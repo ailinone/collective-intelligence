@@ -7,7 +7,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Source: https://github.com/ailinone/collective-intelligence
 
-import { BaseStrategy, type StrategyMetadata } from '../base-strategy';
+import { BaseStrategy, mergeArtifacts, type StrategyMetadata } from '../base-strategy';
 import { resolvePreferredExecutor } from './preferred-model-helper';
 import type {
   ChatRequest,
@@ -16,6 +16,7 @@ import type {
   OrchestrationResult,
   ModelExecution,
   Model,
+  ArtifactRef,
 } from '@/types';
 import { autoLearningSystem } from '@/core/learning/auto-learning-system';
 
@@ -119,6 +120,7 @@ export class AdaptiveStrategy extends BaseStrategy {
       totalCost: execution.cost,
       totalDuration: duration,
       qualityScore: execution.qualityScore,
+      toolArtifacts: execution.toolArtifacts,
       metadata: {
         requestAnalysis: analysis,
         selectedSubStrategy: selectedStrategy,
@@ -227,6 +229,7 @@ export class AdaptiveStrategy extends BaseStrategy {
     cost: number;
     qualityScore: number;
     modelsUsed: ModelExecution[];
+    toolArtifacts: ArtifactRef[];
   }> {
     // Try to resolve the actual strategy and delegate
     const sibling = this.getSiblingStrategy?.(strategyName);
@@ -238,6 +241,12 @@ export class AdaptiveStrategy extends BaseStrategy {
         cost: result.totalCost,
         qualityScore: result.qualityScore ?? 0.8,
         modelsUsed: result.modelsUsed,
+        // Recomputed from the delegate's own ModelExecutions (not a
+        // passthrough of result.toolArtifacts) so this is correct
+        // regardless of whether the delegate strategy has been wired to
+        // set toolArtifacts itself yet — executeModelWithTools() already
+        // populates ModelExecution.artifacts independent of that wiring.
+        toolArtifacts: mergeArtifacts(result.modelsUsed),
       };
     }
 
@@ -281,6 +290,7 @@ export class AdaptiveStrategy extends BaseStrategy {
       cost: execution.cost,
       qualityScore: 0.8,
       modelsUsed: [execution],
+      toolArtifacts: mergeArtifacts([execution]),
     };
   }
 

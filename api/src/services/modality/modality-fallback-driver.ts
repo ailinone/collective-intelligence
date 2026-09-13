@@ -51,7 +51,15 @@ export interface ModalityFallbackArgs<TRaw> {
   deadlineMs?: number;
   registry: ProviderRegistry;
   supportsCapability?: (adapter: ProviderAdapter) => boolean;
-  execute: (model: Model, adapter: ProviderAdapter) => Promise<TRaw>;
+  /**
+   * See executeWithFallback's `FallbackOptions.execute` doc — the third
+   * argument is the absolute wall-clock deadline (epoch ms) for the WHOLE
+   * fallback search, forwarded unchanged. Callers whose execution can
+   * internally wait/poll (e.g. video) should thread it down so a single
+   * slow-failing candidate cannot silently consume the entire search budget
+   * (Bug 2 fix, 2026-09-08).
+   */
+  execute: (model: Model, adapter: ProviderAdapter, ctx: { deadlineAt: number }) => Promise<TRaw>;
   log: Pick<Logger, 'info' | 'warn' | 'error'>;
   requestId: string;
   startTime: number;

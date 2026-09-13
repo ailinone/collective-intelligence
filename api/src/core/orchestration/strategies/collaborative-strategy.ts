@@ -13,7 +13,7 @@
  * Premium quality through collaborative refinement
  */
 
-import { BaseStrategy, type StrategyMetadata } from '../base-strategy';
+import { BaseStrategy, type StrategyMetadata, safeResponseContent, mergeArtifacts } from '../base-strategy';
 import type {
   ChatRequest,
   ChatResponse,
@@ -24,19 +24,12 @@ import type {
   OrchestrationResult,
   ModelExecution,
   TaskType,
-  MessageContent,
   ImageContent,
   Tool,
 } from '@/types';
 import type { ProviderAdapter } from '@/providers/base/provider-adapter';
 import { getUserSpecifiedModelFlag, getTaskType } from '@/types/chat-request-extended';
-
-/**
- * Type guard for TextContent
- */
-function isTextContent(part: MessageContent): part is { type: 'text'; text: string } {
-  return part.type === 'text' && 'text' in part && typeof part.text === 'string';
-}
+import { estimateContextSize as estimateContextSizeShared } from '../context-size-estimator';
 
 /**
  * Collaborative Strategy
@@ -310,6 +303,21 @@ export class CollaborativeStrategy extends BaseStrategy {
       totalCost,
       totalDuration,
       qualityScore,
+      // Media/document artifacts (PR3b): a tool call producing an artifact
+      // can happen in ANY phase — primary's initial draft, a refinement
+      // pass, even the quality-checker call — not only whichever phase's
+      // text ends up as `finalResponse`. mergeArtifacts() is deliberately
+      // called over the FULL `executions` list (all phases accumulated),
+      // not just the phase that supplied `finalResponse`, mirroring how
+      // `reasoning_traces` below already aggregates across every phase in
+      // this same strategy. Top-level `toolArtifacts` (matching tier 3a's
+      // consensus/competitive/debate-strategy.ts convention) rather than
+      // the pre-existing `OrchestrationResult.artifacts` — that field is
+      // `AilinArtifact[]` from the unrelated multi-stage triage-plan
+      // pathway (media-planner-strategy.ts), a different shape than
+      // `mergeArtifacts()`'s `ArtifactRef[]`. See the field's doc comment
+      // in types/index.ts.
+      toolArtifacts: mergeArtifacts(executions),
       metadata: {
         strategyId: metadata.id,
         modelCount: selectedModels.length,
@@ -351,6 +359,17 @@ export class CollaborativeStrategy extends BaseStrategy {
     return true;
   }
 
+  /**
+   * PR3b scope note: this generator yields raw `ChatResponse` chunks directly —
+   * there is no `OrchestrationResult`/`metadata` object here to attach
+   * `mergeArtifacts()` output to (unlike `execute()` above). Wiring artifact
+   * merging into the streaming path would mean changing how SSE final chunks
+   * carry `ailin_metadata` — that assembly lives in orchestration-engine.ts,
+   * which is out of scope for this change. The safeResponseContent() text-
+   * extraction fix below still applies (it's a pure behavior-preserving
+   * substitution), but tool-call artifacts produced during a streamed
+   * collaborative run are not surfaced by this strategy today.
+   */
   async *executeStream(
     request: ChatRequest,
     context: OrchestrationContext
@@ -450,10 +469,12 @@ export class CollaborativeStrategy extends BaseStrategy {
           { adapter: primary.adapter, model: primary.model },
           { adapter: reviewer.adapter, model: reviewer.model },
         ],
-        () => {
-          const c = primaryExec.response?.choices?.[0]?.message?.content;
-          return typeof c === 'string' ? c : '';
-        }
+        // safeResponseContent() also joins multimodal (array-of-parts) content,
+        // which the old inline `typeof c === 'string' ? c : ''` returned '' for.
+        // This fallback text is a plain (non-tool) primary generation, so
+        // content is virtually always a string in practice — the widened
+        // handling is a strict improvement, not an observed regression.
+        () => safeResponseContent(primaryExec.response)
       );
     } else {
       this.emitObserverEvent(context, {
@@ -651,28 +672,7 @@ export class CollaborativeStrategy extends BaseStrategy {
     originalRequest: ChatRequest,
     primaryResponse: ChatResponse
   ): ChatRequest {
-    // Type guard for message content
-    const getMessageContent = (message: ChatMessage | undefined): string => {
-      if (!message) return '';
-      if (typeof message.content === 'string') {
-        return message.content;
-      }
-      if (Array.isArray(message.content)) {
-        return message.content
-          .map((part: MessageContent) => {
-            if (isTextContent(part)) {
-              return part.text;
-            }
-            return '';
-          })
-          .join('');
-      }
-      return '';
-    };
-
-    const primaryContent = primaryResponse.choices[0]?.message
-      ? getMessageContent(primaryResponse.choices[0].message)
-      : '';
+    const primaryContent = safeResponseContent(primaryResponse);
 
     const reviewMessages: ChatMessage[] = [
       {
@@ -698,22 +698,7 @@ export class CollaborativeStrategy extends BaseStrategy {
    * Check if review suggests improvements
    */
   private hasImprovements(reviewResponse: ChatResponse): boolean {
-    const message = reviewResponse.choices[0]?.message;
-    if (!message) return false;
-
-    let content = '';
-    if (typeof message.content === 'string') {
-      content = message.content;
-    } else if (Array.isArray(message.content)) {
-      content = message.content
-        .map((part: MessageContent) => {
-          if (part.type === 'text') {
-            return (part as { type: 'text'; text: string }).text;
-          }
-          return '';
-        })
-        .join('');
-    }
+    const content = safeResponseContent(reviewResponse);
 
     // Check for improvement keywords
     const improvementKeywords = [
@@ -740,32 +725,24 @@ export class CollaborativeStrategy extends BaseStrategy {
     primaryResponse: ChatResponse,
     reviewResponse: ChatResponse
   ): ChatRequest {
-    // Type guard for message content
-    const getMessageContent = (message: ChatMessage | undefined): string => {
-      if (!message) return '';
-      if (typeof message.content === 'string') {
-        return message.content;
-      }
-      if (Array.isArray(message.content)) {
-        return message.content
-          .map((part: MessageContent) => {
-            if (isTextContent(part)) {
-              return part.text;
-            }
-            return '';
-          })
-          .join('');
-      }
-      return '';
-    };
+    const primaryContent = safeResponseContent(primaryResponse);
+    const reviewContent = safeResponseContent(reviewResponse);
 
-    const primaryContent = primaryResponse.choices[0]?.message
-      ? getMessageContent(primaryResponse.choices[0].message)
-      : '';
-    const reviewContent = reviewResponse.choices[0]?.message
-      ? getMessageContent(reviewResponse.choices[0].message)
-      : '';
-
+    // The reviewer's note is a USER turn, not a system one.
+    //
+    // As a trailing `system` message this was doubly broken. First, the engine has
+    // already prepended two system messages (identity/conduct and peer-review), so
+    // `normalizeSystemMessages` merged all three and hoisted the reviewer's free
+    // text into the HEAD system block — it stopped being the last thing said.
+    // Second, that left the conversation ending on an ASSISTANT turn with nothing
+    // addressed to the model, so the natural completion was meta-commentary about
+    // having been reviewed. Production returned exactly that: "Thank you for
+    // providing your feedback and…", "I'm sorry for the confusion earlier, but…",
+    // and outright refusals — on a request as benign as 17 x 23.
+    //
+    // Ending on an assistant turn is also an assistant PREFILL for Anthropic,
+    // whose adapter lifts the system message out and keeps the rest, so the prior
+    // answer could be dropped outright rather than refined.
     const refinementMessages: ChatMessage[] = [
       ...originalRequest.messages,
       {
@@ -773,8 +750,13 @@ export class CollaborativeStrategy extends BaseStrategy {
         content: primaryContent,
       },
       {
-        role: 'system',
-        content: `Code review feedback:\n${reviewContent}\n\nRefine your solution based on this feedback.`,
+        role: 'user',
+        content:
+          `A reviewer commented on your answer:\n${reviewContent}\n\n` +
+          `Answer the ORIGINAL question again, applying only the corrections you agree with. ` +
+          `Reply with the final answer ONLY — do not thank the reviewer, do not apologise, and ` +
+          `do not mention the review or this process. If your previous answer was already ` +
+          `correct, repeat it unchanged.`,
       },
     ];
 
@@ -791,23 +773,7 @@ export class CollaborativeStrategy extends BaseStrategy {
     originalRequest: ChatRequest,
     finalResponse: ChatResponse
   ): ChatRequest {
-    // Type guard for message content
-    const getMessageContent = (message: ChatMessage | undefined): string => {
-      if (!message) return '';
-      if (typeof message.content === 'string') {
-        return message.content;
-      }
-      if (Array.isArray(message.content)) {
-        return message.content
-          .map((part: MessageContent) => (isTextContent(part) ? part.text : ''))
-          .join('');
-      }
-      return '';
-    };
-
-    const finalContent = finalResponse.choices[0]?.message
-      ? getMessageContent(finalResponse.choices[0].message)
-      : '';
+    const finalContent = safeResponseContent(finalResponse);
 
     const validationMessages: ChatMessage[] = [
       {
@@ -850,11 +816,7 @@ export class CollaborativeStrategy extends BaseStrategy {
    * Estimate context size in tokens for DynamicModelSelector
    */
   private estimateContextSize(request: ChatRequest): number {
-    const totalChars =
-      request.messages?.reduce((sum, msg) => sum + (msg.content?.toString() || '').length, 0) || 0;
-
-    // Rough estimation: ~4 chars per token
-    return Math.ceil(totalChars / 4);
+    return estimateContextSizeShared(request);
   }
 
   /**

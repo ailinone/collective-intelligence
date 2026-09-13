@@ -48,6 +48,7 @@ import { WandbAdapter } from '../wandb/wandb-adapter';
 import { RecraftAdapter } from '../recraft/recraft-adapter';
 import { RunwayMLAdapter } from '../runwayml/runwayml-adapter';
 import { TopazAdapter } from '../topaz/topaz-adapter';
+import { CartesiaAdapter } from '../cartesia/cartesia-adapter';
 // Batch 3 — enterprise auth + self-hosted + Xiaomi
 import { SnowflakeCortexAdapter } from '../snowflake/snowflake-cortex-adapter';
 import { SapAiCoreAdapter } from '../sap/sap-ai-core-adapter';
@@ -108,6 +109,10 @@ import { V0Adapter } from '../v0/v0-adapter';
 // one-vector-per-request multimodal embeddings) diverge too far from the
 // OpenAI-compatible hub's defaults for hub inheritance to be a net win.
 import { BytePlusModelArkAdapter } from '../byteplus/byteplus-adapter';
+// LOTE AU (2026-09-08) — aivideoapi.com. Narrow { apiKey, baseUrl } shape,
+// same as RunwayML/BFL/Topaz above: a bespoke async-job REST API with no
+// OpenAI-compatible surface for the hub bridge to represent.
+import { AivideoapiAdapter } from '../aivideoapi/aivideoapi-adapter';
 
 /**
  * Convert the factory context into the `OpenAICompatibleHubAdapterConfig`
@@ -200,6 +205,15 @@ const runwaymlFactory: AdapterFactory = (ctx) =>
 
 const topazFactory: AdapterFactory = (ctx) =>
   new TopazAdapter({
+    apiKey: ctx.apiKey,
+    baseUrl: ctx.baseUrl,
+  });
+
+// 2026-09-12 — cartesia direct extension. Narrow { apiKey, baseUrl } shape,
+// same as Topaz/V0/BFL/Triton — CartesiaAdapter's own pinned model list
+// (CARTESIA_MODELS) is a same-file constant, no extra env-sourced config.
+const cartesiaFactory: AdapterFactory = (ctx) =>
+  new CartesiaAdapter({
     apiKey: ctx.apiKey,
     baseUrl: ctx.baseUrl,
   });
@@ -423,6 +437,14 @@ const byteplusFactory: AdapterFactory = (ctx) =>
     baseUrl: ctx.baseUrl,
   });
 
+// LOTE AU (2026-09-08) — aivideoapi.com (Runway aggregator). Same narrow
+// { apiKey, baseUrl } shape as RunwayML/BFL/Topaz/BytePlus above.
+const aivideoapiFactory: AdapterFactory = (ctx) =>
+  new AivideoapiAdapter({
+    apiKey: ctx.apiKey,
+    baseUrl: ctx.baseUrl,
+  });
+
 /**
  * Register the project's first-party adapter factories. Called once from the
  * catalog loader. Additional provider batches register by adding entries here.
@@ -445,6 +467,11 @@ export function registerDefaultAdapterFactories(): void {
   registerAdapterFactory('RecraftAdapter', recraftFactory);
   registerAdapterFactory('RunwayMLAdapter', runwaymlFactory);
   registerAdapterFactory('TopazImageAdapter', topazFactory);
+
+  // 2026-09-12 — Cartesia. Catalog row's adapterClass was absent entirely
+  // (cartesia ran only through the legacy provider-registry.ts switch
+  // case); this closes the gap and lets the switch case be removed.
+  registerAdapterFactory('CartesiaAdapter', cartesiaFactory);
 
   // Batch 3 — enterprise auth (Snowflake JWT, SAP OAuth2) + self-hosted + Xiaomi.
   registerAdapterFactory('SnowflakeCortexAdapter', snowflakeFactory);
@@ -513,4 +540,10 @@ export function registerDefaultAdapterFactories(): void {
   // video, multimodal embeddings, chat-based STT). Distinct provider from
   // `volcano`; that row and its adapter are untouched.
   registerAdapterFactory('BytePlusModelArkAdapter', byteplusFactory);
+
+  // LOTE AU (2026-09-08) — aivideoapi.com. New catalog row + dedicated
+  // async-job adapter (5 submit routes + shared poll), same pattern as the
+  // RunwayML/BFL/Topaz media specialists above. Distinct provider/credential
+  // from `runwayml` (that row's adapter is untouched).
+  registerAdapterFactory('AivideoapiAdapter', aivideoapiFactory);
 }

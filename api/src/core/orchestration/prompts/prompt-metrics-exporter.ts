@@ -120,6 +120,12 @@ const METRIC_HELP: Record<PromptMetricName, string> = {
     'Total times a judge output was routed through the unified JudgeVerdict normalizer.',
   [PROMPT_METRIC_NAMES.JUDGE_NORMALIZATION_FAILURES]:
     'Total times the JudgeVerdict normalizer could not recognize the input shape.',
+  [PROMPT_METRIC_NAMES.TRIAGE_HEURISTIC_FALLBACK]:
+    'Total times triage fell back to the non-LLM heuristic path, labelled by whether a media-generation intent was detected.',
+  [PROMPT_METRIC_NAMES.TRIAGE_HEURISTIC_MEDIA_SAFETY_NET]:
+    'Total times the broad heuristic media-intent safety net (not the primary capability-inference regexes) is what caught a media-generation request during a heuristic fallback.',
+  [PROMPT_METRIC_NAMES.TRIAGE_GENERATION_PROMPT_MISSING]:
+    'Total times a real (LLM) triage response omitted generation_prompt for a generation stage despite the system prompt requiring it.',
 };
 
 /**

@@ -2,6 +2,16 @@
 # Without this, Windows checkouts produce CRLF that breaks `#!/usr/bin/env bash`.
 *.sh text eol=lf
 
+# Node operator scripts carry `#!/usr/bin/env node` for exactly the same
+# reason, and fail in exactly the same way: on a Windows checkout with
+# core.autocrlf=true the shebang becomes `#!/usr/bin/env node\r`, and a loader
+# that reads the file as a module rejects it with
+# "SyntaxError: Invalid or unexpected token" pointing at the `#`.
+# Hit for real on 2026-09-04 (LOTE AK) when a test imported
+# api/scripts/revalidate-providers.mjs: green on Linux CI, broken locally.
+*.mjs text eol=lf
+*.cjs text eol=lf
+
 # Same for yaml/dockerfile/makefile — consumed by Linux tooling
 Dockerfile text eol=lf
 *.yml text eol=lf

@@ -41,7 +41,7 @@ import type {
 } from '@/types';
 import type { ProviderAdapter } from '@/providers/base/provider-adapter';
 import { PROMPTS } from '../prompts/sota-system-prompts';
-import { BaseStrategy, safeResponseContent, type StrategyMetadata } from '../base-strategy';
+import { BaseStrategy, safeResponseContent, mergeArtifacts, type StrategyMetadata } from '../base-strategy';
 import { getDynamicModelSelector } from '@/core/selection/dynamic-model-selector';
 import { resolvePreferredExecutor } from './preferred-model-helper';
 import {
@@ -49,6 +49,7 @@ import {
   type DebateSignalInput,
 } from '@/core/coordination/collective-run-repository';
 import { buildEnsembleRequest } from '@/core/coordination/ensemble-coordinator-client';
+import { sanitizeForPromptContext } from '@/core/coordination/collective-prompt-safety';
 import {
   runEnsembleInShadow,
   type ShadowEnsembleSnapshot,
@@ -432,6 +433,7 @@ export class DebateStrategy extends BaseStrategy {
       modelsUsed: allExecutions,
       totalCost,
       totalDuration,
+      toolArtifacts: mergeArtifacts(allExecutions),
       metadata: {
         debate: {
           moderator: moderator.name,
@@ -568,7 +570,7 @@ export class DebateStrategy extends BaseStrategy {
     // can see HOW each debater arrived at their position — not just WHAT they said
     const reasoningTraces =
       allExecutions && this.isReasoningEnabled(request)
-        ? this.formatReasoningForSynthesizer(allExecutions)
+        ? sanitizeForPromptContext(this.formatReasoningForSynthesizer(allExecutions), 4000)
         : '';
 
     const messages: ChatMessage[] = [
@@ -958,7 +960,10 @@ export class DebateStrategy extends BaseStrategy {
           {
             role: 'user',
             content: respondingTo
-              ? `Respond to ${respondingTo.participant}'s argument: "${respondingTo.position.substring(0, Number(process.env.DEBATE_REBUTTAL_EXCERPT_CHARS) || 2000)}..."`
+              ? `Respond to ${sanitizeForPromptContext(respondingTo.participant, 80)}'s argument: "${sanitizeForPromptContext(
+                  respondingTo.position,
+                  Number(process.env.DEBATE_REBUTTAL_EXCERPT_CHARS) || 2000
+                )}..."`
               : 'Continue the debate with your refined position.',
           },
         ];
@@ -1064,8 +1069,15 @@ export class DebateStrategy extends BaseStrategy {
       );
 
       for (const position of round.positions) {
-        const responding = position.respondingTo ? ` (responding to ${position.respondingTo})` : '';
-        parts.push(`**${position.participant}**${responding}:\n${position.position}\n`);
+        // TM-08: peer outputs are untrusted — sanitize before they flow into the
+        // moderator/debater prompts as assistant-channel history (same helper the
+        // coordination layer uses in formatSignalForSynthesis).
+        const responding = position.respondingTo
+          ? ` (responding to ${sanitizeForPromptContext(position.respondingTo, 80)})`
+          : '';
+        parts.push(
+          `**${sanitizeForPromptContext(position.participant, 80)}**${responding}:\n${sanitizeForPromptContext(position.position, 4000)}\n`
+        );
       }
     }
 

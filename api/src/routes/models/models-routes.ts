@@ -38,6 +38,7 @@ import {
   buildAilinAliasEntry,
   buildModelDto,
   buildModelsFacets,
+  buildStrategyTierCompositeEntries,
   entrySupportsEndpoint,
   filterRankedEntries,
   getModelMetadata,
@@ -359,6 +360,11 @@ const MODELS_LIST_RESPONSE_200_SCHEMA = {
           type: 'number',
           description:
             'Additive first-party ailin-* virtual alias rows prepended to data. NOT included in catalog/runnable/scoped/matched, and exempt from limit/offset.',
+        },
+        strategyComposites: {
+          type: 'number',
+          description:
+            'Additive <strategy>:<tier> composite rows (e.g. consensus:large) prepended to data, right after the ailin-* aliases. Same treatment as aliases: NOT included in catalog/runnable/scoped/matched, and exempt from limit/offset.',
         },
       },
       required: ['catalog', 'runnable', 'scoped', 'matched', 'returned'],
@@ -734,6 +740,29 @@ export async function registerModelRoutes(
         `Exposed ${AILIN_VIRTUAL_DISCOVERY_SOURCE} model aliases`
       );
 
+      // ── `<strategy>:<tier>` composite rows (e.g. `consensus:large`) ───────
+      // Same additive treatment as the legacy ailin-* aliases above (see
+      // models-list-serialization.ts for the full background): these are
+      // real, executionReady selectable targets resolved identically by
+      // normalizeChatRequest, but were never listed as rows here, making them
+      // impossible to select from chat's UI (ModelSelector.svelte resets any
+      // id absent from this response). Listed with the SAME provider id and
+      // buildModelDto serializer as the legacy aliases so chat's existing
+      // provider-keyed capability gating picks them up with zero chat-side
+      // changes.
+      const baseStrategyTierEntries = buildStrategyTierCompositeEntries().filter(
+        (entry) =>
+          endpointFilter === undefined ||
+          entrySupportsEndpoint(entry, endpointFilter as ModelOperationEndpoint)
+      );
+      const strategyTierEntries = searchActive
+        ? filterRankedEntries(baseStrategyTierEntries, modelsListFilters)
+        : baseStrategyTierEntries;
+      requestLog.debug(
+        { strategyTierCount: strategyTierEntries.length, endpointFilter },
+        'Exposed <strategy>:<tier> composite model rows'
+      );
+
       // Expose count metadata so callers can see the runnable-vs-catalog
       // gap WITHOUT a second request to scope=all. Historically the gap
       // was severe (~5k runnable vs 64k catalog) which left users
@@ -776,8 +805,9 @@ export async function registerModelRoutes(
           runnable: runnableCount,
           scoped: scopedCount,
           matched: matchedTotal,
-          returned: matchedTotal + ailinAliasEntries.length,
+          returned: matchedTotal + ailinAliasEntries.length + strategyTierEntries.length,
           aliases: ailinAliasEntries.length,
+          strategyComposites: strategyTierEntries.length,
         };
         requestLog.info({ ...counts, streamed: true }, 'Streaming full model inventory (all=true)');
         const head = {
@@ -789,11 +819,12 @@ export async function registerModelRoutes(
           ...(facets ? { facets } : {}),
         };
         reply.header('content-type', 'application/json; charset=utf-8');
-        // Alias rows stream FIRST, then the DB-derived matched set — without
-        // copying the (potentially ~64k-entry) array; a generator keeps the
-        // stream lazy so peak memory stays O(1 row).
+        // Alias rows stream FIRST, then strategy:tier composites, then the
+        // DB-derived matched set — without copying the (potentially ~64k-entry)
+        // array; a generator keeps the stream lazy so peak memory stays O(1 row).
         const aliasFirstEntries = (function* (): Generator<RankedEntry> {
           yield* ailinAliasEntries;
+          yield* strategyTierEntries;
           yield* filteredEntries;
         })();
         return reply.send(
@@ -811,6 +842,7 @@ export async function registerModelRoutes(
       });
       const data = [
         ...ailinAliasEntries.map((entry) => buildModelDto(entry)),
+        ...strategyTierEntries.map((entry) => buildModelDto(entry)),
         ...page.pageEntries.map((entry) => buildModelDto(entry)),
       ];
 
@@ -819,8 +851,9 @@ export async function registerModelRoutes(
         runnable: runnableCount, // pass operability gate
         scoped: scopedCount, // after scope filter
         matched: matchedTotal, // after endpoint filter (full result set)
-        returned: data.length, // rows in THIS response (page + additive aliases)
+        returned: data.length, // rows in THIS response (page + additive aliases + composites)
         aliases: ailinAliasEntries.length, // additive alias rows, not in the counts above
+        strategyComposites: strategyTierEntries.length, // additive <strategy>:<tier> rows, not in the counts above
       };
 
       return reply.send({
@@ -863,7 +896,8 @@ export async function registerModelRoutes(
           'List available models (OpenAI-compatible endpoint).\n\n' +
           'PAGINATED BY DEFAULT: returns a bounded page (default 100 rows, `?limit=` up to 1000, `?offset=` to page). The `pagination` field carries `total`/`hasMore`/`nextOffset` — follow `nextOffset` until `hasMore` is false to enumerate everything. Use `?all=true` to stream the entire inventory as one JSON array (memory-bounded, but large). This replaced the old buffer-everything behavior that serialized ~64k rows into a single ~53MB string and OOM-crashed the container (2026-06-10).\n\n' +
           'NOTE: by default `scope=runnable` — only models whose execution provider has a registered adapter at runtime are returned. The `counts` field exposes catalog/runnable/scoped/matched/returned so callers can confirm the runnable-vs-catalog gap without a second request. Use `?scope=all` to include catalog rows whose adapters are not currently registered (e.g. providers with missing keys or proprietary-schema providers in inventory-only mode).\n\n' +
-          'FIRST-PARTY ALIASES: the ailin-* virtual model aliases (ailin-auto, ailin-best, ailin-fast, ailin-economy, ailin-consensus, ailin-voice, ailin-stt, ailin-realtime) are always listed FIRST in `data` (discoverySource="ailin-virtual"). They are additive: counted separately in `counts.aliases`, never in catalog/runnable/scoped/matched, and exempt from limit/offset — pagination windows over the DB-derived result set are unchanged.',
+          'FIRST-PARTY ALIASES: the ailin-* virtual model aliases (ailin-auto, ailin-best, ailin-fast, ailin-economy, ailin-consensus, ailin-voice, ailin-stt, ailin-realtime) are always listed FIRST in `data` (discoverySource="ailin-virtual"). They are additive: counted separately in `counts.aliases`, never in catalog/runnable/scoped/matched, and exempt from limit/offset — pagination windows over the DB-derived result set are unchanged.\n\n' +
+          'STRATEGY:TIER COMPOSITES: real, executionReady `<strategy>:<tier>` targets (e.g. `consensus:large`) per pricing-tiers.ts — resolved by normalizeChatRequest identically to the ailin-* aliases above, reasoning_effort included — are listed right after the aliases (also discoverySource="ailin-virtual", provider="ailin-virtual"). Same additive treatment: counted separately in `counts.strategyComposites`, never in catalog/runnable/scoped/matched, and exempt from limit/offset.',
         querystring: MODELS_LIST_QUERYSTRING_SCHEMA,
         response: {
           200: MODELS_LIST_RESPONSE_200_SCHEMA,
@@ -885,7 +919,8 @@ export async function registerModelRoutes(
           'List available models from all providers.\n\n' +
           'PAGINATED BY DEFAULT: returns a bounded page (default 100 rows, `?limit=` up to 1000, `?offset=` to page). Follow `pagination.nextOffset` until `pagination.hasMore` is false to enumerate everything, or use `?all=true` to stream the full inventory as one JSON array (memory-bounded). This replaced the old buffer-everything behavior that OOM-crashed the container (2026-06-10).\n\n' +
           'NOTE: by default `scope=runnable` — only models whose execution provider has a registered adapter at runtime are returned. The `counts` field exposes catalog/runnable/scoped/matched/returned. Use `?scope=all` to include catalog rows whose adapters are not currently registered (e.g. providers with missing keys or proprietary-schema providers in inventory-only mode).\n\n' +
-          'FIRST-PARTY ALIASES: the ailin-* virtual model aliases (ailin-auto, ailin-best, ailin-fast, ailin-economy, ailin-consensus, ailin-voice, ailin-stt, ailin-realtime) are always listed FIRST in `data` (discoverySource="ailin-virtual"). They are additive: counted separately in `counts.aliases`, never in catalog/runnable/scoped/matched, and exempt from limit/offset — pagination windows over the DB-derived result set are unchanged.',
+          'FIRST-PARTY ALIASES: the ailin-* virtual model aliases (ailin-auto, ailin-best, ailin-fast, ailin-economy, ailin-consensus, ailin-voice, ailin-stt, ailin-realtime) are always listed FIRST in `data` (discoverySource="ailin-virtual"). They are additive: counted separately in `counts.aliases`, never in catalog/runnable/scoped/matched, and exempt from limit/offset — pagination windows over the DB-derived result set are unchanged.\n\n' +
+          'STRATEGY:TIER COMPOSITES: real, executionReady `<strategy>:<tier>` targets (e.g. `consensus:large`) per pricing-tiers.ts — resolved by normalizeChatRequest identically to the ailin-* aliases above, reasoning_effort included — are listed right after the aliases (also discoverySource="ailin-virtual", provider="ailin-virtual"). Same additive treatment: counted separately in `counts.strategyComposites`, never in catalog/runnable/scoped/matched, and exempt from limit/offset.',
         querystring: MODELS_LIST_QUERYSTRING_SCHEMA,
         response: {
           200: MODELS_LIST_RESPONSE_200_SCHEMA,
@@ -962,6 +997,19 @@ export async function registerModelRoutes(
         if (aliasProfile) {
           requestLog.info({ aliasId: aliasProfile.id }, 'Ailin virtual model alias fetched');
           return reply.send(buildModelDto(buildAilinAliasEntry(aliasProfile)));
+        }
+
+        // Same treatment for `<strategy>:<tier>` composites (e.g.
+        // `consensus:large`) — no DB catalog row, resolved server-side at
+        // request time, so a client that selected one from the list endpoint
+        // (see the parallel synthesis path above) can still fetch its details.
+        const lookupId = normalizedId.trim().toLowerCase();
+        const strategyTierEntry = buildStrategyTierCompositeEntries().find(
+          (entry) => entry.model.id === lookupId
+        );
+        if (strategyTierEntry) {
+          requestLog.info({ compositeId: lookupId }, 'Strategy:tier composite model fetched');
+          return reply.send(buildModelDto(strategyTierEntry));
         }
 
         let result = await getModelById(normalizedId);

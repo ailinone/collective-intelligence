@@ -182,8 +182,14 @@ const EXTENSIONS: Record<FileGenerationFormat, string> = {
  *  already-generated code as a correctly-named downloadable file. Falls
  *  back to CODE_DEFAULT_EXTENSION for anything unrecognized rather than
  *  rejecting the request — an unfamiliar/niche language name shouldn't
- *  block the download, it should just get a generic .txt extension. */
-const CODE_LANGUAGE_EXTENSIONS: Record<string, string> = {
+ *  block the download, it should just get a generic .txt extension.
+ *
+ *  Exported so `proactive-code-file-extra.ts` can reuse the SAME canonical
+ *  language roster as its trigger's allow-list (minus the generic
+ *  text/plaintext/txt aliases, which convey no real "this is source code"
+ *  signal) — avoids a second, independently-maintained language list that
+ *  could silently drift from this one. */
+export const CODE_LANGUAGE_EXTENSIONS: Record<string, string> = {
   python: 'py',
   py: 'py',
   javascript: 'js',

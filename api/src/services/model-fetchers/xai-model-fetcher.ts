@@ -24,32 +24,50 @@ import { logger } from '@/utils/logger';
  */
 export class XAIModelFetcher extends BaseProviderModelFetcher {
   protected providerName = 'xai';
-  private client: OpenAI;
+  private client: OpenAI | null;
+  private apiKey: string;
   private log = logger.child({ component: 'xai-fetcher' });
 
   constructor(apiKey: string, baseUrl: string = 'https://api.x.ai/v1') {
     super();
-    this.client = new OpenAI({
-      apiKey,
-      baseURL: baseUrl,
-      timeout: 30000,
-    });
+    this.apiKey = apiKey;
+    // Guard against constructing the raw `openai` SDK client (reused here as
+    // a thin OpenAI-COMPATIBLE HTTP client — xAI's own API is OpenAI-shaped,
+    // this fetcher does not talk to OpenAI) with an empty/mock key. The
+    // SDK's own constructor throws a synchronous, OpenAI-branded "Missing
+    // credentials... OPENAI_API_KEY or OPENAI_ADMIN_KEY..." error when
+    // apiKey is falsy, which bypassed getModels()'s own graceful missing-key
+    // handling below entirely and was genuinely confusing in production
+    // (2026-09-08 incident: an xAI discovery failure logged an OpenAI-
+    // branded credential error). Constructing lazily means a missing/mock
+    // key surfaces through this fetcher's own xAI-branded log line instead.
+    this.client = XAIModelFetcher.isUsableApiKey(apiKey)
+      ? new OpenAI({
+          apiKey,
+          baseURL: baseUrl,
+          timeout: 30000,
+        })
+      : null;
+  }
+
+  private static isUsableApiKey(key: string | undefined): key is string {
+    return Boolean(key) && !key!.includes('mock') && !key!.includes('test-');
   }
 
   async getModels(): Promise<ProviderModel[]> {
-    // Validate API key is not mock - check the client's apiKey
-    const apiKey = (this.client as { apiKey?: string }).apiKey;
-    if (!apiKey || apiKey.includes('mock') || apiKey.includes('test-')) {
+    if (!this.client) {
       this.log.warn(
-        { keyPresent: Boolean(apiKey) },
-        'xAI API key appears to be mock/test key - skipping model discovery'
+        { keyPresent: Boolean(this.apiKey) },
+        'xAI API key appears to be missing/mock/test key - skipping model discovery'
       );
       return [];
     }
 
+    const client = this.client;
+
     try {
       // xAI uses OpenAI-compatible API
-      const response = await this.client.models.list();
+      const response = await client.models.list();
 
       // Distinguish empty response from fetch error (see openai-model-fetcher for
       // rationale). Surfacing zero-data-with-200-OK as a warn is essential for

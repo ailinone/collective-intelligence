@@ -169,6 +169,27 @@ export const ProviderSupportsSchema = z
   })
   .strict();
 
+// ─── Video capability attributes (LOTE AS, 2026-09-06) ──────────────────────
+
+/**
+ * Mirrors `VideoCapabilityAttributes` in provider-catalog.types.ts. Every
+ * field is optional — absence means "undocumented", never "unsupported".
+ */
+export const VideoCapabilityAttributesSchema = z
+  .object({
+    maxDurationSeconds: z.number().positive().max(3600).optional(),
+    minDurationSeconds: z.number().nonnegative().max(3600).optional(),
+    allowedDurationsSeconds: z.array(z.number().positive().max(3600)).min(1).max(20).optional(),
+    maxResolution: z.string().min(1).max(24).optional(),
+    supportedAspectRatios: z.array(z.string().min(1).max(24)).min(1).max(24).optional(),
+    nativeAudioSupport: z.boolean().optional(),
+    attributesVerifiedAt: z
+      .string()
+      .regex(/^\d{4}-\d{2}-\d{2}$/, 'attributesVerifiedAt must be ISO date (YYYY-MM-DD)')
+      .optional(),
+  })
+  .strict();
+
 // ─── Provider ID naming rules ───────────────────────────────────────────────
 
 /**
@@ -235,10 +256,34 @@ export const ProviderCatalogEntrySchema = z
     baseUrlEnvVar: envVarString.optional(),
     extraEnvVars: z.record(envVarString, z.string().min(1).max(200)).optional(),
     apiKeyOptional: z.boolean().optional(),
+    /**
+     * GAP-A11 (LOTE AM, 2026-09-05): generic `{placeholder}` substitution for
+     * `baseUrl`. Maps a placeholder name (as it appears literally in
+     * `baseUrl`, e.g. `product_id` for `.../ai/{product_id}/openai/v1`) to
+     * the env var that supplies its value at runtime. Purely ADDITIVE to the
+     * existing `baseUrlEnvVar` convention (a full-string override) — a row
+     * may declare both; `baseUrlEnvVar` still wins when set (see
+     * `catalog-provider-plugin.ts#resolveBaseUrl`), so none of the 175+ rows
+     * already using `baseUrlEnvVar` as a whole-string swap are affected.
+     * Every key here MUST appear as `{key}` in `baseUrl` (enforced below) —
+     * this is what stops a stale/typo'd declaration from silently doing
+     * nothing.
+     */
+    baseUrlTemplateVars: z
+      .record(
+        z
+          .string()
+          .min(1)
+          .max(60)
+          .regex(/^[a-z][a-z0-9_]*$/, 'template var placeholder must be lowercase snake_case'),
+        envVarString
+      )
+      .optional(),
 
     // Capabilities
     supports: ProviderSupportsSchema,
     capabilityHints: z.array(CapabilityHintSchema).max(32).optional(),
+    videoCapabilityAttributes: VideoCapabilityAttributesSchema.optional(),
 
     // Pricing
     pricingMode: PricingModeSchema,
@@ -249,6 +294,12 @@ export const ProviderCatalogEntrySchema = z
 
     // Discovery tuning
     modelDenylist: z.array(z.string().min(1).max(200)).max(100).optional(),
+    /** LOTE AJ (2026-09-03, SOTA §16): declared when a provider has NO
+     *  machine-readable model listing upstream and the row deliberately
+     *  ships ZERO model inventory (execution-capable, discovery honestly
+     *  unavailable). The only sanctioned alternative to pinnedFallback for
+     *  execution-only rows — fabricating /v1/models entries is forbidden. */
+    discoveryStatus: z.literal('unavailable-upstream').optional(),
     /** @deprecated — use `pinnedFallback`. Removed once every catalog row is
      *  migrated; kept here for the duration of Phase 4d so a partial migration
      *  cannot silently drop rows. */
@@ -311,6 +362,12 @@ export const ProviderCatalogEntrySchema = z
       .string()
       .regex(/^\d{4}-\d{2}-\d{2}$/, 'lastReviewedAt must be ISO date (YYYY-MM-DD)')
       .optional(),
+    /** GAP-A10 (LOTE AM, 2026-09-05): audit/traceability metadata only — see
+     *  `deriveFromCatalogEntry()` in types.ts. Resolution already happened at
+     *  catalog-authoring time; this field does not drive any runtime
+     *  behavior. The collection-level refine below checks it references a
+     *  real providerId elsewhere in the catalog. */
+    basedOn: providerIdString.optional(),
   })
   .strict()
   // ── Cross-field invariants ────────────────────────────────────────────────
@@ -401,9 +458,16 @@ export const ProviderCatalogEntrySchema = z
     (entry) => {
       // Rule 5: execution-only mode requires either pinnedFallback (preferred,
       // Phase 4d schema) OR legacy staticModels (deprecated; migration in
-      // progress). Discovery is disabled in this mode, so a curated inventory
-      // is the only source of model identifiers.
+      // progress) OR an explicit discoveryStatus='unavailable-upstream'
+      // declaration (LOTE AJ 2026-09-03, SOTA §16): the provider exposes no
+      // machine-readable model listing, the row ships ZERO inventory, and
+      // models enter only via operator-validated or execution-observed
+      // discovery. Fabricating a pinned list to satisfy this rule is worse
+      // than an honest empty inventory.
       if (entry.integrationMode !== 'execution-only') {
+        return true;
+      }
+      if (entry.discoveryStatus === 'unavailable-upstream') {
         return true;
       }
       const hasPinnedFallback =
@@ -413,8 +477,24 @@ export const ProviderCatalogEntrySchema = z
     },
     {
       message:
-        'integrationMode `execution-only` requires pinnedFallback.models (preferred) or staticModels (deprecated) — discovery is disabled, where do models come from?',
+        'integrationMode `execution-only` requires pinnedFallback.models, legacy staticModels, or discoveryStatus="unavailable-upstream" (no fabricated inventory) — discovery is disabled, where do models come from?',
       path: ['pinnedFallback'],
+    }
+  )
+  .refine(
+    (entry) => {
+      // Rule 6 (GAP-A11, LOTE AM 2026-09-05): every baseUrlTemplateVars key
+      // must appear literally as `{key}` in baseUrl — otherwise the
+      // declaration does nothing (silently) and looks like it should.
+      if (!entry.baseUrlTemplateVars) return true;
+      return Object.keys(entry.baseUrlTemplateVars).every((placeholder) =>
+        entry.baseUrl.includes(`{${placeholder}}`)
+      );
+    },
+    {
+      message:
+        'every baseUrlTemplateVars key must appear as `{key}` in baseUrl — an unused placeholder declaration silently resolves nothing',
+      path: ['baseUrlTemplateVars'],
     }
   );
 
@@ -432,6 +512,18 @@ export const ProviderCatalogSchema = z
       return true;
     },
     { message: 'duplicate providerId found in catalog' }
+  )
+  .refine(
+    (entries) => {
+      // GAP-A10 (LOTE AM 2026-09-05): `basedOn` is authoring-time-only
+      // metadata (see deriveFromCatalogEntry in types.ts), but a stale value
+      // — e.g. the parent row was renamed/removed after this row was derived
+      // from it — is worth catching at boot rather than silently pointing at
+      // nothing.
+      const ids = new Set(entries.map((e) => e.providerId));
+      return entries.every((e) => e.basedOn === undefined || ids.has(e.basedOn));
+    },
+    { message: 'basedOn must reference an existing providerId in the same catalog' }
   )
   .refine(
     (entries) => {

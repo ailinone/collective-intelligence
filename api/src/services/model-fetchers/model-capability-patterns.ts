@@ -58,6 +58,18 @@ export const MODEL_CAPABILITY_PATTERNS: CapabilityPattern[] = [
       /^recraft[-/]/,
       /^recraftv\d/,
       /^playground[-/]/,
+      // OpenAI's image-generation family (`gpt-image-1`, `gpt-image-1-mini`,
+      // `gpt-image-1.5`, `gpt-image-2`, ...). Confirmed missing on 4 real hub
+      // providers (vercel-ai-gateway, poe, fastrouter, routeway): these IDs
+      // start with `gpt-` so, absent this pattern, they fell through to the
+      // broad chat category below and were persisted WITHOUT
+      // `image_generation` at all. Delimiter-safe (not prefix-anchored)
+      // because hubs prefix/suffix the bare name in different ways
+      // (`web-gpt-image-1.5`, `openai-gpt-image-2`, `openai/gpt-image-1-5`).
+      /(?:^|[-/])gpt-image\b/,
+      // `chatgpt-image-latest` (OpenAI/orqai) — same family, different
+      // marketing name; not covered by the `gpt-image` pattern above.
+      /(?:^|[-/])chatgpt-image\b/,
     ],
     capabilities: ['image_generation'],
     endpoint: 'images',
@@ -100,7 +112,11 @@ export const MODEL_CAPABILITY_PATTERNS: CapabilityPattern[] = [
       /-reranker$/,
       /-reranker-/,
       /^cohere-rerank/,
-      /^relace-code-reranker/,
+      // `relace-code-reranker` REMOVED 2026-09-09 (LOTE AT): the id never
+      // appeared anywhere in Relace's official OpenAPI spec (no rerank
+      // model is documented there at all) — it was an unverified/likely-
+      // fabricated pinnedFallback entry, not a real discoverable model. See
+      // providers.catalog.ts's `relace` entry.
     ],
     capabilities: ['reranking', 'retrieval'],
     endpoint: 'rerank',
@@ -173,7 +189,11 @@ export const MODEL_CAPABILITY_PATTERNS: CapabilityPattern[] = [
       /^databricks-e5[-/]/,
       /-embedding$/,
       /-embeddings$/,
-      /^relace-embedding/,
+      // `relace-embedding` REMOVED 2026-09-09 (LOTE AT): the id never
+      // appeared anywhere in Relace's official OpenAPI spec (no
+      // /v1/embeddings path is documented at all) — it was an unverified/
+      // likely-fabricated pinnedFallback entry, not a real discoverable
+      // model. See providers.catalog.ts's `relace` entry.
       // Delimiter-safe (NOT prefix-anchored) variants: hub listings flatten org
       // prefixes into the id (`intfloat-multilingual-e5-base`), so `^e5-` never
       // matches and the model leaked into chat pools as a consensus voter

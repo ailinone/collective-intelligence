@@ -236,6 +236,69 @@ export function pinnedModelIds(entries: readonly PinnedModelEntry[]): string[] {
 }
 
 /**
+ * LOTE AS (2026-09-06): real, vendor-documented (or code-verified) media
+ * limits for a provider's video-generation surface. Every field is a
+ * PLAUSIBILITY ceiling/set, not a validator — the adapter still owns exact
+ * request-shape validation (see byteplus-adapter.ts's RATIOS/RESOLUTIONS sets
+ * for the strict-validation pattern). A field absent here means
+ * "undocumented, unknown" — NEVER treat absence as "unsupported"; see
+ * `canSatisfyVideoAttributes` in `video-capability-matcher.ts`, which fails
+ * OPEN on missing data and only fails closed on a known, documented conflict.
+ *
+ * These are attached at the PROVIDER level, matching the granularity of
+ * `supports`. For an aggregator/gateway row (togetherai, aihubmix, cometapi,
+ * imagerouter, empiriolabs, fastrouter, gmi, stepfun) where limits genuinely
+ * vary per underlying upstream model — or are simply undocumented — leave
+ * this field entirely unset rather than inventing a provider-wide number.
+ * Populating every field from real vendor docs/code, live-verified 2026-09-06
+ * (LOTE AS research): byteplus, zai, venice, runwayml, siliconflow.
+ */
+export interface VideoCapabilityAttributes {
+  /** Real documented ceiling in seconds, e.g. Venice=30, Runway=10, Z.AI=10.
+   *  Use the LARGEST value in a discrete set (Z.AI only allows 5|10 — this
+   *  field records 10; exact-set validation, if ever needed, belongs in
+   *  `allowedDurationsSeconds` below, not here). */
+  readonly maxDurationSeconds?: number;
+  /** Real documented floor in seconds — several vendors reject short clips
+   *  outright (Runway: minimum 2s). Omit when the vendor allows any length
+   *  down to sub-1s or the floor is undocumented. */
+  readonly minDurationSeconds?: number;
+  /** OPTIONAL richer form for vendors with a small, fixed, non-contiguous
+   *  duration set (Z.AI: exactly 5 or 10, nothing between). When present, a
+   *  matcher can do exact-set checking instead of range plausibility; when
+   *  absent, `maxDurationSeconds`/`minDurationSeconds` are the only signal. */
+  readonly allowedDurationsSeconds?: readonly number[];
+  /** Coarse resolution ceiling. Kept as `string` (not a closed union) to
+   *  match the project's existing forward-compat philosophy
+   *  (`capabilityHints.capability` is `string` for the same reason) — a raw
+   *  vendor pixel-dimension string (e.g. RunwayML's `'1584x672'`) or a
+   *  labeled tier (`'480p'|'720p'|'1080p'|'1440p'|'4K'|'2160p'`) are both
+   *  accepted; `video-capability-matcher.ts#resolutionTier` normalizes
+   *  either form for comparison. */
+  readonly maxResolution?: string;
+  /** Real documented aspect-ratio surface. Store the vendor's OWN raw enum
+   *  values verbatim (e.g. RunwayML's pixel-dimension strings like
+   *  '1280:720', not a derived '16:9') so a citation back to the vendor docs
+   *  stays exact; the matcher normalizes both sides when comparing. */
+  readonly supportedAspectRatios?: readonly string[];
+  /** True only when the vendor's OWN video-generation call can embed a
+   *  generated soundtrack/sound-effects/dialogue track directly in the
+   *  output (BytePlus `generate_audio`, Z.AI `with_audio`, Venice `audio`).
+   *  Set explicitly to `false` when the vendor's docs affirmatively confirm
+   *  NO such feature exists (RunwayML, SiliconFlow) — that is real, verified
+   *  absence, distinguishable from "undocumented" (field left unset). Do NOT
+   *  set this `true` for a provider that merely accepts an input audio clip
+   *  for conditioning (that's `VideoGenerationOptions.audio` — a different
+   *  concept) or that exposes audio only via a SEPARATE endpoint (RunwayML's
+   *  /v1/sound_effect is not video-embedded audio). */
+  readonly nativeAudioSupport?: boolean;
+  /** ISO date this row's attributes were last verified against the vendor's
+   *  own docs — mirrors `lastReviewedAt` at the entry level so a future audit
+   *  can tell a live-verified row from a stale one. */
+  readonly attributesVerifiedAt?: string;
+}
+
+/**
  * Provider catalog entry — the source of truth for one provider integration.
  */
 export interface ProviderCatalogEntry {
@@ -292,15 +355,45 @@ export interface ProviderCatalogEntry {
    * convention whenever the upstream SDK has no canonical name.
    */
   readonly apiKeyEnvVarOverrideReason?: string;
-  /** Override env var for base URL (defaults to the catalog value). */
+  /** Override env var for base URL (defaults to the catalog value). Takes a
+   *  FULL-STRING value that replaces `baseUrl` wholesale — see
+   *  `baseUrlTemplateVars` below for per-placeholder substitution instead. */
   readonly baseUrlEnvVar?: string;
+  /**
+   * GAP-A11 (LOTE AM, 2026-09-05): generic `{placeholder}` substitution for
+   * `baseUrl`. Maps each placeholder name — as it appears literally in
+   * `baseUrl`, e.g. `product_id` for
+   * `https://api.infomaniak.com/2/ai/{product_id}/openai/v1` — to the env
+   * var that supplies its value at runtime (see
+   * `catalog-provider-plugin.ts#resolveBaseUrl`/`applyBaseUrlTemplate`).
+   *
+   * Purely ADDITIVE to `baseUrlEnvVar`: a row may declare both, and
+   * `baseUrlEnvVar` (a full-string override) still wins when set — so none
+   * of the 175+ existing rows using that convention are affected. Every key
+   * here must appear as `{key}` in `baseUrl` (enforced by the Zod schema).
+   */
+  readonly baseUrlTemplateVars?: Readonly<Record<string, string>>;
   /** Extra env vars (org, project, tenant, region). Shape: varName → purpose. */
   readonly extraEnvVars?: Readonly<Record<string, string>>;
   /** If true, absence of the API key disables the provider silently (no warning). */
   readonly apiKeyOptional?: boolean;
 
   // ─── Capability surface ──────────────────────────────────────────────────
-  /** High-level modality flags. These are CATALOG-LEVEL — feed HCRA as hints. */
+  /**
+   * High-level modality flags. These are CATALOG-LEVEL — feed HCRA as hints.
+   *
+   * Relationship to the capability ontology (LOTE AO, 2026-09-05): this is a
+   * deliberately coarser, PROVIDER-level vocabulary — "this provider's API
+   * exposes a speech-to-text surface" — while `ModelCapability` /
+   * `capabilityOntology` describe an individual MODEL. The two are NOT
+   * merged (rewriting the field would touch every one of the ~230 provider
+   * rows for no behavioural gain, since these flags are already consumed as
+   * hints by the capability merger), but the correspondence is formal and
+   * exhaustive: see `CATALOG_SUPPORTS_TO_CAPABILITY` in
+   * `api/src/core/capabilities/capability-ontology.ts`. Adding a flag here
+   * without adding it there is a compile error in
+   * `capability-ontology-coverage.test.ts`.
+   */
   readonly supports: Readonly<{
     chat?: boolean;
     responses?: boolean;
@@ -322,6 +415,13 @@ export interface ProviderCatalogEntry {
   /** Additional hints for the capability merger. May reference ontology URIs
    *  or plain strings that match preferredLabel/synonyms. */
   readonly capabilityHints?: readonly CapabilityHint[];
+  /** Real per-provider video-generation media limits (duration/resolution/
+   *  aspect-ratio/native-audio), additive to `supports.videoGeneration`. See
+   *  `VideoCapabilityAttributes` for field semantics and the "absence ≠
+   *  unsupported" contract. Unset on aggregator/gateway rows where limits
+   *  vary per underlying upstream model or are undocumented. Consumed by
+   *  `video-capability-matcher.ts#canSatisfyVideoAttributes`. */
+  readonly videoCapabilityAttributes?: VideoCapabilityAttributes;
 
   // ─── Pricing ─────────────────────────────────────────────────────────────
   readonly pricingMode: PricingMode;
@@ -337,6 +437,10 @@ export interface ProviderCatalogEntry {
   // ─── Discovery tuning ────────────────────────────────────────────────────
   /** Model IDs to exclude from discovery. Also honored via `<PROVIDER>_MODEL_DENYLIST` env. */
   readonly modelDenylist?: readonly string[];
+  /** LOTE AJ (2026-09-03, SOTA §16): the provider exposes NO machine-readable
+   *  model listing and the row deliberately ships ZERO inventory. Models enter
+   *  only via operator-validated or execution-observed discovery. */
+  readonly discoveryStatus?: 'unavailable-upstream';
   /**
    * Pinned fallback model list — used when discovery either cannot run (no
    * /models endpoint) or should not be authoritative (curated shortlist).
@@ -422,6 +526,59 @@ export interface ProviderCatalogEntry {
   readonly notes?: string;
   /** ISO date string — when the catalog entry was last reviewed. Used in audits. */
   readonly lastReviewedAt?: string;
+  /**
+   * GAP-A10 (LOTE AM, 2026-09-05): the `providerId` of the catalog entry this
+   * row was derived from via `deriveFromCatalogEntry()`. AUTHORING-TIME ONLY
+   * — by the time this entry sits in the exported `PROVIDER_CATALOG` array it
+   * is already a complete, ordinary `ProviderCatalogEntry`; nothing at
+   * runtime (Zod, the loader, or any of the other direct `PROVIDER_CATALOG`
+   * consumers) performs inheritance resolution. This field is pure
+   * audit/traceability metadata — it records provenance for plan/token-plan
+   * rows that share a vendor's protocol quirks but differ only in host +
+   * plan-bound credential, so a future audit can tell "genuinely independent
+   * row" apart from "derived, and possibly stale relative to its parent"
+   * without re-deriving the diff by hand.
+   */
+  readonly basedOn?: string;
+}
+
+/**
+ * GAP-A10 (LOTE AM, 2026-09-05): derive a new catalog entry from an existing
+ * one, overriding only the given fields. Use this for plan/token-plan
+ * profile rows (same vendor protocol + `supports` surface, different host
+ * and plan-bound credential) INSTEAD of copy-pasting the parent's
+ * `integrationClass`/`supports`/`adapterClass`/etc. by hand — the copy is
+ * exactly the drift risk this helper removes: when the parent's declared
+ * capabilities change (e.g. a capability-audit correction), every row
+ * derived from it picks up the fix for free instead of needing its own
+ * separate correction.
+ *
+ * Resolution happens HERE, at catalog-authoring time, as a plain object
+ * spread — NOT at runtime. `PROVIDER_CATALOG` is still exported as a flat
+ * `readonly ProviderCatalogEntry[]`, so every consumer (Zod validation, the
+ * loader, and the ~9 other modules that read `PROVIDER_CATALOG` directly)
+ * keeps seeing ordinary, fully-populated entries — this cannot regress any
+ * of them.
+ *
+ * Only a shallow merge: an override REPLACES the parent's value for that key
+ * wholesale (e.g. passing `supports` overrides the entire supports object,
+ * it does not merge field-by-field) — deliberately, since a plan profile
+ * with a genuinely narrower capability surface than its parent (a real
+ * pattern in this catalog: `stepfun-step-plan` bundles only specific
+ * reasoning models and must NOT inherit the flagship `stepfun` row's
+ * vision/embeddings/audio surface) needs to say so explicitly, not have it
+ * silently merged back in.
+ */
+export function deriveFromCatalogEntry(
+  parent: ProviderCatalogEntry,
+  overrides: Partial<ProviderCatalogEntry> &
+    Pick<ProviderCatalogEntry, 'providerId' | 'displayName' | 'baseUrl' | 'apiKeyEnvVar'>
+): ProviderCatalogEntry {
+  return {
+    ...parent,
+    ...overrides,
+    basedOn: parent.providerId,
+  };
 }
 
 /**

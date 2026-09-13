@@ -224,42 +224,44 @@ describe('applyDryRunFailClosedGate — body shape normalization', () => {
     process.env.ENABLE_CONSENSUS_PLAN_DRY_RUN = 'true';
     const { applyDryRunFailClosedGate } = await import('../chat-request-processor');
 
-    // Provide a tiny candidate pool via the model repository mock.
-    vi.doMock('@/services/model-repository', () => ({
-      getModelRepository: () => ({
-        searchModels: async () => [
-          {
-            id: 'm1',
-            provider: 'aihubmix',
-            name: 'm1',
-            capabilities: ['chat'],
-            contextWindow: 32000,
-            inputCostPer1k: 0.001,
-            outputCostPer1k: 0.002,
-            performance: { latencyMs: 200, throughput: 100, quality: 0.8, reliability: 0.95 },
-          },
-          {
-            id: 'm2',
-            provider: 'cometapi',
-            name: 'm2',
-            capabilities: ['chat'],
-            contextWindow: 32000,
-            inputCostPer1k: 0.001,
-            outputCostPer1k: 0.002,
-            performance: { latencyMs: 250, throughput: 100, quality: 0.78, reliability: 0.93 },
-          },
-          {
-            id: 'm3',
-            provider: 'openrouter',
-            name: 'm3',
-            capabilities: ['chat'],
-            contextWindow: 32000,
-            inputCostPer1k: 0.001,
-            outputCostPer1k: 0.002,
-            performance: { latencyMs: 300, throughput: 80, quality: 0.82, reliability: 0.92 },
-          },
-        ],
-      }),
+    // Provide a tiny candidate pool via the catalog cache mock (the pool
+    // builder filters status === 'active' in memory, so the stubs carry it).
+    vi.doMock('@/services/model-catalog-service', () => ({
+      getAllCatalogModels: async () => [
+        {
+          id: 'm1',
+          provider: 'aihubmix',
+          name: 'm1',
+          capabilities: ['chat'],
+          contextWindow: 32000,
+          inputCostPer1k: 0.001,
+          outputCostPer1k: 0.002,
+          performance: { latencyMs: 200, throughput: 100, quality: 0.8, reliability: 0.95 },
+          status: 'active',
+        },
+        {
+          id: 'm2',
+          provider: 'cometapi',
+          name: 'm2',
+          capabilities: ['chat'],
+          contextWindow: 32000,
+          inputCostPer1k: 0.001,
+          outputCostPer1k: 0.002,
+          performance: { latencyMs: 250, throughput: 100, quality: 0.78, reliability: 0.93 },
+          status: 'active',
+        },
+        {
+          id: 'm3',
+          provider: 'openrouter',
+          name: 'm3',
+          capabilities: ['chat'],
+          contextWindow: 32000,
+          inputCostPer1k: 0.001,
+          outputCostPer1k: 0.002,
+          performance: { latencyMs: 300, throughput: 80, quality: 0.82, reliability: 0.92 },
+          status: 'active',
+        },
+      ],
     }));
 
     try {
@@ -287,7 +289,7 @@ describe('applyDryRunFailClosedGate — body shape normalization', () => {
         expect(meta.consensusPlan).toBeDefined();
       }
     } finally {
-      vi.doUnmock('@/services/model-repository');
+      vi.doUnmock('@/services/model-catalog-service');
     }
 
     // PROVIDER_CALL_SENTINEL is fetch — must not have been called.

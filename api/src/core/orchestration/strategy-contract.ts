@@ -196,6 +196,13 @@ const executionToCanonical: Record<ExecutionStrategyName, CanonicalStrategyName>
   'tri-role-collective': 'tri-role-collective',
   cached: 'dynamic',
   auto: 'dynamic',
+  // LOTE AT (Part 2): not user-selectable (absent from STRATEGY_INPUT_VALUES
+  // / aliasToCanonical), reached only via `resolveMediaPlanRouting`'s own
+  // gate. Mapped to 'agentic' — the closest existing canonical bucket
+  // ("Autonomous: plan workflow → execute steps ... → deliver result") —
+  // purely so this Record stays exhaustive; nothing resolves TO
+  // 'media-planner' via canonicalToExecution.
+  'media-planner': 'agentic',
 };
 
 export function normalizeStrategyInput(

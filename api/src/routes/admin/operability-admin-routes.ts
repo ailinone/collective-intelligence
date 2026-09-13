@@ -31,7 +31,7 @@
  */
 
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
-import { authenticate, requireRole } from '@/middleware/auth-middleware';
+import { authenticate, requirePlatformAdmin } from '@/middleware/auth-middleware';
 import { rejectAnonymousGuestKeyPreHandler } from '@/services/anonymous-quota-gate';
 import { rejectChatFreeTierKeyPreHandler } from '@/services/free-tier-quota-gate';
 import { logger } from '@/utils/logger';
@@ -39,11 +39,15 @@ import { logger } from '@/utils/logger';
 const log = logger.child({ component: 'operability-admin-routes' });
 
 export async function registerOperabilityAdminRoutes(server: FastifyInstance): Promise<void> {
+  // SECURITY (platform-admin-vs-tenant-admin, 2026-09-08): these read/mutate
+  // singleton platform services (provider health, discovery, embedding
+  // index) shared by every tenant — requireRole('admin','owner') alone is
+  // per-org and any tenant's own self-promoted admin satisfies it.
   const adminPreHandler = [
     authenticate,
     rejectAnonymousGuestKeyPreHandler,
     rejectChatFreeTierKeyPreHandler,
-    requireRole('admin', 'owner'),
+    requirePlatformAdmin(),
   ];
 
   // ─── GET /v1/admin/operability/health ─────────────────────────────────

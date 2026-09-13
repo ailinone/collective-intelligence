@@ -249,6 +249,30 @@ export async function registerImagesRoutes(server: FastifyInstance): Promise<voi
                   type: 'string',
                   description: 'AI provider used (e.g., "openai", "stability-ai", "midjourney")',
                 },
+                judge_used: {
+                  type: 'boolean',
+                  description:
+                    'true when strategy=parallel/debate/quality_multipass actually generated multiple candidates and a real vision-model judge decided the winner (Package B). Absent/false for ordinary strategies, or when the judge was unavailable and the winner fell back to static ranking.',
+                },
+                candidates_evaluated: {
+                  type: 'integer',
+                  description: 'How many candidates succeeded and were considered (best-of-N strategies only).',
+                },
+                judge_verdicts: {
+                  type: 'array',
+                  description: 'Per-candidate judge output, in scoring order — why a given candidate won.',
+                  items: {
+                    type: 'object',
+                    properties: {
+                      model_used: { type: 'string' },
+                      provider: { type: 'string' },
+                      score: { type: 'number' },
+                      verdict: { type: 'string', enum: ['pass', 'fail', 'uncertain'] },
+                      rationale: { type: 'string' },
+                      available: { type: 'boolean' },
+                    },
+                  },
+                },
               },
             },
           },
@@ -427,6 +451,25 @@ export async function registerImagesRoutes(server: FastifyInstance): Promise<voi
             model_used: result.modelUsed,
             provider: result.provider,
             duration_ms: result.durationMs,
+            // Package B (2026-09-09): surface whether real collective
+            // intelligence actually happened for this request — not just
+            // internal log data nobody reads.
+            ...(result.judgeUsed !== undefined ? { judge_used: result.judgeUsed } : {}),
+            ...(result.candidatesEvaluated !== undefined
+              ? { candidates_evaluated: result.candidatesEvaluated }
+              : {}),
+            ...(result.judgeVerdicts
+              ? {
+                  judge_verdicts: result.judgeVerdicts.map((v) => ({
+                    model_used: v.modelUsed,
+                    provider: v.provider,
+                    score: v.score,
+                    verdict: v.verdict,
+                    ...(v.rationale ? { rationale: v.rationale } : {}),
+                    available: v.available,
+                  })),
+                }
+              : {}),
           },
         });
       } catch (error: unknown) {
@@ -462,6 +505,10 @@ export async function registerImagesRoutes(server: FastifyInstance): Promise<voi
   // POST /v1/images/edits
   // ==========================================
   server.post('/v1/images/edits', {
+    // Skip body schema validation for multipart/form-data endpoints.
+    // Fastify's JSON schema validator runs BEFORE the multipart parser and rejects
+    // raw form-data bytes as invalid JSON objects. Validation is done in the handler.
+    validatorCompiler: () => () => true,
     schema: {
       tags: ['Images'],
       summary: 'Edit images with text prompts',
@@ -870,6 +917,10 @@ export async function registerImagesRoutes(server: FastifyInstance): Promise<voi
   // POST /v1/images/variations
   // ==========================================
   server.post('/v1/images/variations', {
+    // Skip body schema validation for multipart/form-data endpoints.
+    // Fastify's JSON schema validator runs BEFORE the multipart parser and rejects
+    // raw form-data bytes as invalid JSON objects. Validation is done in the handler.
+    validatorCompiler: () => () => true,
     schema: {
       tags: ['Images'],
       summary: 'Create variations of images',

@@ -112,8 +112,33 @@ export interface FallbackOptions<TResponse> {
   deadlineMs?: number;
   /** Registry used for adapter resolution. */
   registry: ProviderRegistry;
-  /** The capability call to attempt against each (model, adapter). */
-  execute: (model: Model, adapter: ProviderAdapter) => Promise<TResponse>;
+  /**
+   * The capability call to attempt against each (model, adapter).
+   *
+   * The third argument, `ctx.deadlineAt`, is an absolute wall-clock deadline
+   * (epoch ms, `Infinity` when `deadlineMs` is omitted/Infinite) THIS
+   * candidate's internal wait should respect. Bug 2 fix (2026-09-08,
+   * live-proven on empiriolabs/wan-3-0): a per-candidate operation that
+   * internally waits/polls (e.g. an async video job) has no way to know how
+   * much of the outer search budget is left, so without this it can — and
+   * did, in production — run past `deadlineMs` on its own fixed budget
+   * alone, and the between-candidate check below only fires AFTER that
+   * candidate returns, by which point the whole search budget (and then
+   * some) is already spent and every other candidate in the pool is
+   * starved. In the sequential phase `ctx.deadlineAt` is the OVERALL search
+   * deadline divided fairly across however many candidates are still
+   * queued (itself included) — never more than the full remaining budget,
+   * and identical to it when only one candidate remains — so a single
+   * hanging candidate can only ever consume its own share, not everyone
+   * else's; in the (video-unused) parallel race phase every racer gets the
+   * full remaining budget, since racers don't compete for the same clock.
+   * Callers whose `execute` can internally wait should thread
+   * `ctx.deadlineAt` down to that wait so it can bail out in time — see
+   * video-orchestration-service.ts's `execute` hook and the hub adapter's
+   * `pollVideoTask`. Callers with no internal wait (chat, embeddings, …) can
+   * ignore the third argument entirely.
+   */
+  execute: (model: Model, adapter: ProviderAdapter, ctx: { deadlineAt: number }) => Promise<TResponse>;
   /**
    * Optional adapter-level capability probe. Catalog metadata can lie (we've
    * seen it); when the route knows how to detect "this adapter doesn't
@@ -132,7 +157,7 @@ export interface FallbackOptions<TResponse> {
   log?: Pick<Logger, 'info' | 'warn'>;
   /**
    * Optional pre-fetched catalog. When supplied, the primitive skips the
-   * default `getModelRepository().searchModels()` call. Useful for callers
+   * default `getModelRepository().searchModelsComplete()` call. Useful for callers
    * that already filtered by tenant/quality/etc., and for unit tests that
    * want to drive the inner loop deterministically without standing up
    * Prisma.
@@ -351,11 +376,24 @@ export async function executeWithFallback<TResponse>(
   const maxCandidates = options.maxCandidates ?? Infinity;
   const deadlineMs = options.deadlineMs ?? Infinity;
   const searchStartedAt = Date.now();
+  // The OVERALL search's absolute deadline — the ceiling every candidate's
+  // `ctx.deadlineAt` is derived from (fair-shared in the sequential loop
+  // below, passed through as-is to parallel racers). See
+  // FallbackOptions.execute doc (Bug 2 fix, 2026-09-08).
+  const overallDeadlineAt = deadlineMs === Infinity ? Infinity : searchStartedAt + deadlineMs;
   const log = options.log ?? logger.child({ component: 'execute-with-fallback', capabilityLabel });
 
+  // searchModelsComplete, never searchModels: the plain search applies a silent
+  // `limit || 100` on top of `ORDER BY created_at DESC`, so this generic
+  // fallback pool — shared by EVERY modality that routes through this
+  // primitive — was really "the 100 most recently discovered rows that declare
+  // the capability". Explicit model references outside that recency window
+  // resolved to nothing and surfaced as a false 404. The pool must reach the
+  // whole catalog; how many candidates are actually TRIED stays governed by
+  // `maxCandidates`/`deadlineMs` below.
   const catalog =
     options.catalog ??
-    (await getModelRepository().searchModels({ capabilities, status: 'active' }));
+    (await getModelRepository().searchModelsComplete({ capabilities, status: 'active' }));
 
   const matched = selectCandidates({
     catalog,
@@ -400,7 +438,10 @@ export async function executeWithFallback<TResponse>(
         selectedAdapter: ProviderAdapter;
       }
     | { ok: false };
-  const tryCandidate = async (model: Model): Promise<Outcome> => {
+  const tryCandidate = async (
+    model: Model,
+    candidateDeadlineAt: number = overallDeadlineAt
+  ): Promise<Outcome> => {
     const startedAt = Date.now();
     const resolution = options.registry.resolveAdapterForModel(model);
     const adapter = resolution.adapter;
@@ -424,7 +465,7 @@ export async function executeWithFallback<TResponse>(
     );
 
     try {
-      const response = await options.execute(model, adapter);
+      const response = await options.execute(model, adapter, { deadlineAt: candidateDeadlineAt });
       attempts.push({
         model: model.name,
         modelId: model.id,
@@ -497,7 +538,9 @@ export async function executeWithFallback<TResponse>(
   // attempt (not a per-attempt timeout — see class doc) so a catalog that
   // grows to thousands of candidates per capability never needs a code
   // change: the search simply tries as many as fit in `deadlineMs`.
-  for (const model of queue.slice(cursor)) {
+  const remainingQueue = queue.slice(cursor);
+  for (let i = 0; i < remainingQueue.length; i++) {
+    const model = remainingQueue[i];
     // The deadline never blocks the FIRST attempt of the whole search (across
     // both phases) — deadlineMs:0 means "try exactly one candidate, no
     // further search", not "try zero candidates". Without this guard,
@@ -516,7 +559,29 @@ export async function executeWithFallback<TResponse>(
       );
       break;
     }
-    const outcome = await tryCandidate(model);
+    // Bug 2 fix (2026-09-08, live-proven on empiriolabs/wan-3-0): give THIS
+    // candidate a fair SHARE of whatever search time remains, proportional to
+    // how many candidates are still queued (itself included) — not the full
+    // remaining budget. A flat shared deadline (every candidate gets
+    // `overallDeadlineAt`) only bounds the OVERSHOOT past `deadlineMs`; it
+    // does nothing to stop a single hanging candidate from consuming the
+    // ENTIRE remaining budget by itself, which is the literal failure mode
+    // reported live: a 300000ms poll ran under a 30000ms search deadline and
+    // left 143 other candidates untried. Dividing the remaining time by the
+    // remaining candidate count means a hanging candidate can only ever
+    // consume its own slice, leaving the rest for the others — while a
+    // healthy candidate (the overwhelmingly common case; fallback is the
+    // exception) finishes long before its slice matters. When only one
+    // candidate remains (the common non-fallback case) this is exactly
+    // `overallDeadlineAt`, i.e. bit-identical to before.
+    const candidatesRemaining = remainingQueue.length - i;
+    const overallRemainingMs =
+      overallDeadlineAt === Infinity ? Infinity : Math.max(0, overallDeadlineAt - Date.now());
+    const candidateDeadlineAt =
+      overallRemainingMs === Infinity
+        ? Infinity
+        : Date.now() + overallRemainingMs / candidatesRemaining;
+    const outcome = await tryCandidate(model, candidateDeadlineAt);
     if (outcome.ok) {
       return {
         response: outcome.response,

@@ -65,9 +65,9 @@ beforeEach(() => {
   // approved-plan check intermittently under singleFork.
   vi.resetModules();
 
-  // Mock the model repository so role-specific pool builder + planner
+  // Mock the catalog cache so role-specific pool builder + planner
   // run without hitting the real DB.
-  vi.doMock('@/services/model-repository', () => {
+  vi.doMock('@/services/model-catalog-service', () => {
     const judgeStub = {
       id: 'fixture-judge',
       provider: 'fixture-prov-judge',
@@ -117,15 +117,13 @@ beforeEach(() => {
       balanceStatus: 'has-credits',
     });
     return {
-      getModelRepository: () => ({
-        searchModels: async () => [
-          participantStub('p-a', 'prov-a'),
-          participantStub('p-b', 'prov-b'),
-          participantStub('p-c', 'prov-c'),
-          judgeStub,
-          synthStub,
-        ],
-      }),
+      getAllCatalogModels: async () => [
+        participantStub('p-a', 'prov-a'),
+        participantStub('p-b', 'prov-b'),
+        participantStub('p-c', 'prov-c'),
+        judgeStub,
+        synthStub,
+      ],
     };
   });
 });
@@ -136,7 +134,7 @@ afterEach(() => {
     if (!(k in ORIG_ENV)) delete process.env[k];
   }
   Object.assign(process.env, ORIG_ENV);
-  vi.doUnmock('@/services/model-repository');
+  vi.doUnmock('@/services/model-catalog-service');
 });
 
 function makeBaseRequest(): ChatRequest {
@@ -281,9 +279,11 @@ describe('processChatRequest — dryRun=false consensus dynamic-plan gate', () =
         await import('@/core/orchestration/strategies/consensus-plan-dry-run-service');
       const { computePlanFingerprint } =
         await import('@/core/orchestration/strategies/consensus-plan-fingerprint');
-      const { getModelRepository } = await import('@/services/model-repository');
+      // Same (mocked) catalog source the gate recomputes from, so the
+      // approved fingerprint and the recomputed one share their universe.
+      const { getAllCatalogModels } = await import('@/services/model-catalog-service');
       const pools = await buildConsensusRoleSpecificCandidatePools({
-        repo: getModelRepository() as never,
+        catalog: { listCatalogModels: getAllCatalogModels },
         maxCostPer1kJudge: 0.01,
       });
       const planSvc = new ConsensusPlanDryRunService();

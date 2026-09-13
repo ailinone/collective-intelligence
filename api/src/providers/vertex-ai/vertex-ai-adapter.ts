@@ -24,6 +24,7 @@ import type {
   Model,
   EmbeddingRequest,
   EmbeddingResponse,
+  ToolCall,
 } from '@/types';
 import type {
   ModerationRequest,
@@ -35,7 +36,36 @@ import type {
 } from '@/types/model-client';
 import { logger } from '@/utils/logger';
 import { getModelsByProvider } from '@/services/model-catalog-service';
+import { recordProviderPromptCacheUsage } from '@/observability/ci-metrics';
 import { spawn } from 'child_process';
+
+/**
+ * Surface Vertex AI's own reported context-cache tokens into ci's
+ * provider-cache observability metric (ADR-025 follow-up, 2026-09).
+ *
+ * Vertex AI's Gemini models get IMPLICIT context caching enabled by default
+ * (no request-side field to set) for Gemini 2.5+ — the same mechanism and
+ * the same `UsageMetadata.cachedContentTokenCount` response field as the
+ * standalone Gemini API that `google-adapter.ts` already surfaces (confirmed
+ * live against Vertex AI's `GenerateContentResponse.UsageMetadata` reference,
+ * 2026-09-09: "the number of tokens in the cached part of your input").
+ * Vertex only reports the hit count directly, so the miss count is derived
+ * the same way the Gemini/xAI/Moonshot adapters do
+ * (`promptTokenCount - cachedContentTokenCount`). A no-op when the field is
+ * absent (e.g. a model/response that never populated it).
+ */
+function recordVertexAICacheUsage(usageMetadata: Record<string, unknown> | undefined): void {
+  if (!usageMetadata) return;
+  const cachedTokens = usageMetadata.cachedContentTokenCount;
+  if (typeof cachedTokens !== 'number') return;
+  const promptTokens = usageMetadata.promptTokenCount;
+
+  recordProviderPromptCacheUsage({
+    provider: 'vertex-ai',
+    hitTokens: cachedTokens,
+    missTokens: typeof promptTokens === 'number' ? Math.max(0, promptTokens - cachedTokens) : undefined,
+  });
+}
 
 /**
  * Vertex AI Adapter
@@ -281,9 +311,53 @@ export class VertexAIAdapter extends ProviderAdapter {
       payload.tools = request.tools.map((tool) => ({
         function_declarations: [tool.function],
       }));
+      const toolConfig = this.convertToolChoiceToVertex(request.tool_choice);
+      if (toolConfig) {
+        payload.toolConfig = toolConfig;
+      }
     }
 
     return payload;
+  }
+
+  /**
+   * Map the canonical OpenAI-shaped `tool_choice` onto Vertex AI's native
+   * `toolConfig.functionCallingConfig` shape for the classic `:generateContent`
+   * / `:streamGenerateContent` endpoints this adapter calls — verbatim per
+   * Google's REST reference (`toolConfig`, `functionCallingConfig`, `mode`,
+   * `allowedFunctionNames` are all camelCase; `mode` is `AUTO` (model
+   * decides, the default), `ANY` (must call a function), or `NONE` (must
+   * not)). Same shape as the native Google adapter's Gemini SDK path
+   * (`google-adapter.ts`'s `convertToolChoiceToGemini`) since both target
+   * the same underlying Gemini API — kept as a separate method because this
+   * adapter posts a raw JSON payload rather than going through the
+   * `@google/generative-ai` SDK, so the two request-body shapes are built
+   * independently even where the target field happens to match.
+   *
+   * OpenAI's `'required'` maps to `ANY`, not `AUTO` — "must call some tool"
+   * and "may call a tool" are different constraints. `ChatRequest['tool_choice']`
+   * doesn't carry a `'required'` literal in its type today, but a real
+   * OpenAI-compatible caller can still send the string at runtime, so it's
+   * handled defensively here rather than only through the type.
+   *
+   * Only called when `tools` is non-empty (see `buildVertexAIPayload` above)
+   * — a `toolConfig` with no declared functions has nothing to constrain.
+   */
+  private convertToolChoiceToVertex(
+    toolChoice: ChatRequest['tool_choice'] | 'required'
+  ):
+    | { functionCallingConfig: { mode: 'AUTO' | 'ANY' | 'NONE'; allowedFunctionNames?: string[] } }
+    | undefined {
+    if (toolChoice === undefined) return undefined;
+    if (toolChoice === 'auto') return { functionCallingConfig: { mode: 'AUTO' } };
+    if (toolChoice === 'none') return { functionCallingConfig: { mode: 'NONE' } };
+    if (toolChoice === 'required') return { functionCallingConfig: { mode: 'ANY' } };
+    if (typeof toolChoice === 'object' && toolChoice.type === 'function') {
+      return {
+        functionCallingConfig: { mode: 'ANY', allowedFunctionNames: [toolChoice.function.name] },
+      };
+    }
+    return undefined;
   }
 
   /**
@@ -331,7 +405,21 @@ export class VertexAIAdapter extends ProviderAdapter {
   }
 
   /**
-   * Make Vertex AI API request
+   * Make Vertex AI API request (non-streaming — `chatCompletion`'s call site).
+   *
+   * Endpoint-swap fix (2026-09-08): this previously hit `:streamGenerateContent`
+   * — the STREAMING endpoint — for a plain, non-streaming call, then read the
+   * whole body with `response.text()` and `JSON.parse`d it as one object.
+   * Per the Gemini REST reference
+   * (https://ai.google.dev/api/generate-content, fetched 2026-09-08), the
+   * non-streaming REST verb is `:generateContent` (returns a single JSON
+   * response object matching `parseVertexAIResponse`'s expected shape);
+   * `:streamGenerateContent` without `alt=sse` instead returns a JSON ARRAY
+   * of partial response chunks over one chunked connection — an array has no
+   * top-level `.candidates`, so every non-streaming Vertex AI chat call was
+   * silently throwing "No response candidates from Vertex AI" in
+   * `parseVertexAIResponse` below. See `chatCompletionStream`'s doc comment
+   * for the other half of this swap.
    */
   private async makeVertexAIRequest(
     modelId: string,
@@ -346,7 +434,7 @@ export class VertexAIAdapter extends ProviderAdapter {
 
     if (this.config.useExpressMode) {
       // Express mode
-      url = `https://aiplatform.googleapis.com/v1/publishers/${publisher}/models/${model}:streamGenerateContent?key=${this.config.apiKey}`;
+      url = `https://aiplatform.googleapis.com/v1/publishers/${publisher}/models/${model}:generateContent?key=${this.config.apiKey}`;
       headers = {
         'Content-Type': 'application/json',
       };
@@ -357,7 +445,7 @@ export class VertexAIAdapter extends ProviderAdapter {
         'application-default',
         'print-access-token',
       ]);
-      url = `https://aiplatform.googleapis.com/v1/projects/${this.config.projectId}/locations/${location}/publishers/${publisher}/models/${model}:streamGenerateContent`;
+      url = `https://aiplatform.googleapis.com/v1/projects/${this.config.projectId}/locations/${location}/publishers/${publisher}/models/${model}:generateContent`;
       headers = {
         Authorization: `Bearer ${accessToken}`,
         'Content-Type': 'application/json',
@@ -380,11 +468,11 @@ export class VertexAIAdapter extends ProviderAdapter {
         throw new Error(`Vertex AI API error ${response.status}: ${errorText}`);
       }
 
-      // For streaming, we'll handle the first chunk for now
-      // In production, you'd want to implement proper streaming
+      // `:generateContent` (see this method's doc comment) always returns
+      // one complete JSON response object — no chunking/SSE to handle here.
       const responseText = await response.text();
       const parsed: unknown = JSON.parse(responseText);
-      if (typeof parsed === 'object' && parsed !== null) {
+      if (typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)) {
         return parsed as Record<string, unknown>;
       }
       throw new Error('Invalid response format from Vertex AI');
@@ -411,13 +499,91 @@ export class VertexAIAdapter extends ProviderAdapter {
   }
 
   /**
+   * Extract `functionCall` parts from a Gemini `content.parts[]` array into
+   * OpenAI-shaped `ToolCall[]`.
+   *
+   * Per the Gemini API's `FunctionCall` schema — corroborated across
+   * https://ai.google.dev/api/generate-content and
+   * https://ai.google.dev/gemini-api/docs/function-calling (fetched
+   * 2026-09-08) — a `functionCall` part is `{ name: string, args: object,
+   * id?: string }`: `args` is already a complete JSON OBJECT (not a string
+   * to be parsed), and `id` (when present) correlates a call with its later
+   * `functionResponse.id` for parallel/composed calls. Unlike Anthropic's
+   * `input_json_delta` or OpenAI's `function.arguments` fragments, Gemini's
+   * wire contract has no documented mechanism to fragment a structured
+   * `args` object into partial-JSON string deltas — every real-world sample
+   * and the official function-calling guide's own streaming examples treat
+   * a `functionCall` part as arriving whole. Each call is therefore surfaced
+   * as one complete, immediately-usable `ToolCall` the moment its part is
+   * seen, rather than split across synthetic argument fragments (a client
+   * doing the standard `arguments += delta` reconstruction still gets the
+   * right result, since there is exactly one fragment).
+   *
+   * Audit finding, 2026-09-08: previously never called anywhere in this
+   * adapter — every `functionCall` part (streaming or non-streaming) was
+   * silently ignored, so `tools` + a Vertex/Gemini model never actually
+   * surfaced a tool call to the caller.
+   */
+  private extractFunctionCallParts(parts: Array<Record<string, unknown>>): ToolCall[] {
+    const calls: ToolCall[] = [];
+    let index = 0;
+    for (const part of parts) {
+      const fc = part.functionCall as { name?: unknown; args?: unknown; id?: unknown } | undefined;
+      if (!fc || typeof fc !== 'object' || typeof fc.name !== 'string') continue;
+      const args = fc.args && typeof fc.args === 'object' ? fc.args : {};
+      calls.push({
+        id: typeof fc.id === 'string' && fc.id.length > 0 ? fc.id : `vertex-call-${Date.now()}-${index}`,
+        type: 'function',
+        function: { name: fc.name, arguments: JSON.stringify(args) },
+        index,
+      });
+      index++;
+    }
+    return calls;
+  }
+
+  /**
+   * Map a Gemini `finishReason` to the shared OAI-shaped `finish_reason`.
+   *
+   * Bug fix, 2026-09-08: this previously mapped `'RECITATION'` to
+   * `'tool_calls'` — RECITATION means the model's output too closely matched
+   * training/source data (a content-safety-adjacent stoppage per
+   * https://ai.google.dev/api/generate-content's `FinishReason` enum), which
+   * has nothing to do with function calling; it is grouped here with the
+   * other content-safety reasons instead. The real signal for "the model
+   * called a tool" is the presence of `functionCall` parts in the
+   * candidate's content — passed in via `hasFunctionCalls` — which takes
+   * precedence over the raw `finishReason` the same way OpenAI's own
+   * `finish_reason: 'tool_calls'` overrides what would otherwise just be a
+   * normal stop.
+   */
+  private mapGeminiFinishReason(
+    finishReasonValue: unknown,
+    hasFunctionCalls: boolean
+  ): 'stop' | 'length' | 'tool_calls' | 'content_filter' | null {
+    if (hasFunctionCalls) return 'tool_calls';
+    if (finishReasonValue === 'STOP' || finishReasonValue === 'stop') return 'stop';
+    if (finishReasonValue === 'MAX_TOKENS' || finishReasonValue === 'length') return 'length';
+    if (
+      finishReasonValue === 'SAFETY' ||
+      finishReasonValue === 'RECITATION' ||
+      finishReasonValue === 'BLOCKLIST' ||
+      finishReasonValue === 'PROHIBITED_CONTENT' ||
+      finishReasonValue === 'SPII' ||
+      finishReasonValue === 'content_filter'
+    ) {
+      return 'content_filter';
+    }
+    return 'stop';
+  }
+
+  /**
    * Parse Vertex AI response
    */
   private parseVertexAIResponse(
     response: Record<string, unknown>,
     request: ChatRequest
   ): ChatResponse {
-    // Handle streaming response (simplified for now)
     const candidates = Array.isArray(response.candidates) ? response.candidates : [];
     const candidate = candidates[0] as Record<string, unknown> | undefined;
 
@@ -427,27 +593,26 @@ export class VertexAIAdapter extends ProviderAdapter {
 
     const content = candidate.content as Record<string, unknown> | undefined;
     let responseText = '';
+    let toolCalls: ToolCall[] = [];
 
     if (content && Array.isArray(content.parts)) {
       const parts = content.parts as Array<Record<string, unknown>>;
       responseText = parts.map((part) => (typeof part.text === 'string' ? part.text : '')).join('');
+      toolCalls = this.extractFunctionCallParts(parts);
     }
 
-    // Type guard for finishReason
-    const finishReasonValue = candidate.finishReason;
-    const validFinishReason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | null =
-      finishReasonValue === 'STOP' || finishReasonValue === 'stop'
-        ? 'stop'
-        : finishReasonValue === 'MAX_TOKENS' || finishReasonValue === 'length'
-          ? 'length'
-          : finishReasonValue === 'SAFETY' || finishReasonValue === 'content_filter'
-            ? 'content_filter'
-            : finishReasonValue === 'RECITATION' || finishReasonValue === 'tool_calls'
-              ? 'tool_calls'
-              : 'stop';
+    const validFinishReason = this.mapGeminiFinishReason(
+      candidate.finishReason,
+      toolCalls.length > 0
+    );
 
     // Type guard for usageMetadata
     const usageMetadata = response.usageMetadata;
+    recordVertexAICacheUsage(
+      usageMetadata && typeof usageMetadata === 'object'
+        ? (usageMetadata as Record<string, unknown>)
+        : undefined
+    );
     const promptTokens =
       usageMetadata &&
       typeof usageMetadata === 'object' &&
@@ -481,6 +646,7 @@ export class VertexAIAdapter extends ProviderAdapter {
           message: {
             role: 'assistant',
             content: responseText,
+            ...(toolCalls.length > 0 ? { tool_calls: toolCalls } : {}),
           },
           finish_reason: validFinishReason,
           logprobs: null,
@@ -527,7 +693,20 @@ export class VertexAIAdapter extends ProviderAdapter {
 
   /**
    * Chat completion streaming for Vertex AI
-   * REAL IMPLEMENTATION - Uses Server-Sent Events (SSE) streaming from Vertex AI API
+   *
+   * Endpoint-swap fix (2026-09-08): this previously hit `:generateContent` —
+   * the NON-streaming endpoint — and then tried to parse its single JSON
+   * response body as if it were an SSE stream (splitting on `\n`, looking
+   * for `data: ` prefixes). A plain `:generateContent` body never contains
+   * `data: ` lines, so this loop silently found zero matches and the whole
+   * stream yielded NOTHING — no text, no tool calls, no finish reason —
+   * every time. Per https://ai.google.dev/api/generate-content (fetched
+   * 2026-09-08), real SSE (`data: {...}` lines, which the loop below is
+   * written to parse) requires BOTH the `:streamGenerateContent` verb AND
+   * the `alt=sse` query parameter — without `alt=sse`, `:streamGenerateContent`
+   * returns a JSON array instead. See `makeVertexAIRequest`'s doc comment
+   * for the other half of this swap (the non-streaming path was hitting
+   * `:streamGenerateContent`).
    */
   async *chatCompletionStream(request: ChatRequest): AsyncGenerator<ChatResponse, void, unknown> {
     const startTime = Date.now();
@@ -550,19 +729,19 @@ export class VertexAIAdapter extends ProviderAdapter {
       let headers: Record<string, string>;
 
       if (this.config.useExpressMode) {
-        // Express mode - use non-streaming endpoint for regular requests
-        url = `https://aiplatform.googleapis.com/v1/publishers/${publisher}/models/${model}:generateContent?key=${this.config.apiKey}`;
+        // Express mode
+        url = `https://aiplatform.googleapis.com/v1/publishers/${publisher}/models/${model}:streamGenerateContent?alt=sse&key=${this.config.apiKey}`;
         headers = {
           'Content-Type': 'application/json',
         };
       } else {
-        // Standard mode with gcloud auth - use non-streaming endpoint for regular requests
+        // Standard mode with gcloud auth
         const accessToken = await this.executeGcloudCommand([
           'auth',
           'application-default',
           'print-access-token',
         ]);
-        url = `https://aiplatform.googleapis.com/v1/projects/${this.config.projectId}/locations/${location}/publishers/${publisher}/models/${model}:generateContent`;
+        url = `https://aiplatform.googleapis.com/v1/projects/${this.config.projectId}/locations/${location}/publishers/${publisher}/models/${model}:streamGenerateContent?alt=sse`;
         headers = {
           Authorization: `Bearer ${accessToken}`,
           'Content-Type': 'application/json',
@@ -599,8 +778,10 @@ export class VertexAIAdapter extends ProviderAdapter {
       let firstChunk = true;
       let chunkId = `chatcmpl-${Date.now()}`;
       let accumulatedContent = '';
-      let finishReason: 'stop' | 'length' | null = null;
+      let finishReason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | null = null;
       let totalTokens = 0;
+      let sawToolCalls = false;
+      let nextToolCallIndex = 0;
 
       try {
         let streamDone = false;
@@ -626,8 +807,10 @@ export class VertexAIAdapter extends ProviderAdapter {
               const dataStr = line.slice(6).trim();
 
               if (dataStr === '[DONE]') {
-                // End of stream
-                finishReason = 'stop';
+                // End of stream. Only fills in a default — a real
+                // `candidate.finishReason` seen earlier (e.g. 'tool_calls'
+                // via `sawToolCalls`) must not be downgraded back to 'stop'.
+                finishReason = finishReason ?? 'stop';
                 continue;
               }
 
@@ -642,8 +825,8 @@ export class VertexAIAdapter extends ProviderAdapter {
                   const content = candidate.content as Record<string, unknown> | undefined;
                   const parts = Array.isArray(content?.parts) ? content.parts : [];
 
-                  for (const part of parts) {
-                    const text = (part as Record<string, unknown>).text;
+                  for (const part of parts as Array<Record<string, unknown>>) {
+                    const text = part.text;
                     if (typeof text === 'string' && text) {
                       accumulatedContent += text;
 
@@ -675,19 +858,53 @@ export class VertexAIAdapter extends ProviderAdapter {
                     }
                   }
 
-                  // Check for finish reason
-                  const finishReasonStr = candidate.finishReason;
-                  if (typeof finishReasonStr === 'string') {
-                    if (finishReasonStr === 'STOP') {
-                      finishReason = 'stop';
-                    } else if (finishReasonStr === 'MAX_TOKENS') {
-                      finishReason = 'length';
+                  // `functionCall` parts (see `extractFunctionCallParts`'s doc
+                  // comment): Gemini delivers each call whole — id, name, and
+                  // COMPLETE args — in the chunk it first appears in, so each
+                  // one becomes exactly one tool_calls delta here (no
+                  // argument-fragment accumulation to do, unlike Anthropic's
+                  // `input_json_delta`). `nextToolCallIndex` stays scoped to
+                  // the whole stream (not reset per SSE data chunk) so
+                  // multiple calls across chunks still get distinct,
+                  // sequential `ToolCall.index` values.
+                  const toolCallsInChunk = this.extractFunctionCallParts(
+                    parts as Array<Record<string, unknown>>
+                  ).map((tc) => ({ ...tc, index: nextToolCallIndex++ }));
+                  if (toolCallsInChunk.length > 0) {
+                    sawToolCalls = true;
+                    if (firstChunk) {
+                      const duration = Date.now() - startTime;
+                      this.providerLog.debug({ duration }, 'First chunk received');
+                      firstChunk = false;
                     }
+                    yield {
+                      id: chunkId,
+                      object: 'chat.completion.chunk',
+                      created: Math.floor(Date.now() / 1000),
+                      model: modelId,
+                      choices: [
+                        {
+                          index: 0,
+                          delta: { role: 'assistant', tool_calls: toolCallsInChunk },
+                          finish_reason: null,
+                          logprobs: null,
+                        },
+                      ],
+                      usage: undefined,
+                    };
+                  }
+
+                  // Check for finish reason — see `mapGeminiFinishReason`'s
+                  // doc comment for why `sawToolCalls` takes precedence over
+                  // the raw `finishReason` string.
+                  if (typeof candidate.finishReason === 'string' || sawToolCalls) {
+                    finishReason = this.mapGeminiFinishReason(candidate.finishReason, sawToolCalls);
                   }
 
                   // Extract usage if available
                   const usageMetadata = data.usageMetadata as Record<string, unknown> | undefined;
                   if (usageMetadata) {
+                    recordVertexAICacheUsage(usageMetadata);
                     const promptTokens =
                       typeof usageMetadata.promptTokenCount === 'number'
                         ? usageMetadata.promptTokenCount
@@ -713,8 +930,13 @@ export class VertexAIAdapter extends ProviderAdapter {
           }
         }
 
-        // Yield final chunk with finish reason if we have accumulated content
-        if (accumulatedContent && finishReason) {
+        // Yield final chunk with finish reason. Bug fix, 2026-09-08: this
+        // previously required `accumulatedContent` to be truthy too — a
+        // tool-call-only turn (no text at all, the common case for an
+        // agentic tool call) has an empty `accumulatedContent`, so the
+        // terminal `finish_reason` chunk was silently never sent, leaving a
+        // client with no signal the stream had actually finished.
+        if (finishReason) {
           yield {
             id: chunkId,
             object: 'chat.completion.chunk',

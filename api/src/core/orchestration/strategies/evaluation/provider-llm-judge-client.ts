@@ -105,6 +105,24 @@ export class ProviderLLMJudgeClient implements LLMJudgeClient {
       temperature: this.opts.temperature ?? 0,
       max_tokens: this.opts.maxTokens ?? 600,
       stream: false,
+      // LOTE AZ (2026-09) — carry the ORIGINAL request's reasoning-effort
+      // signal onto the judge call. Before this, the judge request was built
+      // from scratch with zero knowledge of what the caller asked for, so a
+      // high-effort original request silently got a judge running at
+      // whatever the judge model's own default happened to be.
+      // `thinking_budget` only takes effect on models with native extended
+      // thinking (forwarded as-is by the OpenAI-compatible hub adapter and
+      // BytePlus); `reasoning_effort` is the new canonical field for
+      // provider adapters that map it onto their own native surface (later
+      // PRs). Neither field is set when the original request carried no
+      // reasoning signal at all — an unrelated request's judge call is
+      // unaffected.
+      ...(input.originalRequestReasoning?.thinkingBudget
+        ? { thinking_budget: input.originalRequestReasoning.thinkingBudget }
+        : {}),
+      ...(input.originalRequestReasoning?.effort
+        ? { reasoning_effort: input.originalRequestReasoning.effort }
+        : {}),
     };
 
     const t0 = Date.now();

@@ -304,7 +304,8 @@ export class VertexAIModelFetcher extends BaseProviderModelFetcher {
         { supportedMethods, description: model.description, displayName: model.displayName },
         extractorOutput
       );
-      const { contextWindow, maxOutputTokens, pricing } = this.estimateVertexModelSpecs(baseName);
+      const { contextWindow, maxOutputTokens, pricing, pricingSource } =
+        this.estimateVertexModelSpecs(baseName);
 
       return {
         id: baseName,
@@ -325,6 +326,7 @@ export class VertexAIModelFetcher extends BaseProviderModelFetcher {
           apiEndpoint: 'aiplatform.googleapis.com',
           projectId: this.projectId,
           location: this.location,
+          pricingSource,
         },
       };
     } catch (error) {
@@ -356,7 +358,8 @@ export class VertexAIModelFetcher extends BaseProviderModelFetcher {
         { supportedMethods, description: model.description, displayName: model.displayName },
         extractorOutput
       );
-      const { contextWindow, maxOutputTokens, pricing } = this.estimateVertexModelSpecs(baseName);
+      const { contextWindow, maxOutputTokens, pricing, pricingSource } =
+        this.estimateVertexModelSpecs(baseName);
 
       return {
         id: baseName,
@@ -376,6 +379,7 @@ export class VertexAIModelFetcher extends BaseProviderModelFetcher {
           apiEndpoint: 'generativelanguage.googleapis.com',
           projectId: this.projectId,
           location: this.location,
+          pricingSource,
         },
       };
     } catch (error) {
@@ -510,12 +514,59 @@ export class VertexAIModelFetcher extends BaseProviderModelFetcher {
   }
 
   /**
-   * Estimate Vertex AI model specifications
+   * Source-of-truth tag for a price returned by {@link estimateVertexModelSpecs}.
+   *
+   * CRITICAL (2026-09): this repo's `cross-provider-pricing-canonical.json` /
+   * `master-price-index.json` recorded gemini-2.5-pro at $1.25/$10 per 1M
+   * tokens (a confirmed, multi-provider rate-card price) while this fetcher's
+   * DEFAULT branch below priced it — and every other current-generation Gemini
+   * model that didn't match `gemini-1.5`/`gemini-2.0`/`claude` — at
+   * ~$0.00125/$0.005, roughly 1000x too low. 82 of 89 (92%) of google/vertex-ai
+   * rows were affected before this fix. The root cause was not just missing
+   * price data: a model that silently fell through to the generic default was
+   * INDISTINGUISHABLE from one with a real, confirmed price, so nothing ever
+   * flagged the gap. `pricingSource` makes that distinction explicit and is
+   * written into `metadata.pricingSource` for every model this fetcher emits,
+   * so `'default-fallback'` can be queried/alerted on downstream instead of
+   * being silently trusted (see the cross-tier and default-fallback contract
+   * tests in `__tests__/pricing-safeguards.test.ts`).
+   */
+  private static readonly PRICING_SOURCES = [
+    'gemini-1.5-tier-table',
+    'gemini-2.0-tier-table',
+    'gemini-2.5-tier-table',
+    'gemini-3.1-tier-table',
+    'gemini-3.5-tier-table',
+    'claude-tier-table',
+    'default-fallback',
+  ] as const;
+
+  /**
+   * Estimate Vertex AI model specifications.
+   *
+   * Pricing for every branch below (other than `default-fallback`) is sourced
+   * from this repo's own operator-approved reference data — NOT invented:
+   *   - api/config/c3/operator-approval/cross-provider-pricing-canonical.json
+   *     (tier1Baselines.gemini-2.5-pro, tier1Baselines.gemini-3.1-pro)
+   *   - api/config/c3/operator-approval/master-price-index.json (raw per-offer
+   *     rate-card prices — gemini-2.5-flash / gemini-2.5-flash-lite / the
+   *     gemini-3.1-pro and gemini-3.1-flash-lite `maxIn` upper bounds, which
+   *     match the canonical rate-card figures)
+   *   - api/config/c3/operator-approval/operator-supplied-pricing.json
+   *     (ai302 aggregator: gemini-3.1-flash-lite, gemini-3.5-flash)
+   *
+   * A sub-pattern with no confirmed reference price (e.g. a bare
+   * `gemini-3.1-flash` with no `-lite` suffix, or any `gemini-3.5-pro`) is
+   * deliberately left unset here rather than guessed from a sibling tier —
+   * flash and flash-lite pricing differ by 3-7x in the confirmed data, so
+   * reusing one for the other would just be a smaller version of the same
+   * bug. Those fall through to the flagged default below.
    */
   private estimateVertexModelSpecs(modelName: string): {
     contextWindow: number;
     maxOutputTokens: number;
     pricing: { inputCostPer1M: number; outputCostPer1M: number; currency: string };
+    pricingSource: (typeof VertexAIModelFetcher.PRICING_SOURCES)[number];
   } {
     const name = modelName.toLowerCase();
 
@@ -523,22 +574,99 @@ export class VertexAIModelFetcher extends BaseProviderModelFetcher {
     let maxOutputTokens = 2048;
     let inputCost = 0.00125;
     let outputCost = 0.005;
+    let pricingSource: (typeof VertexAIModelFetcher.PRICING_SOURCES)[number] = 'default-fallback';
 
     if (name.includes('gemini-1.5')) {
       contextWindow = name.includes('flash') ? 1048576 : 2097152;
       maxOutputTokens = 8192;
       inputCost = name.includes('flash') ? 0.075 : 3.5;
       outputCost = name.includes('flash') ? 0.3 : 10.5;
+      pricingSource = 'gemini-1.5-tier-table';
     } else if (name.includes('gemini-2.0')) {
       contextWindow = 4194304;
       maxOutputTokens = 16384;
       inputCost = 5.0;
       outputCost = 15.0;
+      pricingSource = 'gemini-2.0-tier-table';
+    } else if (name.includes('gemini-2.5')) {
+      // cross-provider-pricing-canonical.json tier1Baselines.gemini-2.5-pro
+      // (rateCardUsdPer1M) + master-price-index.json raw offers for the
+      // flash / flash-lite siblings — all three sub-tiers confirmed.
+      contextWindow = 1048576;
+      maxOutputTokens = 65536;
+      if (name.includes('flash-lite')) {
+        inputCost = 0.1;
+        outputCost = 0.4;
+      } else if (name.includes('flash')) {
+        inputCost = 0.3;
+        outputCost = 2.5;
+      } else {
+        // "pro" and any other 2.5 variant (bare "gemini-2.5") default to the
+        // flagship 2.5 rate card — the tier1Baselines-confirmed price.
+        inputCost = 1.25;
+        outputCost = 10.0;
+      }
+      pricingSource = 'gemini-2.5-tier-table';
+    } else if (name.includes('gemini-3.1')) {
+      contextWindow = 1048576;
+      maxOutputTokens = 65536;
+      if (name.includes('flash-lite')) {
+        // master-price-index.json maxIn 0.2525 + operator-supplied-pricing.json
+        // ai302 [0.25, 1.5] agree.
+        inputCost = 0.25;
+        outputCost = 1.5;
+        pricingSource = 'gemini-3.1-tier-table';
+      } else if (name.includes('pro')) {
+        // cross-provider-pricing-canonical.json tier1Baselines.gemini-3.1-pro;
+        // master-price-index.json maxIn 2.0202 agrees.
+        inputCost = 2.0;
+        outputCost = 12.0;
+        pricingSource = 'gemini-3.1-tier-table';
+      }
+      // A bare "gemini-3.1-flash" (no -lite) or any other 3.1 sub-variant has
+      // no confirmed reference price in this repo — leave pricingSource at
+      // 'default-fallback' rather than reuse flash-lite's (or pro's) price.
+    } else if (name.includes('gemini-3.5')) {
+      contextWindow = 1048576;
+      maxOutputTokens = 65536;
+      if (name.includes('flash-lite')) {
+        // 2026-09 audit fix: this branch used to test `flash` only, and
+        // 'gemini-3.5-flash-lite'.includes('flash') is ALSO true — every
+        // flash-lite row was silently priced at flash's rate (5x too high:
+        // $1.50/$9 vs the real $0.30/$2.50) while being tagged
+        // 'gemini-3.5-tier-table' as if confirmed. ai.google.dev/gemini-api/docs/pricing
+        // (checked 2026-09-09): Gemini 3.5 Flash-Lite is $0.30/$2.50.
+        // Must be checked BEFORE the plain `flash` branch below, same
+        // ordering already used in the gemini-3.1 block above.
+        inputCost = 0.3;
+        outputCost = 2.5;
+        pricingSource = 'gemini-3.5-tier-table';
+      } else if (name.includes('flash')) {
+        // operator-supplied-pricing.json ai302 [1.5, 9]; master-price-index.json
+        // maxIn 1.5152 agrees. ai.google.dev/gemini-api/docs/pricing confirms
+        // $1.50/$9 for Gemini 3.5 Flash (checked 2026-09-09).
+        inputCost = 1.5;
+        outputCost = 9.0;
+        pricingSource = 'gemini-3.5-tier-table';
+      }
+      // No confirmed reference price for gemini-3.5-pro (or any other 3.5
+      // sub-variant) exists yet in this repo's pricing data — default-fallback.
     } else if (name.includes('claude')) {
       contextWindow = 200000;
       maxOutputTokens = 4096;
       inputCost = 3.0;
       outputCost = 15.0;
+      pricingSource = 'claude-tier-table';
+    }
+
+    if (pricingSource === 'default-fallback') {
+      this.log.warn(
+        { modelName, inputCost, outputCost },
+        'Vertex AI pricing fell through to the unverified default fallback — ' +
+          'no confirmed reference price exists for this model id pattern. ' +
+          'metadata.pricingSource is tagged "default-fallback" so downstream ' +
+          'cost-accounting can flag it instead of silently trusting it.'
+      );
     }
 
     return {
@@ -549,6 +677,7 @@ export class VertexAIModelFetcher extends BaseProviderModelFetcher {
         outputCostPer1M: outputCost,
         currency: 'USD',
       },
+      pricingSource,
     };
   }
 

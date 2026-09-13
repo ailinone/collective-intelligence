@@ -17,6 +17,8 @@
 import { describe, it, expect } from 'vitest';
 import { validateSelectionCriteria } from '../selection-criteria-validator';
 import type { SelectionCriteria } from '../dynamic-model-selector';
+import { estimateContextSize } from '@/core/orchestration/context-size-estimator';
+import type { ChatRequest, Tool } from '@/types';
 
 const base: SelectionCriteria = {
   taskType: 'general',
@@ -42,5 +44,35 @@ describe('validateSelectionCriteria — contextSize (10M window)', () => {
   it('still rejects negative/NaN', () => {
     expect(validateSelectionCriteria({ ...base, contextSize: -1 }).valid).toBe(false);
     expect(validateSelectionCriteria({ ...base, contextSize: Number('x') }).valid).toBe(false);
+  });
+
+  it('LOTE AW: a tool-heavy request feeds the hard gate a LARGER, now-correct contextSize (previously request.tools was never counted)', () => {
+    const bigTool: Tool = {
+      type: 'function',
+      function: {
+        name: 'run_query',
+        description: 'Run a complex analytical query'.repeat(20),
+        parameters: {
+          type: 'object',
+          properties: Object.fromEntries(
+            Array.from({ length: 20 }, (_, i) => [`field_${i}`, { type: 'string' }])
+          ),
+        },
+      },
+    };
+    const withoutTools: ChatRequest = { messages: [{ role: 'user', content: 'run this' }] };
+    const withTools: ChatRequest = { ...withoutTools, tools: [bigTool] };
+
+    const sizeWithoutTools = estimateContextSize(withoutTools);
+    const sizeWithTools = estimateContextSize(withTools);
+    expect(sizeWithTools).toBeGreaterThan(sizeWithoutTools);
+
+    // Both sizes still validate cleanly and are PRESERVED through the gate —
+    // this is what a real model-selection call feeds into
+    // SelectionCriteria.contextSize (dynamic-model-selector.ts's hard
+    // `contextWindow >= contextSize` filter).
+    const validated = validateSelectionCriteria({ ...base, contextSize: sizeWithTools });
+    expect(validated.valid).toBe(true);
+    expect(validated.sanitized?.contextSize).toBe(sizeWithTools);
   });
 });

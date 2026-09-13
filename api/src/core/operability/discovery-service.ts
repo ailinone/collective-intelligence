@@ -443,6 +443,15 @@ class ProviderDiscoveryService {
       probeLatencyMs,
     };
 
+    // Per-provider probe latency (2026-09-04, LOTE AK). The run-level
+    // PROVIDER_DISCOVERY_DURATION_MS could say the sweep was slow but never
+    // which provider caused it; `probeLatencyMs` existed on the admin
+    // endpoint and simply never reached Prometheus.
+    observeHistogram(METRIC_NAMES.PROVIDER_DISCOVERY_PROBE_LATENCY_MS, probeLatencyMs, {
+      providerId: provider.providerId,
+      status: 'available',
+    });
+
     registry.recordProbe({
       key: { providerId: provider.providerId },
       state: 'healthy',
@@ -486,6 +495,14 @@ class ProviderDiscoveryService {
       confidence: DiscoveryConfidence;
     }
   ): ProviderDiscoveryResult {
+    const probeLatencyMs = Date.now() - startedAtMs;
+    // Failed probes are the ones whose latency matters most — a provider that
+    // burns 30s before failing costs the whole sweep, and that was previously
+    // invisible per-provider.
+    observeHistogram(METRIC_NAMES.PROVIDER_DISCOVERY_PROBE_LATENCY_MS, probeLatencyMs, {
+      providerId: provider.providerId,
+      status: 'unavailable',
+    });
     return {
       providerId: provider.providerId,
       status: 'unavailable',
@@ -497,7 +514,7 @@ class ProviderDiscoveryService {
       includeInOperationalPool: false,
       discoveredAt: new Date().toISOString(),
       validUntil,
-      probeLatencyMs: Date.now() - startedAtMs,
+      probeLatencyMs,
     };
   }
 }

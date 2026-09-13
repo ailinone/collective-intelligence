@@ -81,7 +81,7 @@ const NATIVE_PROVIDERS: ReadonlySet<string> = new Set([
   'rekaai',
   'replicate',
   // NOTE: 'ai21' removed 2026-04-23 — not present in catalog nor switch
-  // (VERIFIED-CLEAN in consolidation-matrix); secret `ailin-ai21-key`
+  // (VERIFIED-CLEAN in consolidation-matrix); secret `<prefix>-ai21-key`
   // exists but is not consumed by any adapter.
   // NOTE: 'bedrock' replaced by canonical 'aws-bedrock'; 'fireworks' by
   // 'fireworks-ai'; 'together' by 'togetherai'. 'google-vertex' removed

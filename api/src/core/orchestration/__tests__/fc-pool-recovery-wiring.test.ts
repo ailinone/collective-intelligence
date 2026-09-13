@@ -62,6 +62,25 @@ describe('pool-builder FC deferral', () => {
       .build().models;
     expect(pool.map((m) => m.id)).toEqual(['has-vision']);
   });
+
+  it('tool_use is deferred alongside function_calling — the REAL production shape (mapInferredCapabilities always emits both together), not function_calling alone', () => {
+    // Mirrors the real Baidu ERNIE-4.x fetcher shape (baidu-model-fetcher.ts
+    // extractCapabilitiesFromBaidu): declares function_calling, never
+    // independently tags tool_use. Before this fix, requiring
+    // ['tool_use', 'function_calling'] together (the actual shape
+    // chat-routes.ts and orchestration-engine.ts send) hard-dropped this
+    // model on the untouched tool_use string even though function_calling
+    // was correctly deferred — defeating the whole point of the deferral.
+    const pool = new PoolBuilder([
+      chatModel('fc-only', 'prov-a', ['chat', 'function_calling']),
+      chatModel('neither', 'prov-b', ['chat']),
+    ])
+      .filterByModality()
+      .filterByCapabilities(['tool_use', 'function_calling'])
+      .build().models;
+    const ids = pool.map((m) => m.id).sort();
+    expect(ids).toEqual(['fc-only', 'neither']);
+  });
 });
 
 describe('FC-pool recovery wiring', () => {
@@ -83,11 +102,15 @@ describe('FC-pool recovery wiring', () => {
     expect(qmp).toMatch(/runtimeHealthRank\(m\.provider, m\.id\)/);
   });
 
-  it('dynamic-model-selector defers function_calling with never-empty failsafe', () => {
+  it('dynamic-model-selector defers function_calling but fails closed on other hard capabilities', () => {
     const sel = read(join('..', 'selection', 'dynamic-model-selector.ts'));
     expect(sel).toMatch(/function_calling.*DEFERRED|DEFERRED.*function_calling/s);
-    expect(sel).toMatch(
-      /FAILSAFE: required-capability filter would empty the pool — keeping unfiltered pool/
+    // SOTA §20 (2026-09-03): the never-empty failsafe was removed — a hard
+    // capability requirement may not be bypassed. Fail-closed marker:
+    expect(sel).toMatch(/HARD-CAPABILITY FAIL-CLOSED/);
+    // ...and the old bypass must be gone:
+    expect(sel).not.toMatch(
+      /keeping unfiltered pool; capability enforced at execution/
     );
   });
 });

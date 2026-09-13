@@ -22,7 +22,7 @@
  */
 
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
-import { authenticate, requireRole } from '@/middleware/auth-middleware';
+import { authenticate, requirePlatformAdmin } from '@/middleware/auth-middleware';
 import { rejectAnonymousGuestKeyPreHandler } from '@/services/anonymous-quota-gate';
 import { rejectChatFreeTierKeyPreHandler } from '@/services/free-tier-quota-gate';
 import { logger } from '@/utils/logger';
@@ -40,11 +40,15 @@ interface ExtractionStateRow {
 }
 
 export async function registerTrainingDataAdminRoutes(server: FastifyInstance): Promise<void> {
+  // SECURITY (platform-admin-vs-tenant-admin, 2026-09-08): exports/reads span
+  // ALL organizations' outcome/shadow-eval/signal data in one global pass —
+  // requireRole('admin','owner') alone is per-org and any tenant's own
+  // self-promoted admin satisfies it.
   const adminPreHandler = [
     authenticate,
     rejectAnonymousGuestKeyPreHandler,
     rejectChatFreeTierKeyPreHandler,
-    requireRole('admin', 'owner'),
+    requirePlatformAdmin(),
   ];
 
   // ═══════════════════════════════════════════════════════════════════════════

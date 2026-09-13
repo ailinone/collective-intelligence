@@ -108,8 +108,13 @@ export async function resolveSemanticCandidates(
     return fallback.slice(0, k).map((candidate) => ({ candidate }));
   }
 
-  // 2. Semantic kNN over the index
+  // 2. Semantic kNN over the index.
+  //    Timed on its own (2026-09-04, LOTE AK): CANDIDATE_RESOLUTION_LATENCY_MS
+  //    covers embed + kNN + pool filter together, so a slow TEI and a slow
+  //    index were indistinguishable in it.
+  const knnStart = performance.now();
   const hits = index.knn(queryEmbedding, candidateWidth);
+  observeHistogram(METRIC_NAMES.SEMANTIC_INDEX_SEARCH_LATENCY_MS, performance.now() - knnStart, {});
 
   // 3. Health/capability filter (via pool's query-style predicates)
   const operationalIds = new Set(

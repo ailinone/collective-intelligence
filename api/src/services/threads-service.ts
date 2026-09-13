@@ -19,6 +19,8 @@ import { logger } from '@/utils/logger';
 import { getErrorMessage } from '@/utils/type-guards';
 import { prisma } from '@/database/client';
 import { nanoid } from 'nanoid';
+import { ApplicationError, InvalidRequestError } from '@/utils/custom-errors';
+import { keysetFilters, scanPlan, orderByCreatedAtThenId } from '@/utils/keyset-pagination';
 import {
   toPrismaJsonValue,
   toPrismaNullableJsonValue,
@@ -435,44 +437,58 @@ export class ThreadsService {
       }
 
       // Build where clause
-      const where: {
-        threadId: string;
-        runId?: string | null;
-        id?: { gt?: string; lt?: string };
-      } = {
-        threadId: threadId,
-      };
+      const where: Record<string, unknown> = { threadId: threadId };
 
       if (run_id) {
         where.runId = run_id;
       }
 
-      if (after) {
-        where.id = { gt: after };
+      // Keyset pagination over the (createdAt, id) composite.
+      //
+      // This used to be `id: { gt: after }` — a lexicographic comparison over
+      // `msg_${nanoid(24)}` ids. Those are a uniformly random draw, so their
+      // lexicographic order bears no relation to the `createdAt` order the rows
+      // are actually returned in: roughly half the already-returned rows came
+      // back again and roughly half the not-yet-returned rows were permanently
+      // unreachable. The cursor must compare against BOTH columns as a row value.
+      //
+      // The cursor is resolved against THIS thread, so an id from another thread
+      // cannot be used to probe its timestamp.
+      const resolveCursor = async (id: string, param: 'after' | 'before') => {
+        const row = await prisma.threadMessage.findFirst({
+          where: { id, threadId },
+          select: { id: true, createdAt: true },
+        });
+        if (!row) {
+          throw new InvalidRequestError(
+            `No message found with id '${id}' for parameter '${param}'.`
+          );
+        }
+        return row;
+      };
+
+      const afterCursor = after ? await resolveCursor(after, 'after') : undefined;
+      const beforeCursor = before ? await resolveCursor(before, 'before') : undefined;
+
+      const filters = keysetFilters(order, afterCursor, beforeCursor);
+      if (filters.length > 0) {
+        where.AND = filters;
       }
 
-      if (before) {
-        where.id = { lt: before };
-      }
+      // A bare `before` walks backwards, so it is scanned reversed and restored
+      // to display order below — otherwise LIMIT returns the far end of the list
+      // instead of the page adjacent to the cursor.
+      const { scanOrder, reverse } = scanPlan(order, !!after, !!before);
 
-      // Query messages from database
       const messages = await prisma.threadMessage.findMany({
         where,
         take: limit + 1, // Get one extra to check has_more
-        // `createdAt` alone is not a total order: it is millisecond-resolution, so
-        // rows written in the same tick tie exactly and Postgres may return them in
-        // any order. `id` is appended purely as a stable tiebreaker, so repeated
-        // reads at least agree with each other. It is NOT insertion order — ids are
-        // random — so ordering correctness rests on the writes being sequenced,
-        // above, not on this.
-        orderBy:
-          order === 'desc'
-            ? [{ createdAt: 'desc' }, { id: 'desc' }]
-            : [{ createdAt: 'asc' }, { id: 'asc' }],
+        orderBy: orderByCreatedAtThenId(scanOrder),
       });
 
       const has_more = messages.length > limit;
-      const returnMessages = has_more ? messages.slice(0, limit) : messages;
+      const page = has_more ? messages.slice(0, limit) : messages;
+      const returnMessages = reverse ? [...page].reverse() : page;
 
       return {
         messages: returnMessages.map((msg) => {
@@ -504,6 +520,12 @@ export class ThreadsService {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       log.error({ requestId, threadId, error: errorMessage }, 'List messages failed');
 
+      // Typed errors pass through FIRST. The substring check below otherwise
+      // swallows them: it replaces the error with a bare `Error`, losing the
+      // class the route dispatches on, so an invalid cursor surfaced as 404.
+      if (error instanceof ApplicationError) {
+        throw error;
+      }
       if (errorMessage.includes('not found')) {
         throw new Error(`Thread ${threadId} not found`);
       }

@@ -50,6 +50,7 @@ import {
   type OpenAICompatibleHubAdapterConfig,
 } from '../openai-compatible-hub/openai-compatible-hub-adapter';
 import { narrowAs } from '@/utils/type-guards';
+import { deriveSessionKey } from '@/services/session-affinity-service';
 import type { ChatRequest } from '@/types';
 
 export class CerebrasAdapter extends OpenAICompatibleHubAdapter {
@@ -80,14 +81,25 @@ export class CerebrasAdapter extends OpenAICompatibleHubAdapter {
   ): Record<string, unknown> {
     const raw = narrowAs<Record<string, unknown>>(request);
     const mct = raw.max_completion_tokens;
-    if (typeof mct !== 'number') return {};
 
-    // `max_tokens` is part of the hub's canonical payload — if the caller
-    // set ONLY max_completion_tokens, fold it into max_tokens too so the
-    // hub's payload builder forwards it.
-    const extras: Record<string, unknown> = { max_completion_tokens: mct };
-    if (typeof raw.max_tokens !== 'number') {
-      extras.max_tokens = mct;
+    // Prompt caching (ADR-025 follow-up, 2026-09): Cerebras's own docs
+    // (inference-docs.cerebras.ai/capabilities/prompt-caching, verified live
+    // 2026-09-09) document prompt caching as automatic and enabled by
+    // default for every model — `prompt_cache_key` is an OPTIONAL routing
+    // hint ("routes requests sharing a common prompt prefix to the same
+    // cache"), the same contract and derivation OpenAI/Mistral already use
+    // for their fields of the same name. Unconditionally safe to send: it
+    // is just a stable string, with no minimum-prompt-length gate to honor.
+    const extras: Record<string, unknown> = { prompt_cache_key: deriveSessionKey(request) };
+
+    if (typeof mct === 'number') {
+      // `max_tokens` is part of the hub's canonical payload — if the caller
+      // set ONLY max_completion_tokens, fold it into max_tokens too so the
+      // hub's payload builder forwards it.
+      extras.max_completion_tokens = mct;
+      if (typeof raw.max_tokens !== 'number') {
+        extras.max_tokens = mct;
+      }
     }
     return extras;
   }

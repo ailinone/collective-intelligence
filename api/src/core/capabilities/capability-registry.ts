@@ -11,7 +11,19 @@ import type { ModelCapability } from '@/types';
 import { MODEL_CAPABILITIES, isModelCapability } from '@/types';
 
 export type CapabilityExecutionMode =
-  'proxy_route' | 'orchestration' | 'native_adapter' | 'tool_pipeline' | 'sandbox_workflow';
+  | 'proxy_route'
+  | 'orchestration'
+  | 'native_adapter'
+  | 'tool_pipeline'
+  | 'sandbox_workflow'
+  /**
+   * The Docker container sandbox (ADR-024, `core/sandbox/container-sandbox.ts`)
+   * for `computer_use`/`mcp`/`agents`. Deliberately distinct from
+   * `sandbox_workflow`, which stays reserved for `CODE_CAPABILITIES` /
+   * `CodeExecutionService` (E2B/Daytona/LocalProcessSandbox) and is untouched
+   * by this mode — the two are unrelated systems and must never be conflated.
+   */
+  | 'agentic_sandbox';
 
 export interface CapabilityExecutionPlan {
   id: ModelCapability;
@@ -104,6 +116,29 @@ const CAPABILITY_OVERRIDES: Partial<Record<ModelCapability, CapabilityPlanOverri
     executionPath: ['native_adapter', 'orchestration'],
     requiredCapabilities: ['speech_to_text'],
   },
+  /**
+   * `diarization` had NO override, so `defaultExecutionPath()` — which keys
+   * off the substrings `audio`/`speech`/`image`/`video` — matched none of them
+   * and returned `['orchestration']`. The dispatcher's native-adapter branch
+   * for diarization was therefore unreachable, and every request for speaker
+   * labels was answered by a plain chat model that had never heard the audio.
+   *
+   * `native_adapter` only, with no orchestration fallback: falling back to a
+   * chat model is precisely how invented speaker labels would be produced. The
+   * one real path is `AudioOrchestrationService.transcribeAudio({diarize:true})`,
+   * which itself fails closed unless a provider adapter declares NATIVE
+   * diarization (`ProviderAdapter.getDiarizationSupport()`).
+   */
+  diarization: {
+    aliases: ['speaker_diarization'],
+    executionPath: ['native_adapter'],
+    requiredCapabilities: ['speech_to_text'],
+    dependencies: [
+      'audio_transcriptions_route',
+      'native_diarization_provider',
+      ...DEFAULT_DEPENDENCIES,
+    ],
+  },
   text_to_speech: {
     aliases: ['speech_synthesis'],
     executionPath: ['native_adapter', 'orchestration'],
@@ -116,6 +151,18 @@ const CAPABILITY_OVERRIDES: Partial<Record<ModelCapability, CapabilityPlanOverri
   audio_generation: {
     executionPath: ['native_adapter', 'orchestration'],
     requiredCapabilities: ['text_to_speech'],
+  },
+  /**
+   * LOTE AX (2026-09-06). No `orchestration` fallback, mirroring
+   * `video_generation`: a chat model cannot approximate a music
+   * composition — falling back would return text describing a song, not
+   * audio bytes. Failing closed on the single real path (a provider whose
+   * adapter implements `generateMusic`) is the honest answer.
+   */
+  music_generation: {
+    aliases: ['music', 'soundtrack_generation', 'song_generation'],
+    executionPath: ['native_adapter'],
+    dependencies: ['music_generation_route', ...DEFAULT_DEPENDENCIES],
   },
   web_search: {
     aliases: ['search', 'grounding_extract'],
@@ -134,6 +181,32 @@ const CAPABILITY_OVERRIDES: Partial<Record<ModelCapability, CapabilityPlanOverri
   file_search: {
     executionPath: ['tool_pipeline', 'orchestration'],
     dependencies: ['vector_store_or_file_index', ...DEFAULT_DEPENDENCIES],
+  },
+  /**
+   * LOTE AP. Deliberately has NO `orchestration` fallback.
+   *
+   * Every other capability falls back to chat orchestration because a chat
+   * model can approximate it. Reranking is the exception: an LLM asked to
+   * "score these documents" is a different operation — slower, pricier, and
+   * with no guarantee of a total order over the input — so falling back to it
+   * would return a plausible-looking result that is not a reranking. Failing
+   * closed (404 `no_capability_candidates`) is the honest answer when no
+   * reranker is reachable.
+   */
+  reranking: {
+    aliases: ['rerank'],
+    executionPath: ['native_adapter'],
+    dependencies: ['rerank_route', ...DEFAULT_DEPENDENCIES],
+  },
+  /**
+   * LOTE AP. Also no `orchestration` fallback, for the same reason: a chat
+   * model with no corpus attached cannot retrieve. Retrieval needs an
+   * ingested vector store, which is a dependency, not a fallback.
+   */
+  retrieval: {
+    aliases: ['rag'],
+    executionPath: ['tool_pipeline'],
+    dependencies: ['vector_store_or_file_index', 'embedder', ...DEFAULT_DEPENDENCIES],
   },
   image_generation: {
     aliases: ['images', 'image', 'image_variation'],
@@ -161,8 +234,59 @@ const CAPABILITY_OVERRIDES: Partial<Record<ModelCapability, CapabilityPlanOverri
     executionPath: ['native_adapter'],
     dependencies: ['videos_generation_route', ...DEFAULT_DEPENDENCIES],
   },
+  // ── Video INPUT family ────────────────────────────────────────────────
+  // These are COMPOSED capabilities: `VideoUnderstandingService` demuxes the
+  // container with ffmpeg, sends the audio track through the real
+  // `speech_to_text` pipeline and the sampled frames through the real
+  // `vision` pipeline. Two consequences are encoded below.
+  //
+  // 1. `executionPath` is `['native_adapter']` with NO orchestration
+  //    fallback. The fallback used to mean "ffmpeg is missing, so hand the
+  //    base64 blob to a chat model as text" — a request that cannot succeed
+  //    and, if it did, would answer about a video nobody decoded. Failing on
+  //    the single real path reports the true unmet dependency instead.
+  // 2. `requiredCapabilities` names the BINDING per-model constraint, because
+  //    the health endpoint tests `every(cap => model.capabilities.includes(cap))`
+  //    against ONE model. The composition spans several models, so listing
+  //    both `speech_to_text` and `vision` here would demand a single model
+  //    that does both and report 0 runnable. The non-model dependencies
+  //    (ffmpeg, and the second pipeline) are declared in `dependencies`.
+  video_understanding: {
+    aliases: ['video_input'],
+    executionPath: ['native_adapter'],
+    requiredCapabilities: ['vision'],
+    dependencies: [
+      'ffmpeg_media_toolkit',
+      'speech_to_text_pipeline',
+      'vision_pipeline',
+      ...DEFAULT_DEPENDENCIES,
+    ],
+  },
+  video_to_text: {
+    executionPath: ['native_adapter'],
+    requiredCapabilities: ['speech_to_text'],
+    dependencies: ['ffmpeg_media_toolkit', 'speech_to_text_pipeline', ...DEFAULT_DEPENDENCIES],
+  },
+  video_transcription: {
+    executionPath: ['native_adapter'],
+    requiredCapabilities: ['speech_to_text'],
+    dependencies: ['ffmpeg_media_toolkit', 'speech_to_text_pipeline', ...DEFAULT_DEPENDENCIES],
+  },
   vision: {
     executionPath: ['native_adapter', 'orchestration'],
+  },
+  /**
+   * LOTE AP. Was `['orchestration']` — i.e. the document was handed to a chat
+   * model as a base64 `image_url` part that most adapters cannot decode, and
+   * nothing ever read the PDF. Now runs the real extraction pipeline
+   * (native text layer, with page rasterization + vision as the OCR
+   * fallback), keeping chat orchestration as the last resort so a document a
+   * provider CAN ingest natively still has a path.
+   */
+  pdf_understanding: {
+    aliases: ['ocr', 'document_understanding'],
+    executionPath: ['tool_pipeline', 'orchestration'],
+    dependencies: ['pdf_text_extractor', 'vision_pipeline', ...DEFAULT_DEPENDENCIES],
   },
   multimodal: {
     executionPath: ['native_adapter', 'orchestration'],
@@ -210,16 +334,61 @@ const CAPABILITY_OVERRIDES: Partial<Record<ModelCapability, CapabilityPlanOverri
     executionPath: ['sandbox_workflow', 'orchestration'],
     dependencies: ['sandbox_runtime', ...DEFAULT_DEPENDENCIES],
   },
+  // ── Agentic family — executable behind a default-off flag (ADR-024) ────
+  //
+  // All three previously returned 200 for a request none of them performed:
+  //
+  //   `computer_use` routed FIRST to `sandbox_workflow`, i.e. straight into
+  //   `CodeExecutionService.executeCode`. A capability meaning "control a GUI"
+  //   executed whatever `code` field the caller supplied — and with neither
+  //   E2B nor Daytona configured that lands on `LocalProcessSandbox`, which is
+  //   `child_process.spawn` on the API host inheriting the full `process.env`
+  //   (see docs/audit/04-security-assessment.md [SEC-04]). Nothing in that
+  //   path takes a screenshot or presses a key.
+  //
+  //   `agents` and `mcp` had no `tool_pipeline` executor, so both fell through
+  //   to `orchestration` — a plain chat model describing what an agent WOULD
+  //   do, indistinguishable to the caller from one having run.
+  //
+  // ADR-024 (reconciled, LOTE AV) answers that gap with a real, isolated
+  // implementation rather than disabling the surface: a single-backend,
+  // no-fallback Docker sandbox (`core/sandbox/container-sandbox.ts`) with
+  // `--network none`, `--read-only`, `--cap-drop ALL`, a non-root user, and a
+  // command/path allowlist enforced before anything spawns. All three route
+  // through `agentic_sandbox` (`executeAgenticSandboxMode` in
+  // capabilities-routes.ts), which is NOT `sandbox_workflow` — that mode
+  // stays reserved for `CODE_CAPABILITIES` and is untouched here.
+  //
+  // The capability is real but OFF by default: `AGENTIC_COMPUTER_USE_ENABLED`,
+  // `AGENTIC_AGENTS_ENABLED`, and `MCP_CLIENT_ENABLED` (sandbox-policy.ts) all
+  // default to `false`. With a flag off, `executeAgenticSandboxMode` returns
+  // `capability_dependency_unavailable` — behaviour that must stay
+  // byte-for-byte identical to before this change (see
+  // `capability-execution-plan-honesty.test.ts`'s flag-off regression test).
+  //
+  // `browser_automation` stays listed for `computer_use` and stays
+  // permanently unsatisfied: this implementation is SYSTEM control (shell +
+  // file I/O in the container), not GUI control — that remains out of scope
+  // per the sandbox ADR, and this dependency name says so truthfully rather
+  // than silently dropping the distinction.
   computer_use: {
-    executionPath: ['sandbox_workflow', 'tool_pipeline', 'orchestration'],
-    dependencies: ['sandbox_runtime', 'browser_automation', ...DEFAULT_DEPENDENCIES],
+    supportsExecute: true,
+    executionPath: ['agentic_sandbox'],
+    dependencies: [
+      'agentic_sandbox_runtime',
+      'browser_automation',
+      ...DEFAULT_DEPENDENCIES,
+    ],
   },
   mcp: {
-    executionPath: ['tool_pipeline', 'orchestration'],
-    dependencies: ['mcp_runtime', ...DEFAULT_DEPENDENCIES],
+    supportsExecute: true,
+    executionPath: ['agentic_sandbox'],
+    dependencies: ['agentic_sandbox_runtime', 'mcp_runtime', ...DEFAULT_DEPENDENCIES],
   },
   agents: {
-    executionPath: ['tool_pipeline', 'orchestration'],
+    supportsExecute: true,
+    executionPath: ['agentic_sandbox'],
+    dependencies: ['agentic_sandbox_runtime', 'agent_run_store', ...DEFAULT_DEPENDENCIES],
   },
   reasoning: {
     executionPath: ['orchestration', 'proxy_route'],
@@ -306,6 +475,13 @@ function defaultExecutionPath(capability: ModelCapability): CapabilityExecutionM
     capability.includes('search') ||
     capability === 'deep_research' ||
     capability === 'research' ||
+    // `mcp`/`agents`/`computer_use` never actually reach this default: all
+    // three have an explicit `agentic_sandbox` override in
+    // CAPABILITY_OVERRIDES above, which `CAPABILITY_DEFINITIONS` prefers over
+    // this function. Left here (a) as the honest historical default and (b)
+    // because an alias resolving to one of them (e.g. `action_planning` →
+    // `agents` via LEGACY_ALIAS_TO_CANONICAL) still resolves through
+    // `CAPABILITY_BY_ID` to the override, not through this function.
     capability === 'mcp' ||
     capability === 'agents' ||
     capability === 'computer_use'

@@ -46,6 +46,7 @@ import type {
   ListRunStepsRequest,
   GetRunStepRequest,
 } from '@/types/threads';
+import { ValidationError } from '@/utils/custom-errors';
 
 const log = logger.child({ module: 'threads-routes' });
 
@@ -1118,7 +1119,10 @@ export async function registerThreadsRoutes(server: FastifyInstance): Promise<vo
       try {
         const listMessagesRequest: ListMessagesRequest = {
           threadId: request.params.thread_id,
-          limit: request.query.limit || 20,
+          // Clamped: the querystring schema declares `type: 'integer'` with no
+          // `maximum` while its own description claims "1-100", so `?limit=1000000`
+          // became `take: 1000001`. The runs handler already clamps the same way.
+          limit: Math.min(Math.max(request.query.limit || 20, 1), 100),
           order: request.query.order || 'desc',
           after: request.query.after,
           before: request.query.before,
@@ -1127,9 +1131,30 @@ export async function registerThreadsRoutes(server: FastifyInstance): Promise<vo
           requestId: request.id,
         };
         const result = await threadsService.listMessages(listMessagesRequest);
-        return reply.send({ object: 'list', data: result.messages, has_more: result.has_more });
+        // first_id/last_id are declared in the 200 schema and computed by the
+        // service, but were being dropped here — leaving clients no cursor to
+        // page with.
+        return reply.send({
+          object: 'list',
+          data: result.messages,
+          has_more: result.has_more,
+          first_id: result.first_id,
+          last_id: result.last_id,
+        });
       } catch (error: unknown) {
         const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        // An unresolvable cursor is a bad request, not a missing thread. The 400
+        // branch is declared in this route's schema but `reply.code(400)` did not
+        // appear anywhere in this file — every failure became a 404.
+        if (error instanceof ValidationError) {
+          return reply.code(400).send({
+            error: {
+              message: errorMessage,
+              type: 'invalid_request_error',
+              code: 'invalid_parameter',
+            },
+          });
+        }
         return reply.code(404).send({ error: { message: errorMessage } });
       }
     },

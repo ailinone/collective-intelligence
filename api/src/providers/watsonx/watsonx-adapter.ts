@@ -35,6 +35,13 @@
  *     Response shape is roughly OpenAI chat — but with the extra watsonx
  *     envelope: { id, created_at, model_id, choices: [{index, message, finish_reason}], usage }.
  *
+ *   POST {WATSONX_URL}/ml/v1/text/chat_stream?version=2024-05-31
+ *     Same body as /text/chat above; Accept: text/event-stream. Real SSE
+ *     (`data: {...}` lines), each payload shaped like an OpenAI
+ *     chat-completion-chunk (`choices[].delta.{content,tool_calls}`) — see
+ *     `chatCompletionStream`'s doc comment for the sourcing/honesty note on
+ *     this specific shape.
+ *
  *   POST {WATSONX_URL}/ml/v1/text/embeddings?version=2024-05-31
  *     Body: { model_id, project_id, inputs: string[] }
  *     Response: { results: [{ embedding: number[] }], ... }.
@@ -182,6 +189,28 @@ export class WatsonxAdapter extends ProviderAdapter {
   }
 
   /**
+   * Shared `text/chat` request body builder — used by both `chatCompletion`
+   * (`/ml/v1/text/chat`) and `chatCompletionStream` (`/ml/v1/text/chat_stream`),
+   * which per https://cloud.ibm.com/apidocs/watsonx-ai (fetched 2026-09-08)
+   * are separate endpoints with an otherwise identical request body (unlike
+   * OpenAI's single endpoint + `stream: true` flag) — no `stream` field is
+   * added here.
+   */
+  private buildChatRequestBody(request: ChatRequest): Record<string, unknown> {
+    const body: Record<string, unknown> = {
+      model_id: request.model,
+      project_id: this.projectId,
+      messages: request.messages,
+    };
+    if (typeof request.temperature === 'number') body.temperature = request.temperature;
+    if (typeof request.max_tokens === 'number') body.max_tokens = request.max_tokens;
+    if (request.tools) body.tools = request.tools;
+    if (request.tool_choice) body.tool_choice = request.tool_choice;
+    if (request.response_format) body.response_format = request.response_format;
+    return body;
+  }
+
+  /**
    * POST /ml/v1/text/chat?version=...
    *
    * Translates the project's ChatRequest to watsonx's shape. The response
@@ -194,16 +223,7 @@ export class WatsonxAdapter extends ProviderAdapter {
     }
     const token = await this.getToken();
     const url = `${this.baseUrl}/ml/v1/text/chat?version=${encodeURIComponent(this.apiVersion)}`;
-    const body: Record<string, unknown> = {
-      model_id: request.model,
-      project_id: this.projectId,
-      messages: request.messages,
-    };
-    if (typeof request.temperature === 'number') body.temperature = request.temperature;
-    if (typeof request.max_tokens === 'number') body.max_tokens = request.max_tokens;
-    if (request.tools) body.tools = request.tools;
-    if (request.tool_choice) body.tool_choice = request.tool_choice;
-    if (request.response_format) body.response_format = request.response_format;
+    const body = this.buildChatRequestBody(request);
 
     // Route through the resilience stack (bulkhead → breaker → timeout) so a
     // watsonx outage fast-fails and is isolated per-provider. Token exchange
@@ -240,12 +260,116 @@ export class WatsonxAdapter extends ProviderAdapter {
     }, 'chat completion');
   }
 
+  /**
+   * POST /ml/v1/text/chat_stream?version=... — real SSE streaming.
+   *
+   * Audit finding, 2026-09-08: this was previously an "honest placeholder"
+   * that called the non-streaming `chatCompletion` once and yielded the
+   * single result — no incremental deltas at all, including for tool calls.
+   *
+   * watsonx.ai's chat surface is explicitly documented as OpenAI-compatible
+   * for the non-streaming case (see `chatCompletion`'s doc comment: "the
+   * response envelope is already OpenAI-like"), and the official Python SDK
+   * reference for `chat_stream` — https://ibm.github.io/watsonx-ai-python-sdk/v1.7.1/fm_model.html
+   * (fetched 2026-09-08) — confirms (a) `chat_stream(messages, params, tools,
+   * tool_choice, tool_choice_option, ...)` accepts the same `tools`/
+   * `tool_choice` parameters as the non-streaming method, and (b) its own
+   * usage example consumes the stream via `chunk["choices"][0]["delta"]` —
+   * the same `choices[].delta` shape as an OpenAI chat-completion-chunk.
+   * The endpoint listing itself is at
+   * https://cloud.ibm.com/apidocs/watsonx-ai ("POST /ml/v1/text/chat_stream
+   * — Infer text event stream").
+   *
+   * Honesty note (contract-only, not live-verified): neither source's
+   * publicly rendered content spells out `delta.tool_calls[]`'s exact
+   * incremental shape (index/id/function.name announced once, then
+   * function.arguments fragments — the OpenAI convention this codebase's
+   * `ChatMessage.tool_calls[].index` doc comment describes). Given watsonx's
+   * own stated design goal of OpenAI-compatibility for this surface, each
+   * parsed SSE payload is forwarded AS-IS (same trust boundary the
+   * non-streaming path above already relies on via `...(raw as
+   * ChatResponse)`) rather than reshaped — if a real account's stream
+   * departs from that shape, the discrepancy needs a live capture to fix,
+   * not a guess baked in here.
+   */
   async *chatCompletionStream(request: ChatRequest): AsyncGenerator<ChatResponse, void, unknown> {
-    // watsonx chat streaming uses the same URL with Accept: text/event-stream.
-    // First iteration ships non-streaming only — honest placeholder until
-    // the SSE path gets hooked to the streaming pipeline.
-    const once = await this.chatCompletion(request);
-    yield once;
+    if (!this.projectId) {
+      throw new Error('watsonx: WATSONX_PROJECT_ID is required for chat requests');
+    }
+    const token = await this.getToken();
+    const url = `${this.baseUrl}/ml/v1/text/chat_stream?version=${encodeURIComponent(this.apiVersion)}`;
+    const body = this.buildChatRequestBody(request);
+
+    const response = await this.executeThroughBulkhead(
+      () =>
+        fetch(url, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Accept: 'text/event-stream',
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify(body),
+          signal: AbortSignal.timeout(Math.max(1000, this.config.timeout ?? 60000)),
+        }),
+      'streaming chat completion'
+    );
+
+    if (!response.ok) {
+      const txt = await response.text().catch(() => '');
+      throw new Error(`watsonx chat_stream HTTP ${response.status}: ${txt.slice(0, 500)}`);
+    }
+    if (!response.body) {
+      throw new Error('watsonx chat_stream: response body is null');
+    }
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    try {
+      while (true) {
+        const readResult = await reader.read();
+        if (readResult.done) break;
+        // Same treatment as the sibling Vertex AI / OpenAI-compatible-hub
+        // adapters' identical reader loops: `readResult.value` resolves to
+        // an unsafely-typed value in this project's lib config, so it is
+        // narrowed via `unknown` + an explicit `instanceof` guard rather
+        // than destructured directly (ESLint @typescript-eslint/no-unsafe-assignment).
+        const value: unknown = readResult.value;
+        if (!(value instanceof Uint8Array)) continue;
+        buffer += decoder.decode(value, { stream: true });
+
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+
+        for (const rawLine of lines) {
+          const line = rawLine.trim();
+          if (!line.startsWith('data:')) continue;
+          const dataStr = line.slice(5).trim();
+          if (!dataStr || dataStr === '[DONE]') continue;
+
+          let raw: (Partial<ChatResponse> & { model_id?: string; id?: string }) | null = null;
+          try {
+            raw = JSON.parse(dataStr) as Partial<ChatResponse> & { model_id?: string; id?: string };
+          } catch (parseError) {
+            this.log.warn(
+              { error: parseError instanceof Error ? parseError.message : String(parseError), line },
+              'watsonx chat_stream: failed to parse SSE data chunk'
+            );
+            continue;
+          }
+          if (!raw || !Array.isArray(raw.choices)) continue;
+
+          yield {
+            ...(raw as ChatResponse),
+            object: 'chat.completion.chunk',
+            model: raw.model || raw.model_id || request.model || '',
+          };
+        }
+      }
+    } finally {
+      reader.releaseLock();
+    }
   }
 
   /**

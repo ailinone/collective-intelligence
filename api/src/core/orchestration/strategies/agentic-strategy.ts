@@ -26,7 +26,7 @@
  * Best for: complex multi-step tasks (refactoring, project setup, analysis + execution).
  */
 
-import { BaseStrategy, type StrategyMetadata } from '../base-strategy';
+import { BaseStrategy, mergeArtifacts, type StrategyMetadata } from '../base-strategy';
 import { resolvePreferredExecutor, assembleExecutors } from './preferred-model-helper';
 import { PROMPTS } from '../prompts/sota-system-prompts';
 import type {
@@ -206,6 +206,7 @@ export class AgenticStrategy extends BaseStrategy {
         modelsUsed: executions,
         totalCost: executions.reduce((s, e) => s + e.cost, 0),
         totalDuration: Date.now() - startTime,
+        toolArtifacts: mergeArtifacts(executions),
         metadata: { strategy: 'agentic', steps: 0, fallback: true },
       };
     }
@@ -344,6 +345,7 @@ export class AgenticStrategy extends BaseStrategy {
       modelsUsed: executions,
       totalCost: executions.reduce((s, e) => s + e.cost, 0),
       totalDuration: Date.now() - startTime,
+      toolArtifacts: mergeArtifacts(executions),
       metadata: {
         strategy: 'agentic',
         stepsPlanned: steps.length,

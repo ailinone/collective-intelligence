@@ -31,7 +31,10 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { inferCapabilitiesFromModelId } from '@/services/model-fetchers/model-capability-patterns';
+import {
+  inferCapabilitiesFromModelId,
+  MODEL_CAPABILITY_PATTERNS,
+} from '@/services/model-fetchers/model-capability-patterns';
 
 describe('model-capability-patterns — structural fallback coverage 2026-04-28', () => {
   // ── Structural patterns (vendor-family naming conventions) ──────────────
@@ -98,6 +101,73 @@ describe('model-capability-patterns — structural fallback coverage 2026-04-28'
       const r = inferCapabilitiesFromModelId('seedream-3.0');
       expect(r).not.toBeNull();
       expect(r!.capabilities).toContain('image_generation');
+    });
+  });
+
+  // ── OpenAI gpt-image family (LOTE BA, 2026-09) ───────────────────────────
+  // Confirmed bug against production: `gpt-image-1`/`gpt-image-1.5` was
+  // tagged ['vision','multimodal','chat','text_generation','streaming']
+  // WITHOUT `image_generation` on 4 real hub providers (vercel-ai-gateway,
+  // poe, fastrouter, routeway) — the id starts with `gpt-` and, absent a
+  // dedicated pattern here, fell through to the broad chat category. Real
+  // id strings pulled from production (`SELECT id FROM models WHERE
+  // provider_id IN (...)`) are used as the test fixtures below, including
+  // the odd prefix/suffix shapes different hubs apply to the same model.
+  describe('OpenAI gpt-image / chatgpt-image family (production gap, LOTE BA)', () => {
+    const gptImageIds = [
+      'gpt-image-1',
+      'gpt-image-1-mini',
+      'gpt-image-1.5',
+      'gpt-image-2',
+      'gpt-image-2-free',
+      'gpt-image-2-all',
+      'gpt-image-2-oai',
+      'gpt-image-1.5-2025-12-16',
+      'openai/gpt-image-1',
+      'openai/gpt-image-1-mini',
+      'openai/gpt-image-1.5',
+      'openai/gpt-image-1-5',
+      'openai/gpt-image-2',
+      'openai/gpt-image-1.5:free',
+      'openai/gpt-image-2:free',
+      // aihubmix/digitalocean shapes: prefix or suffix around the family
+      // name, not a clean `provider/model` split.
+      'web-gpt-image-1.5',
+      'openai-gpt-image-1',
+      'openai-gpt-image-1.5',
+      'openai-gpt-image-2',
+    ];
+    for (const id of gptImageIds) {
+      it(`${id} → image_generation, not chat`, () => {
+        const r = inferCapabilitiesFromModelId(id);
+        expect(r, id).not.toBeNull();
+        expect(r!.capabilities).toContain('image_generation');
+        expect(r!.capabilities).not.toContain('chat');
+        expect(r!.modelType).toBe('image');
+      });
+    }
+
+    it('chatgpt-image-latest → image_generation, not chat', () => {
+      const r = inferCapabilitiesFromModelId('chatgpt-image-latest');
+      expect(r).not.toBeNull();
+      expect(r!.capabilities).toContain('image_generation');
+      expect(r!.capabilities).not.toContain('chat');
+    });
+
+    it('openai/chatgpt-image-latest (hub-prefixed) → image_generation, not chat', () => {
+      const r = inferCapabilitiesFromModelId('openai/chatgpt-image-latest');
+      expect(r).not.toBeNull();
+      expect(r!.capabilities).toContain('image_generation');
+      expect(r!.capabilities).not.toContain('chat');
+    });
+
+    it('regular gpt chat models are unaffected (regex order safety)', () => {
+      for (const id of ['gpt-4o', 'gpt-5', 'gpt-4.1-mini', 'chatgpt-4o-latest']) {
+        const r = inferCapabilitiesFromModelId(id);
+        expect(r, id).not.toBeNull();
+        expect(r!.capabilities, id).toContain('chat');
+        expect(r!.capabilities, id).not.toContain('image_generation');
+      }
     });
   });
 
@@ -174,5 +244,46 @@ describe('model-capability-patterns — structural fallback coverage 2026-04-28'
       expect(r!.modelType).toBe('stt');
       expect(r!.capabilities).not.toContain('chat');
     });
+  });
+
+  // ── Structural invariant (LOTE BA, 2026-09) ──────────────────────────────
+  // No dedicated non-chat pattern rule (embedding, reranker, moderation,
+  // tts, stt, image, video) may declare a chat-completion-shaped capability.
+  // This is asserted directly against the exported rule table so it holds
+  // for every id these rules will ever match, not just the fixtures above —
+  // catches the exact defect class from the confirmed production bug
+  // (llmgateway's embeddings-only models carrying function_calling/
+  // tool_use/streaming) at the source, before any id is even tested.
+  describe('non-chat pattern rules never declare chat-shaped capabilities (invariant)', () => {
+    const CHAT_SHAPED_CAPABILITIES = [
+      'chat',
+      'text_generation',
+      'streaming',
+      'function_calling',
+      'tool_use',
+      'json_mode',
+      'web_search',
+      'computer_use',
+      'code_interpreter',
+      'mcp',
+      'realtime',
+    ];
+
+    const nonChatRules = MODEL_CAPABILITY_PATTERNS.filter((rule) => rule.modelType !== 'chat');
+
+    it('covers every non-chat category (guards against the table being emptied)', () => {
+      const modelTypes = new Set(nonChatRules.map((rule) => rule.modelType));
+      expect(modelTypes).toEqual(
+        new Set(['image', 'video', 'reranker', 'moderation', 'tts', 'stt', 'embedding'])
+      );
+    });
+
+    for (const rule of nonChatRules) {
+      it(`${rule.modelType} rule declares no chat-shaped capability`, () => {
+        for (const bogus of CHAT_SHAPED_CAPABILITIES) {
+          expect(rule.capabilities, `${rule.modelType} → ${bogus}`).not.toContain(bogus);
+        }
+      });
+    }
   });
 });

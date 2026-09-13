@@ -242,6 +242,17 @@ export class SensitivityConsensusStrategy extends BaseStrategy {
       // metadata blob. Defensive: never throws.
       recordCollectiveTrace('sensitivity-consensus', trace.describe());
 
+      // The coordination loop produced a DECISION, not an answer. Ask a model
+      // the user's actual question now. Skipped when the run aborted on budget:
+      // the guardrail exists to stop spending, and an extra paid call here would
+      // walk straight through it.
+      if (result.stopReason !== 'max_cost') {
+        const answer = await this.composeFinalAnswer(request, context, models);
+        if (answer) {
+          result.finalResponseText = answer;
+        }
+      }
+
       return this.buildOrchestrationResult(
         result,
         executions,
@@ -823,7 +834,7 @@ export class SensitivityConsensusStrategy extends BaseStrategy {
     const criticalVariables = this.extractCriticalVariables(state);
     const dominantSensitivities = this.extractDominantSensitivities(state);
 
-    const finalResponseText = this.generateFinalResponseText(
+    const coordinationSummary = this.generateCoordinationSummary(
       state,
       majorityDecision,
       dissent,
@@ -849,7 +860,13 @@ export class SensitivityConsensusStrategy extends BaseStrategy {
       criticalVariables,
       dominantSensitivities,
       dissent,
-      finalResponseText,
+      // Left EMPTY here on purpose: the coordination loop never asks any model
+      // the user's question — every call is a governance call constrained to
+      // JSON — so at this point no answer exists yet. `execute()` fills it via
+      // composeFinalAnswer(). Defaulting it to the summary is what shipped the
+      // decision record to users.
+      finalResponseText: '',
+      coordinationSummary,
       totalCostUsd: state.totalCostUsd,
       totalLatencyMs: state.totalLatencyMs,
       totalTokens: state.totalTokens,
@@ -954,7 +971,55 @@ export class SensitivityConsensusStrategy extends BaseStrategy {
       .map((v) => v.sensitivity);
   }
 
-  private generateFinalResponseText(
+  /**
+   * Asks a model the user's ACTUAL question.
+   *
+   * The coordination loop is entirely governance: every request it builds is
+   * pinned to "respond with valid JSON only" and carries a flattened task string,
+   * so no model in the run is ever asked what the user asked. The strategy used
+   * to serve the decision record instead — `**Decision: answer** (confidence:
+   * 100%) Rationale: …` — which is what production returned.
+   *
+   * Returns null when no answer could be produced; the caller leaves
+   * `finalResponseText` empty and the engine's `recoverEmptyFinalResponse`
+   * re-selects funded candidates, which is a better outcome than emitting
+   * scaffolding.
+   */
+  private async composeFinalAnswer(
+    request: ChatRequest,
+    context: OrchestrationContext,
+    models: Model[]
+  ): Promise<string | null> {
+    try {
+      if (!this.getAdapterForModel || models.length === 0) return null;
+
+      const model = models[0];
+      const adapter = await this.getAdapterForModel(model, context);
+      if (!adapter) return null;
+
+      const execution = await this.executeModel(adapter, model, request, 'primary');
+      if (!execution.success) return null;
+
+      const content = execution.response?.choices?.[0]?.message?.content;
+      if (typeof content !== 'string' || content.trim().length === 0) return null;
+
+      // Unconditionally, not behind `isReasoningEnabled`. The eligible pool for
+      // this strategy demonstrably contains reasoning models, and executeModel
+      // does not strip — so without this the answer can arrive as
+      // "<think>…</think>391", trading one leak for another.
+      const { cleanContent } = this.extractReasoning(content);
+      const answer = (cleanContent ?? content).trim();
+      return answer.length > 0 ? answer : null;
+    } catch (error) {
+      this.log.warn(
+        { error: error instanceof Error ? error.message : String(error) },
+        'sensitivity-consensus: final answer phase failed; leaving the response empty for engine recovery'
+      );
+      return null;
+    }
+  }
+
+  private generateCoordinationSummary(
     state: CoordinationState,
     decision: CoordinationResult['decision'] | null,
     dissent: CoordinationResult['dissent'],
@@ -1062,6 +1127,10 @@ export class SensitivityConsensusStrategy extends BaseStrategy {
           index: 0,
           message: {
             role: 'assistant',
+            // The real answer. Empty only when the answer phase could not run,
+            // in which case the engine's recoverEmptyFinalResponse takes over —
+            // deliberately NOT falling back to coordinationSummary, which is the
+            // operator record and is what used to be served here.
             content: coordResult.finalResponseText,
           },
           finish_reason: 'stop',

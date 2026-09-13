@@ -27,7 +27,7 @@ import { logger } from '@/utils/logger';
 import { authenticate as authenticateRequest } from '@/middleware/auth-middleware';
 import { rejectAnonymousGuestKeyPreHandler } from '@/services/anonymous-quota-gate';
 import { rejectChatFreeTierKeyPreHandler } from '@/services/free-tier-quota-gate';
-import type { RequestUserContext } from '@/types';
+import type { Model, RequestUserContext } from '@/types';
 import type { ExtendedFastifyRequest } from '@/types/fastify-extended';
 import { OpenAIRealtimeClient } from '@/providers/openai/realtime-client';
 import { GoogleLiveClient } from '@/providers/google/google-live-client';
@@ -35,7 +35,6 @@ import { AilinRealtimeClient } from '@/providers/ailin/ailin-realtime-client';
 import { RealtimeTranslationAdapter } from '@/providers/ailin/realtime-translation-adapter';
 import { getProviderRegistry } from '@/providers/provider-registry';
 import { ModelRepository } from '@/services/model-repository';
-import { GoogleAdapter } from '@/providers/google/google-adapter';
 import { narrowAs } from '@/utils/type-guards';
 import { nanoid } from 'nanoid';
 import { createRealtimeSession } from '@/services/realtime-session-service';
@@ -96,118 +95,208 @@ interface SessionConfig {
 // Realtime Client Factory
 // ============================================
 
-class RealtimeClientFactory {
+/**
+ * How a session should be served upstream.
+ *
+ *  - `provider`: bridge to the provider's OWN realtime WebSocket (OpenAI
+ *    Realtime, Gemini Live). Fails the session if no such provider resolves.
+ *  - `composite`: the gateway's internal STT -> chat -> TTS pipeline
+ *    (`AilinRealtimeClient`), which works with any provider but is not a
+ *    native speech-to-speech session.
+ *  - `auto` (default): use a provider bridge when the caller named a model
+ *    that resolves to one; otherwise the composite.
+ */
+export type RealtimeTransportPreference = 'auto' | 'provider' | 'composite';
+
+export function parseTransportPreference(value: unknown): RealtimeTransportPreference {
+  return value === 'provider' || value === 'composite' ? value : 'auto';
+}
+
+export interface RealtimeClientSelection {
+  client: RealtimeClient;
+  provider: string;
+  /** Which upstream actually serves the session. */
+  transport: 'provider' | 'composite';
+  /** Set only for `transport: 'provider'` — the model the bridge will open. */
+  model?: string;
+  transportKind?: 'openai-realtime-ws' | 'google-live-ws';
+}
+
+/**
+ * Alias prefix that names the gateway's own composite pipeline rather than an
+ * upstream model. Such names must never be resolved against the model catalog.
+ */
+const COMPOSITE_MODEL_PREFIX = 'ailin-';
+
+export class RealtimeClientFactory {
   private modelRepo: ModelRepository;
 
-  constructor() {
-    this.modelRepo = new ModelRepository();
+  constructor(modelRepo: ModelRepository = new ModelRepository()) {
+    this.modelRepo = modelRepo;
   }
 
   /**
-   * Create a realtime client for the specified model
+   * Resolve the client that will serve this session.
+   *
+   * --- What was broken here -------------------------------------------
+   * The previous implementation opened with `if (userContext) { return
+   * AilinRealtimeClient }`. `getUserContext()` always returns an object, so
+   * that branch was taken on EVERY request through this authenticated route
+   * and the ~110 lines below it — the whole provider-native bridge to the
+   * OpenAI Realtime API and the Gemini Live API — were unreachable. Naming a
+   * provider realtime model in `session.update` still got the composite
+   * STT->chat->TTS pipeline, and `audio_to_audio` (true speech-to-speech,
+   * which the composite cannot do because it round-trips through text) had
+   * no path at all. The `return null` sitting after a `return` statement was
+   * the visible symptom.
+   *
+   * --- The rule now ---------------------------------------------------
+   * The upstream is chosen from what the caller asked for, and the provider
+   * capability is DECLARED by the adapter (`getRealtimeTransport()`), not
+   * inferred from a provider-name list. Default behaviour is unchanged for
+   * callers that name no model, so this is additive rather than a routing
+   * flip: a session reaches a provider bridge only when it named a model that
+   * resolves to one, or explicitly asked for `transport: 'provider'`.
    */
   async createClient(
-    modelName: string,
-    connection: WebSocket,
+    modelName: string | null,
     requestId: string,
-    userContext?: { organizationId: string; userId?: string; authToken?: string }
-  ): Promise<{ client: RealtimeClient; provider: string } | null> {
-    // Default: Ailin realtime (uses internal STT→Chat→TTS services)
-    if (userContext) {
-      const client = new AilinRealtimeClient({
-        organizationId: userContext.organizationId,
-        userId: userContext.userId || '',
-        requestId,
-        authToken: userContext.authToken,
-      });
-      return { client: client as RealtimeClient, provider: 'ailin' };
-    }
+    userContext: { organizationId: string; userId?: string; authToken?: string } | undefined,
+    preference: RealtimeTransportPreference = 'auto'
+  ): Promise<RealtimeClientSelection | null> {
+    const requested = typeof modelName === 'string' ? modelName.trim() : '';
+    const namesComposite = requested.startsWith(COMPOSITE_MODEL_PREFIX);
 
-    // Get model info
-    let selectedModel = await this.modelRepo.getModelById(modelName);
-
-    // If not found by ID, search by name using tags
-    if (!selectedModel) {
-      const models = await this.modelRepo.searchModels({
-        tags: [modelName],
-        status: 'active',
-        limit: 1,
-      });
-      if (models.length > 0) {
-        selectedModel = models[0];
+    if (preference !== 'composite' && !(preference === 'auto' && namesComposite)) {
+      const bridge = await this.createProviderBridge(requested, requestId, preference);
+      if (bridge) return bridge;
+      if (preference === 'provider') {
+        // An explicit request for a native provider session that cannot be
+        // honoured. Silently downgrading to the composite would answer a
+        // speech-to-speech request with a text round-trip.
+        log.warn(
+          { requestId, requested },
+          'transport=provider requested but no provider-native realtime bridge resolved'
+        );
+        return null;
       }
     }
 
-    // If still not found, try providers with verified WebSocket support first
-    if (!selectedModel) {
-      for (const prov of ['openai', 'google']) {
-        const models = await this.modelRepo.findModelsWithCapabilities(['realtime'], {
-          providers: [prov],
-          limit: 1,
-        });
-        if (models.length > 0) {
-          selectedModel = models[0];
-          break;
-        }
-      }
-    }
-    // Last resort: any provider
-    if (!selectedModel) {
-      const models = await this.modelRepo.findModelsWithCapabilities(['realtime'], { limit: 1 });
-      if (models.length > 0) {
-        selectedModel = models[0];
-      }
-    }
-
-    if (!selectedModel) {
-      log.warn({ requestId, modelName }, 'No realtime-capable model found');
+    if (!userContext) {
+      log.warn({ requestId, requested }, 'No user context — cannot serve composite realtime');
       return null;
     }
 
-    log.info(
-      { requestId, model: selectedModel.name, provider: selectedModel.provider },
-      'Selected realtime model'
-    );
+    const client = new AilinRealtimeClient({
+      organizationId: userContext.organizationId,
+      userId: userContext.userId || '',
+      requestId,
+      authToken: userContext.authToken,
+    });
+    return { client: client as RealtimeClient, provider: 'ailin', transport: 'composite' };
+  }
+
+  /**
+   * Build a bridge to a provider's own realtime WebSocket, or return null when
+   * none is available. Never throws — the caller decides whether the absence
+   * is fatal.
+   */
+  private async createProviderBridge(
+    requested: string,
+    requestId: string,
+    preference: RealtimeTransportPreference
+  ): Promise<RealtimeClientSelection | null> {
+    const candidates = await this.resolveRealtimeCandidates(requested, preference);
+    if (candidates.length === 0) return null;
 
     const providerRegistry = getProviderRegistry();
-    const adapter = providerRegistry.get(selectedModel.provider);
 
-    if (!adapter) {
-      log.error({ requestId, provider: selectedModel.provider }, 'Provider adapter not found');
-      return null;
-    }
+    for (const candidate of candidates) {
+      const adapter = providerRegistry.get(candidate.provider);
+      if (!adapter) continue;
 
-    // Create client based on provider type
-    const apiKey = adapter.getApiKey();
-    if (!apiKey) {
-      log.error({ requestId, provider: selectedModel.provider }, 'Provider API key not configured');
-      return null;
-    }
+      const transport = adapter.getRealtimeTransport();
+      if (!transport.kind) continue;
 
-    // Google Live API has its own client
-    if (adapter instanceof GoogleAdapter) {
-      const googleClient = new GoogleLiveClient(apiKey);
-      return { client: googleClient as RealtimeClient, provider: 'google' };
-    }
+      const apiKey = adapter.getApiKey();
+      if (!apiKey) {
+        log.warn(
+          { requestId, provider: candidate.provider },
+          'Provider declares a realtime transport but has no credential configured'
+        );
+        continue;
+      }
 
-    // All other providers use OpenAI-compatible realtime protocol
-    // (OpenAI native, OpenRouter, orqai, etc.)
-    const baseUrl =
-      narrowAs<{ config?: { baseUrl?: string } }>(adapter).config?.baseUrl ||
-      (selectedModel.provider === 'openai' ? 'https://api.openai.com/v1' : undefined);
+      if (transport.kind === 'google-live-ws') {
+        log.info(
+          { requestId, provider: candidate.provider, model: candidate.name },
+          'Realtime session bound to provider-native Google Live bridge'
+        );
+        return {
+          client: narrowAs<RealtimeClient>(new GoogleLiveClient(apiKey)),
+          provider: candidate.provider,
+          transport: 'provider',
+          model: candidate.name,
+          transportKind: transport.kind,
+        };
+      }
 
-    if (!baseUrl) {
-      log.warn(
-        { requestId, provider: selectedModel.provider },
-        'No baseUrl for provider — cannot establish realtime connection'
+      // `openai-realtime-ws`. The base URL comes from the adapter's own config
+      // so an OpenAI-compatible upstream is bridged at ITS host; the realtime
+      // client falls back to the public OpenAI base only when the adapter
+      // declares none.
+      const baseUrl = narrowAs<{ config?: { baseUrl?: string } }>(adapter).config?.baseUrl;
+      log.info(
+        { requestId, provider: candidate.provider, model: candidate.name },
+        'Realtime session bound to provider-native OpenAI-protocol bridge'
       );
-      return null;
+      return {
+        client: narrowAs<RealtimeClient>(new OpenAIRealtimeClient(apiKey, baseUrl)),
+        provider: candidate.provider,
+        transport: 'provider',
+        model: candidate.name,
+        transportKind: transport.kind,
+      };
     }
-
-    const client = new OpenAIRealtimeClient(apiKey, baseUrl);
-    return { client: client as RealtimeClient, provider: selectedModel.provider };
 
     return null;
+  }
+
+  /**
+   * Candidate models for a provider-native session, most specific first.
+   *
+   * When the caller named a model we resolve exactly that — an explicit name
+   * is a constraint, not a hint, so a different model is never silently
+   * substituted. Only when nothing was named (and the caller explicitly asked
+   * for `transport: 'provider'`) do we fall back to a capability search.
+   */
+  private async resolveRealtimeCandidates(
+    requested: string,
+    preference: RealtimeTransportPreference
+  ): Promise<Model[]> {
+    if (requested.length > 0) {
+      return this.modelRepo.findModelsByIdOrName(requested);
+    }
+
+    if (preference !== 'provider') return [];
+
+    // No model named but a provider-native session was demanded: search the
+    // catalog by capability. `realtime_audio` first (the ontology id meaning a
+    // live AUDIO session), then the broader `realtime`.
+    const [audioFirst, anyRealtime] = await Promise.all([
+      this.modelRepo.findModelsWithCapabilities(['realtime_audio'], { limit: 10 }),
+      this.modelRepo.findModelsWithCapabilities(['realtime'], { limit: 10 }),
+    ]);
+
+    const seen = new Set<string>();
+    const merged: Model[] = [];
+    for (const model of [...audioFirst, ...anyRealtime]) {
+      const key = `${model.provider}:${model.id}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      merged.push(model);
+    }
+    return merged;
   }
 }
 
@@ -311,6 +400,12 @@ export async function registerRealtimeRoutes(server: FastifyInstance): Promise<v
               type: 'string',
               description: 'Session id (rs_) issued together with the ephemeral token.',
             },
+            transport: {
+              type: 'string',
+              enum: ['auto', 'provider', 'composite'],
+              description:
+                'Upstream to serve the session with. "provider" bridges to the provider\'s own realtime WebSocket (OpenAI Realtime / Gemini Live) and is the only mode that yields true speech-to-speech; it fails the session rather than downgrading. "composite" pins the gateway STT-to-chat-to-TTS pipeline. "auto" (default) uses a provider bridge when the named model resolves to one, otherwise the composite. May also be set on the session.update payload.',
+            },
           },
         },
       },
@@ -333,6 +428,7 @@ export async function registerRealtimeRoutes(server: FastifyInstance): Promise<v
       let currentProvider: string | null = null;
       // Initialize model from query param (e.g. ?model=ailin-auto)
       let modelName: string | null = (request.query as Record<string, string>)?.model || null;
+      const queryTransport = (request.query as Record<string, string>)?.transport;
 
       // Handle incoming messages (text JSON or binary audio)
       connection.on('message', async (message: Buffer) => {
@@ -370,72 +466,22 @@ export async function registerRealtimeRoutes(server: FastifyInstance): Promise<v
               'session.update received'
             );
 
-            // Select model - require explicit model or find one dynamically
+            // An explicit model on session.update overrides the query param.
+            // Everything else about upstream selection now lives in
+            // RealtimeClientFactory — including the case where no model was
+            // named at all. The block that used to sit here pre-computed a
+            // model the factory then ignored (see the factory's doc comment).
             if (sessionConfig.model) {
               modelName = sessionConfig.model;
-            } else if (!modelName) {
-              // No model specified — auto-select by capability.
-              if (userContext) {
-                // getUserContext() always returns an object (never undefined),
-                // so `userContext` is truthy for every request through this
-                // authenticated route — meaning clientFactory.createClient()
-                // below ALWAYS takes its `if (userContext)` branch and returns
-                // an AilinRealtimeClient, which never reads the `modelName`
-                // parameter at all. A DB-backed capability search here would
-                // add 1-2 round-trips just to compute a value nothing reads.
-                modelName = 'ailin-auto';
-              } else {
-                // Prioritize providers with verified WebSocket realtime support.
-                const modelRepo = new ModelRepository();
-                const providerPriority = ['openai', 'google'];
-                let found = false;
-
-                for (const prov of providerPriority) {
-                  const models = await modelRepo.findModelsWithCapabilities(['realtime'], {
-                    providers: [prov],
-                    limit: 1,
-                  });
-                  if (models.length > 0) {
-                    modelName = models[0].name;
-                    log.info(
-                      { requestId, model: modelName, provider: prov },
-                      'Auto-selected realtime model (priority provider)'
-                    );
-                    found = true;
-                    break;
-                  }
-                }
-
-                // Fallback: any provider with realtime capability
-                if (!found) {
-                  const models = await modelRepo.findModelsWithCapabilities(['realtime'], {
-                    limit: 1,
-                  });
-                  if (models.length > 0) {
-                    modelName = models[0].name;
-                    log.info(
-                      { requestId, model: modelName },
-                      'Auto-selected realtime model (fallback)'
-                    );
-                    found = true;
-                  }
-                }
-
-                if (!found) {
-                  connection.send(
-                    JSON.stringify({
-                      type: 'error',
-                      error: {
-                        type: 'no_realtime_model',
-                        message:
-                          'No realtime-capable model available. Please specify a model in session.update.',
-                      },
-                    })
-                  );
-                  return;
-                }
-              }
             }
+
+            // `transport` lets a caller demand a provider-NATIVE session
+            // (`provider`, the only way to get true speech-to-speech) or pin
+            // the gateway's composite pipeline (`composite`). Default `auto`
+            // preserves the historical behaviour.
+            const transportPreference = parseTransportPreference(
+              (sessionConfig as Record<string, unknown>).transport ?? queryTransport
+            );
 
             // ── Translation mode: dedicated adapter ──────────────────
             // When translation is enabled, use RealtimeTranslationAdapter directly.
@@ -501,29 +547,7 @@ export async function registerRealtimeRoutes(server: FastifyInstance): Promise<v
               }
             }
 
-            // ── Normal mode: model search + client creation ──────────
-            // Try connecting with the selected model; retry with alternatives on failure
-            const modelRepo = new ModelRepository();
-            const candidates = modelName ? [modelName] : [];
-
-            // Add fallback candidates from the database (different models, same
-            // capability) — ONLY meaningful when userContext is absent (see the
-            // comment on the `modelName` auto-select branch above: with
-            // userContext present, createClient() always returns an
-            // AilinRealtimeClient and never reads any of these candidate names).
-            if (!sessionConfig.model && !userContext) {
-              // User didn't specify a model — we can try alternatives
-              for (const prov of ['openai', 'google']) {
-                const models = await modelRepo.findModelsWithCapabilities(['realtime'], {
-                  providers: [prov],
-                  limit: 5,
-                });
-                for (const m of models) {
-                  if (!candidates.includes(m.name)) candidates.push(m.name);
-                }
-              }
-            }
-
+            // ── Normal mode: upstream selection + connect ────────────
             // Auth token for internal HTTP loopback calls (AilinRealtimeClient
             // → /v1/chat/completions). Header-authenticated clients reuse their
             // own credential. Session-token (rst_) connections get a short-lived
@@ -549,80 +573,97 @@ export async function registerRealtimeRoutes(server: FastifyInstance): Promise<v
               }
             }
 
-            let connectError: string | null = null;
-            for (const candidateModel of candidates) {
-              const result = await clientFactory.createClient(
-                candidateModel,
-                connection,
-                requestId,
-                userContext
-                  ? {
-                      organizationId: userContext.organizationId,
-                      userId: userContext.userId,
-                      authToken: loopbackToken,
-                    }
-                  : undefined
+            const selection = await clientFactory.createClient(
+              modelName,
+              requestId,
+              {
+                organizationId: userContext.organizationId,
+                userId: userContext.userId,
+                authToken: loopbackToken,
+              },
+              transportPreference
+            );
+
+            if (!selection) {
+              connection.send(
+                JSON.stringify({
+                  type: 'error',
+                  error: {
+                    type: 'no_realtime_transport',
+                    message:
+                      transportPreference === 'provider'
+                        ? 'No configured provider exposes a native realtime WebSocket for the requested model. Name a model from a provider whose adapter declares a realtime transport, or drop transport="provider" to use the gateway composite session.'
+                        : 'No realtime session could be established for this request.',
+                    requested_model: modelName,
+                    transport: transportPreference,
+                  },
+                })
               );
-              if (!result) continue;
+              return;
+            }
 
-              realtimeClient = result.client;
-              currentProvider = result.provider;
-              modelName = candidateModel;
+            realtimeClient = selection.client;
+            currentProvider = selection.provider;
+            // For a provider bridge the factory resolved the concrete upstream
+            // model; for the composite there is none, and reporting the
+            // caller's alias back is the honest answer.
+            modelName = selection.model ?? modelName;
 
-              try {
-                if (realtimeClient instanceof GoogleLiveClient) {
-                  await (realtimeClient as GoogleLiveClient).connect({
-                    model: candidateModel.replace('models/', ''),
-                    modalities: (sessionConfig.modalities?.map((m) => m.toUpperCase()) ?? [
-                      'TEXT',
-                      'AUDIO',
-                    ]) as ('TEXT' | 'AUDIO')[],
-                    systemInstruction: sessionConfig.instructions,
-                    speechConfig: sessionConfig.voice
-                      ? { voiceConfig: { prebuiltVoiceConfig: { voiceName: sessionConfig.voice } } }
-                      : undefined,
-                    generationConfig: { temperature: sessionConfig.temperature },
-                  });
-                } else if (realtimeClient instanceof AilinRealtimeClient) {
-                  await (realtimeClient as AilinRealtimeClient).connect({
-                    modalities: (sessionConfig.modalities ?? ['text', 'audio']) as (
-                      'text' | 'audio'
-                    )[],
-                    instructions: sessionConfig.instructions,
-                    voice: sessionConfig.voice ?? 'alloy',
-                    temperature: sessionConfig.temperature ?? 0.8,
-                    tools: sessionConfig.tools,
-                    // Translation is now handled by RealtimeTranslationAdapter (separate path above)
-                  });
-                } else if (realtimeClient instanceof OpenAIRealtimeClient) {
-                  await (realtimeClient as OpenAIRealtimeClient).connect({
-                    model: candidateModel,
-                    modalities: (sessionConfig.modalities ?? ['text', 'audio']) as (
-                      'text' | 'audio'
-                    )[],
-                    instructions: sessionConfig.instructions,
-                    voice: (sessionConfig.voice ?? 'alloy') as string,
-                    temperature: sessionConfig.temperature ?? 1,
-                  });
-                }
-
-                // Connection succeeded — break out of retry loop
-                connectError = null;
-                log.info(
-                  { requestId, model: candidateModel, provider: currentProvider },
-                  'Realtime connection established'
-                );
-                break;
-              } catch (err) {
-                connectError = err instanceof Error ? err.message : 'Connection failed';
-                log.warn(
-                  { requestId, model: candidateModel, error: connectError },
-                  'Realtime model failed — trying next'
-                );
-                realtimeClient.disconnect();
-                realtimeClient = null;
-                continue;
+            let connectError: string | null = null;
+            try {
+              if (realtimeClient instanceof GoogleLiveClient) {
+                await realtimeClient.connect({
+                  model: (selection.model ?? '').replace('models/', ''),
+                  modalities: (sessionConfig.modalities?.map((m) => m.toUpperCase()) ?? [
+                    'TEXT',
+                    'AUDIO',
+                  ]) as ('TEXT' | 'AUDIO')[],
+                  systemInstruction: sessionConfig.instructions,
+                  speechConfig: sessionConfig.voice
+                    ? { voiceConfig: { prebuiltVoiceConfig: { voiceName: sessionConfig.voice } } }
+                    : undefined,
+                  generationConfig: { temperature: sessionConfig.temperature },
+                });
+              } else if (realtimeClient instanceof AilinRealtimeClient) {
+                await realtimeClient.connect({
+                  modalities: (sessionConfig.modalities ?? ['text', 'audio']) as (
+                    'text' | 'audio'
+                  )[],
+                  instructions: sessionConfig.instructions,
+                  voice: sessionConfig.voice ?? 'alloy',
+                  temperature: sessionConfig.temperature ?? 0.8,
+                  tools: sessionConfig.tools,
+                  // Translation is handled by RealtimeTranslationAdapter (separate path above)
+                });
+              } else if (realtimeClient instanceof OpenAIRealtimeClient) {
+                await realtimeClient.connect({
+                  model: selection.model ?? '',
+                  modalities: (sessionConfig.modalities ?? ['text', 'audio']) as (
+                    'text' | 'audio'
+                  )[],
+                  instructions: sessionConfig.instructions,
+                  voice: (sessionConfig.voice ?? 'alloy') as string,
+                  temperature: sessionConfig.temperature ?? 1,
+                });
               }
+              log.info(
+                {
+                  requestId,
+                  model: modelName,
+                  provider: currentProvider,
+                  transport: selection.transport,
+                  transportKind: selection.transportKind,
+                },
+                'Realtime connection established'
+              );
+            } catch (err) {
+              connectError = err instanceof Error ? err.message : 'Connection failed';
+              log.warn(
+                { requestId, model: modelName, provider: currentProvider, error: connectError },
+                'Realtime upstream connect failed'
+              );
+              realtimeClient.disconnect();
+              realtimeClient = null;
             }
 
             if (!realtimeClient || connectError) {
@@ -647,6 +688,12 @@ export async function registerRealtimeRoutes(server: FastifyInstance): Promise<v
                 session: {
                   model: modelName,
                   provider: currentProvider,
+                  // `provider` = a native upstream realtime session;
+                  // `composite` = the gateway's STT->chat->TTS pipeline. The
+                  // client needs this to know whether it is getting true
+                  // speech-to-speech or a text round-trip.
+                  transport: selection.transport,
+                  transport_kind: selection.transportKind,
                   modalities: sessionConfig.modalities ?? ['text', 'audio'],
                   instructions: sessionConfig.instructions,
                   voice: sessionConfig.voice ?? 'alloy',

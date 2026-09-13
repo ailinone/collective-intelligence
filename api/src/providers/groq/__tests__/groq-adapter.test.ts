@@ -145,4 +145,49 @@ describe('GroqAdapter — getExtraChatPayloadFields hook', () => {
     expect(extras).toEqual({ reasoning_format: 'raw' });
     expect(extras).not.toHaveProperty('malicious_field');
   });
+
+  it('falls back to the canonical cross-provider reasoning_effort when the request carries no Groq-specific field', () => {
+    // The canonical ChatRequest.reasoning_effort field (LOTE AZ,
+    // @/utils/reasoning-effort) lives at the top level, exactly where the
+    // "flat fields" path above already looks — this is really the same
+    // field, confirmed explicitly so the canonical contract stays covered
+    // even if the flat-field reading path changes shape later.
+    const adapter = makeAdapter();
+    const request: ChatRequest = {
+      model: 'deepseek-r1-distill-llama-70b',
+      messages: [{ role: 'user', content: 'reason' }],
+      reasoning_effort: 'high',
+    };
+
+    expect(invokeHook(adapter, request.model!, request)).toEqual({ reasoning_effort: 'high' });
+  });
+
+  it('defaults reasoning_effort to medium when only ailin_constraints.enable_reasoning is set (no explicit effort)', () => {
+    // Every other provider adapter (OpenAI/xAI/Anthropic/Google) already
+    // resolves a bare `enable_reasoning: true` opt-in to the 'medium' tier
+    // via resolveReasoningEffort()'s Rule 3. Groq previously only read the
+    // raw reasoning_effort field and never saw this fallback at all.
+    const adapter = makeAdapter();
+    const request: ChatRequest = {
+      model: 'openai/gpt-oss-120b',
+      messages: [{ role: 'user', content: 'reason' }],
+      ailin_constraints: { enable_reasoning: true },
+    };
+
+    expect(invokeHook(adapter, request.model!, request)).toEqual({ reasoning_effort: 'medium' });
+  });
+
+  it('does not fabricate a reasoning_effort from a bare numeric thinking_budget alone', () => {
+    // thinking_budget is a token count, not a qualitative tier — resolver
+    // Rule 1 deliberately leaves `effort` undefined in this case (see
+    // resolveReasoningEffort's module doc), so Groq must not invent one.
+    const adapter = makeAdapter();
+    const request: ChatRequest = {
+      model: 'deepseek-r1-distill-llama-70b',
+      messages: [{ role: 'user', content: 'reason' }],
+      thinking_budget: 4096,
+    };
+
+    expect(invokeHook(adapter, request.model!, request)).toEqual({});
+  });
 });

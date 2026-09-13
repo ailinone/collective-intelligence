@@ -225,6 +225,31 @@ function usesDirectRead(source: string): boolean {
   return true;
 }
 
+/**
+ * Strategy files that are out of scope for this contract ENTIRELY — they
+ * don't select from `context.models` (the chat-model pool
+ * `preferredModelIds` pins into) at all, so neither HELPER nor DIRECT-READ
+ * applies, and PENDING (which promises "relevant, just not wired yet")
+ * would misrepresent them as future candidates for a pin mechanism their
+ * unit of work doesn't use.
+ *
+ * - `media-consensus-strategy.ts` (LOTE AT): generates N media-generation
+ *   candidates via `VideoOrchestrationService`/`ImagesOrchestrationService`
+ *   calls, never by selecting a chat model out of `context.models`. A
+ *   per-call model override flows through `videoOptions.model` /
+ *   `imageOptions.model` straight into the orchestration service call —
+ *   already that service's own `model?` option, a different mechanism
+ *   entirely from `preferredModelIds`.
+ * - `media-planner-strategy.ts` (LOTE AT, Part 2): a bounded agentic loop
+ *   that dispatches each turn's action through `executeCapabilityByPlan`
+ *   (non-generation) or a `MediaConsensusExecutor` (generation), and makes
+ *   its own planner-reasoning calls via `context.invoker.chat()` /
+ *   `CapabilityExecutionService.executeWithCapabilities()` — a recursive
+ *   re-entry into the full engine, not a direct `context.models` pool
+ *   selection. There is nothing here for `preferredModelIds` to pin.
+ */
+const OUT_OF_SCOPE = new Set<string>(['media-consensus-strategy.ts', 'media-planner-strategy.ts']);
+
 // ──────────────────────────────────────────────────────────────────────
 // Test setup: read every strategy file once.
 // ──────────────────────────────────────────────────────────────────────
@@ -233,6 +258,7 @@ function listStrategyFiles(): string[] {
   return readdirSync(STRATEGIES_DIR)
     .filter((f) => f.endsWith('-strategy.ts'))
     .filter((f) => f !== 'preferred-model-helper.ts')
+    .filter((f) => !OUT_OF_SCOPE.has(f))
     .sort();
 }
 

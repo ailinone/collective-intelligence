@@ -27,6 +27,7 @@ import { getQualityValidator } from '@/core/validation/quality-validator';
 import { getQualityScorer, type QualityScore } from '@/core/quality/quality-scorer';
 import type { BaseStrategy } from '@/core/orchestration/base-strategy';
 import type { ValidationResult } from '@/core/validation/quality-validator';
+import { LANGUAGE_MIRROR_DIRECTIVE } from '@/core/orchestration/prompts/language-directive';
 
 export interface RealtimeFeedbackConfig {
   qualityThreshold?: number; // 0-1
@@ -423,7 +424,9 @@ export class RealtimeFeedbackLoop {
       ...request.messages,
       {
         role: 'system',
-        content: feedback,
+        // Language mirror (audit F-06) appended LAST — the repair iteration must
+        // keep answering in the user's language, matching the execution prompt.
+        content: `${feedback}\n\n${LANGUAGE_MIRROR_DIRECTIVE}`,
       },
     ];
 

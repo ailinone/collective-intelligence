@@ -38,7 +38,9 @@ RUN pnpm install --frozen-lockfile && \
 FROM node:24-alpine AS production
 
 # Install dumb-init (proper signal handling) and OpenSSL (Prisma runtime)
-RUN apk add --no-cache dumb-init openssl
+# ffmpeg/ffprobe back the video-input capability family (demux before STT+vision);
+# see src/services/media/ffmpeg-media-toolkit.ts. Invoked as a separate process.
+RUN apk add --no-cache dumb-init openssl ffmpeg
 
 # Create non-root user
 RUN addgroup -g 1001 -S nodejs && \

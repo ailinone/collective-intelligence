@@ -19,7 +19,6 @@ import { requestQueueService } from '@/services/request-queue-service';
 import { logger } from '@/utils/logger';
 import type { OrchestrationContext, ChatRequest } from '@/types';
 import { config } from '@/config';
-import { recordSecurityEvent } from '@/services/security-audit-service';
 import type { ExtendedFastifyRequest } from '@/types/fastify-extended';
 
 export interface QueueContext {
@@ -46,12 +45,29 @@ export async function queueManagerMiddleware(
     const extendedRequest = request as ExtendedFastifyRequest;
     const tenantContext = extendedRequest.tenantContext;
 
+    if (!tenantContext || !tenantContext.organizationId) {
+      // Fail OPEN, not closed: queueing is a load-shedding optimization,
+      // not an auth gate. Rejecting the request here would mean the
+      // presence of this middleware in a route's preHandler chain can 403
+      // a request that every OTHER auth/tenant check upstream already
+      // allowed through — confirmed as a real regression (2026-09-08):
+      // this exact throw+403 path is what fired the instant
+      // chat-completions wired this middleware in for real load-shedding,
+      // exposing dead logic that had never actually run before (the
+      // middleware was previously imported but never registered). Leaving
+      // `queueContext` unset makes `enqueueIfNeeded` take the same
+      // `queued:false` branch it always took before this middleware
+      // existed — correct, safe degradation, not a regression from
+      // "before this fix" behavior.
+      log.debug(
+        { path: request.url },
+        'Queue manager invoked without tenant context — skipping queue evaluation, request proceeds normally'
+      );
+      return;
+    }
+
     // Check if request should be queued
     const decision = await requestQueueService.shouldQueue();
-
-    if (!tenantContext || !tenantContext.organizationId) {
-      throw new Error('Tenant context missing');
-    }
 
     const tier = (tenantContext.tier as 'enterprise' | 'pro' | 'free') ?? 'free';
 
@@ -75,33 +91,6 @@ export async function queueManagerMiddleware(
     }
   } catch (error: unknown) {
     const errorMessage = error instanceof Error ? error.message : String(error);
-    if (errorMessage.includes('Tenant context missing')) {
-      log.warn(
-        { path: request.url },
-        'Queue manager invoked without tenant context; denying request'
-      );
-
-      await recordSecurityEvent({
-        eventType: 'tenant_context_missing',
-        severity: 'warning',
-        message: 'Queue manager denied request due to missing tenant context.',
-        organizationId: undefined,
-        userId: undefined,
-        metadata: {
-          path: request.url,
-          method: request.method,
-        },
-      });
-
-      reply.status(403).send({
-        error: {
-          code: 'tenant_context_required',
-          message: 'Tenant context is required to evaluate queue strategy.',
-        },
-      });
-      return;
-    }
-
     log.error({ error: errorMessage }, 'Queue manager middleware error');
     reply.status(500).send({
       error: {

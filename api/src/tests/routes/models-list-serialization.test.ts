@@ -25,12 +25,16 @@ import { describe, it, expect } from 'vitest';
 import {
   DEFAULT_PAGE_SIZE,
   MAX_PAGE_SIZE,
+  AILIN_ALIAS_PROVIDER_ID,
   buildModelDto,
+  buildStrategyTierCompositeEntries,
+  buildStrategyTierCompositeEntry,
   entrySupportsEndpoint,
   resolveModelsPage,
   streamModelsResponse,
   type RankedEntry,
 } from '@/routes/models/models-list-serialization';
+import { STRATEGY_POLICY, listOfferedPricingCells } from '@/services/pricing-tiers';
 
 function makeEntry(
   i: number,
@@ -217,5 +221,83 @@ describe('streamModelsResponse — memory-bounded full inventory', () => {
     }
     const parsed = JSON.parse(chunks.join(''));
     expect(parsed.data[0]).toEqual(buildModelDto(entry));
+  });
+});
+
+// `<strategy>:<tier>` composite rows (2026-09-08) — found independently by a
+// chat-repo agent shipping reasoning-effort UI (PR #61 there): ci's /v1/models
+// only ever synthesized the 8 legacy ailin-* alias presets via
+// buildAilinAliasEntry(), never the real, executionReady `<strategy>:<tier>`
+// composites (e.g. `consensus:large`) that normalizeChatRequest already
+// resolves identically. Because chat's ModelSelector.svelte resets any
+// selected id absent from this endpoint's response back to empty, a strategy
+// composite was impossible to select from chat's UI at all — a pure
+// discoverability gap. These tests fail before buildStrategyTierCompositeEntry/
+// buildStrategyTierCompositeEntries existed and pass on the fix.
+describe('buildStrategyTierCompositeEntry(ies) — <strategy>:<tier> composite rows', () => {
+  it('lists at least one composite row, and every id uses the real <strategy>:<tier> colon format', () => {
+    const entries = buildStrategyTierCompositeEntries();
+    expect(entries.length).toBeGreaterThan(0);
+    for (const entry of entries) {
+      // Exactly one colon separator, never a slash — the format already
+      // established by resolveStrategyTier/parseStrategyTier and
+      // ailin-virtual-model-service.ts, not a new naming scheme.
+      expect(entry.model.id).toMatch(/^[a-z-]+:[a-z]+$/);
+    }
+  });
+
+  it('includes a known real composite (consensus:large) since consensus is executionReady with large in [medium, extra]', () => {
+    const entries = buildStrategyTierCompositeEntries();
+    const ids = entries.map((entry) => entry.model.id);
+    expect(ids).toContain('consensus:large');
+  });
+
+  it('excludes shadow-wired (non-executionReady) strategies entirely, e.g. debate/war-room', () => {
+    expect(STRATEGY_POLICY.debate.executionReady).toBe(false);
+    expect(STRATEGY_POLICY['war-room'].executionReady).toBe(false);
+
+    const ids = buildStrategyTierCompositeEntries().map((entry) => entry.model.id);
+    expect(ids.some((id) => id.startsWith('debate:'))).toBe(false);
+    expect(ids.some((id) => id.startsWith('war-room:'))).toBe(false);
+  });
+
+  it('serializes to the same row shape chat consumes for ailin-* aliases: provider="ailin-virtual" and "chat" in capabilities', () => {
+    const [cell] = listOfferedPricingCells();
+    const dto = buildModelDto(buildStrategyTierCompositeEntry(cell));
+
+    // Chat's backend gating (derive_gateway_capabilities' is_chat_router_alias)
+    // keys off exactly these two fields, never the specific id — confirmed by
+    // reading backend/ailin_chat/utils/models.py in the chat repo.
+    expect(dto.provider).toBe(AILIN_ALIAS_PROVIDER_ID);
+    expect(dto.provider).toBe('ailin-virtual');
+    expect(dto.capabilities).toContain('chat');
+    expect(dto.discoverySource).toBe('ailin-virtual');
+    expect(dto.id).toBe(cell.id);
+    expect(dto.runnable).toBe(true);
+    expect(dto.operability).toBe('operational');
+  });
+
+  it('carries the REAL published per-tier rate (unlike the legacy aliases, which are deliberately 0/dynamic)', () => {
+    const cell = listOfferedPricingCells().find((c) => c.id === 'consensus:large')!;
+    const dto = buildModelDto(buildStrategyTierCompositeEntry(cell));
+
+    expect(dto.pricing).toEqual({
+      inputCostPer1M: cell.inputPer1MUsd,
+      outputCostPer1M: cell.outputPer1MUsd,
+      currency: 'USD',
+    });
+    expect((dto.pricing as { inputCostPer1M: number }).inputCostPer1M).toBeGreaterThan(0);
+  });
+
+  it('is compatible with the chat_completions endpoint filter the route applies to alias rows', () => {
+    const [cell] = listOfferedPricingCells();
+    const entry = buildStrategyTierCompositeEntry(cell);
+    expect(entrySupportsEndpoint(entry, 'chat_completions')).toBe(true);
+  });
+
+  it('every offered cell round-trips through buildStrategyTierCompositeEntry without throwing', () => {
+    for (const cell of listOfferedPricingCells()) {
+      expect(() => buildModelDto(buildStrategyTierCompositeEntry(cell))).not.toThrow();
+    }
   });
 });

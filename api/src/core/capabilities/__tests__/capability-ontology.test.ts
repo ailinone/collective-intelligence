@@ -39,8 +39,35 @@ describe('capabilityOntology — normalize + lookup', () => {
     expect(capabilityOntology.normalize('json-mode')).toBe('json_mode');
     expect(capabilityOntology.normalize('image_understanding')).toBe('vision');
     expect(capabilityOntology.normalize('text_to_speech')).toBe('audio_generation');
-    expect(capabilityOntology.normalize('speech_to_text')).toBe('audio_generation');
     expect(capabilityOntology.normalize('chain_of_thought')).toBe('reasoning');
+  });
+
+  /**
+   * Regression guard (LOTE AO, 2026-09-05). The table used to fold BOTH
+   * audio directions into one `audio_generation` id, so a TTS request and a
+   * transcription request normalised to the same string and nothing
+   * downstream could tell them apart. They are now distinct canonical ids.
+   */
+  it('keeps the two audio DIRECTIONS as distinct canonical ids', () => {
+    expect(capabilityOntology.normalize('text_to_speech')).toBe('audio_generation');
+    expect(capabilityOntology.normalize('tts')).toBe('audio_generation');
+    expect(capabilityOntology.normalize('audio_output')).toBe('audio_generation');
+
+    expect(capabilityOntology.normalize('speech_to_text')).toBe('speech_to_text');
+    expect(capabilityOntology.normalize('transcription')).toBe('speech_to_text');
+    expect(capabilityOntology.normalize('asr')).toBe('speech_to_text');
+    expect(capabilityOntology.normalize('audio_input')).toBe('audio_input');
+    expect(capabilityOntology.normalize('listen')).toBe('audio_input');
+
+    // Speech-to-speech is a third, separate thing.
+    expect(capabilityOntology.normalize('audio_to_audio')).toBe('audio_to_audio');
+    expect(capabilityOntology.normalize('speech_to_speech')).toBe('audio_to_audio');
+
+    // `supportsAudio` is direction-agnostic, so all audio ids still share it
+    // as their structural pre-filter — documented in the module header.
+    for (const id of ['audio_generation', 'speech_to_text', 'audio_input', 'audio_to_audio']) {
+      expect(capabilityOntology.get(id)?.routeFlag).toBe('supportsAudio');
+    }
   });
 
   it('normalize returns the lowercased input when no match', () => {
@@ -69,7 +96,9 @@ describe('capabilityOntology — normalize + lookup', () => {
 
   it('all() returns the canonical definition table', () => {
     expect(capabilityOntology.all().length).toBe(__CAPABILITIES_TABLE.length);
-    expect(capabilityOntology.all().length).toBeGreaterThanOrEqual(14);
+    // Was 14 pre-LOTE-AO; the table now covers the whole catalog vocabulary.
+    // Coverage itself is asserted in capability-ontology-coverage.test.ts.
+    expect(capabilityOntology.all().length).toBeGreaterThanOrEqual(70);
   });
 });
 

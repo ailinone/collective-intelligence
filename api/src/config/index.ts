@@ -571,6 +571,69 @@ function deepFreeze<T>(value: T): T {
 }
 
 /**
+ * Resolve the maximum PostgreSQL connection pool size.
+ *
+ * 2026-09 footgun fix: `DATABASE_POOL_MAX` used to be defined here
+ * (`config.database.poolMax`) but nothing ever read it — the REAL pool size
+ * `database/client.ts`'s `createPgPool()` passed to `pg.Pool({ max })` came
+ * from a completely different, undocumented env var, `DB_POOL_MAX`, read
+ * directly from `process.env`. An operator tuning the discoverable,
+ * conventionally-named `DATABASE_POOL_MAX` had zero effect, silently.
+ *
+ * `config.database.poolMax` (built by this function) is now the single
+ * source of truth: `createPgPool()` reads ONLY `config.database.poolMax`,
+ * never `process.env` directly. `DB_POOL_MAX` is kept as a deprecated
+ * fallback — checked only when `DATABASE_POOL_MAX` is unset — so any
+ * already-deployed environment setting it keeps working identically, with a
+ * warning nudging towards the documented name.
+ *
+ * The default is mode-aware (20 in development/test, 100 otherwise) to
+ * exactly match the pool size `database/client.ts` has always actually used
+ * in each environment (production currently has neither env var set, so it
+ * silently relies on this same 100 default) — wiring this through must not
+ * silently change anyone's real pool size.
+ */
+export function resolveDatabasePoolMax(): number {
+  const nodeEnv = (process.env.NODE_ENV || 'development').trim().toLowerCase();
+  const modeAwareDefault = nodeEnv === 'development' || nodeEnv === 'test' ? 20 : 100;
+
+  // Truthy checks (not `!== undefined`) to match getEnvNumber's own "empty
+  // string counts as unset" convention used throughout this file.
+  if (process.env.DATABASE_POOL_MAX) {
+    return getEnvNumber('DATABASE_POOL_MAX', modeAwareDefault);
+  }
+
+  if (process.env.DB_POOL_MAX) {
+    console.warn(
+      'WARNING: DB_POOL_MAX is a deprecated, undocumented alias for the Postgres pool size and ' +
+        'will stop being read in a future release. Set DATABASE_POOL_MAX instead (same effect, ' +
+        'documented name, validated at boot).'
+    );
+    return getEnvNumber('DB_POOL_MAX', modeAwareDefault);
+  }
+
+  return modeAwareDefault;
+}
+
+/**
+ * Resolve the minimum ("keep warm") PostgreSQL connection pool size.
+ *
+ * Companion to `resolveDatabasePoolMax()`. Unlike `poolMax`, no env var has
+ * ever actually reached the pool's `min` option under any naming scheme —
+ * `DATABASE_POOL_MIN` was dead the same way `DATABASE_POOL_MAX` was, and
+ * there has never been a live `DB_POOL_MIN` counterpart (`database/client.ts`
+ * never constructed its pool with a `min` at all). The default is therefore
+ * `0` — pg-pool's own built-in default, and today's real production
+ * behavior — rather than the previously-dead config's stale default of 10,
+ * so wiring this through does not silently make every deployment hold
+ * connections open that it isn't holding today. Set `DATABASE_POOL_MIN`
+ * explicitly to opt into keeping warm connections in the pool.
+ */
+export function resolveDatabasePoolMin(): number {
+  return getEnvNumber('DATABASE_POOL_MIN', 0);
+}
+
+/**
  * Application configuration
  */
 export const config: AppConfig = deepFreeze({
@@ -596,8 +659,8 @@ export const config: AppConfig = deepFreeze({
 
   database: {
     url: getEnv('DATABASE_URL'),
-    poolMin: getEnvNumber('DATABASE_POOL_MIN', 10),
-    poolMax: getEnvNumber('DATABASE_POOL_MAX', 50),
+    poolMin: resolveDatabasePoolMin(),
+    poolMax: resolveDatabasePoolMax(),
     connectionTimeout: getEnvNumber('DATABASE_CONNECTION_TIMEOUT', 5000),
     idleTimeout: getEnvNumber('DATABASE_IDLE_TIMEOUT', 30000),
   },
@@ -1040,6 +1103,20 @@ export const config: AppConfig = deepFreeze({
     retentionDays: getEnvNumber('AUTO_LEARNING_RETENTION_DAYS', 365),
   },
 
+  // LOTE AT (Part 2) — MediaPlannerStrategy. `enabled` defaults false: the
+  // entire pathway is unreachable until this is explicitly turned on (see
+  // `resolveMediaPlanRouting` in
+  // core/orchestration/strategies/media-planner-gate.ts, the single choke
+  // point that reads this flag). `maxTurns` and `costCeilingMultiplier` are
+  // PROVISIONAL defaults per the architecture's §8 — real product/cost
+  // decisions still pending; exposed as env vars so they can be tuned
+  // without a code change.
+  mediaPlanner: {
+    enabled: getEnvBoolean('MEDIA_PLANNER_ENABLED', false),
+    maxTurns: getEnvNumber('MEDIA_PLANNER_MAX_TURNS', 3),
+    costCeilingMultiplier: getEnvNumber('MEDIA_PLANNER_COST_CEILING_MULTIPLIER', 3),
+  },
+
   security: {
     jwtSecret: getEnv('JWT_SECRET'),
     jwtExpiresIn: getEnv('JWT_EXPIRES_IN', '24h'),
@@ -1087,6 +1164,23 @@ export const config: AppConfig = deepFreeze({
         .filter((value) => value.length > 0),
       cacheTtlMs: getEnvNumber('SECURITY_RBAC_CACHE_TTL_MS', 60000),
     },
+    // SECURITY (platform-admin-vs-tenant-admin, 2026-09-08): 'admin'/'owner'
+    // above are PER-ORGANIZATION UserRole grants — any tenant's own owner can
+    // self-service-promote another user in the SAME org to 'admin' via PUT
+    // /v1/users/:id. Routes that operate on GLOBAL/cross-tenant resources
+    // (model discovery, benchmark/experiment infra, DLQ replay, API-key
+    // rotation across orgs, the shared shell/git tool-execution surface) were
+    // gated with requireRole('admin','owner') alone, which a tenant's own
+    // self-promoted admin also satisfies — that is not a platform-operator
+    // check. platformOrganizationId designates ONE reserved Organization row
+    // (provisioned out-of-band, e.g. via `pnpm run rbac:grant-owner` against
+    // that org) whose admin/owner grants are treated as true platform-admin.
+    // No schema change: reuses the existing per-org UserRole/Role tables via
+    // requirePlatformAdmin() in auth-middleware.ts. Fails CLOSED (denies
+    // everyone, logs at error) when unset, rather than silently falling back
+    // to "any tenant admin", so shipping this fix before an operator has
+    // provisioned the platform org still closes the hole immediately.
+    platformOrganizationId: process.env.PLATFORM_ORGANIZATION_ID || null,
     audit: {
       enabled: getEnvBoolean('SECURITY_AUDIT_ENABLED', true),
       retentionDays: getEnvNumber('SECURITY_AUDIT_RETENTION_DAYS', 365),
@@ -1188,6 +1282,23 @@ export function validateConfig(): void {
   // Validate database URL
   if (!config.database.url || !config.database.url.startsWith('postgresql://')) {
     errors.push('Invalid DATABASE_URL: must be a PostgreSQL connection string');
+  }
+
+  // Validate database pool sizing. These values are now genuinely wired
+  // into pg.Pool (see database/client.ts's createPgPool()) — before the
+  // 2026-09 footgun fix they were dead config, so a bad value here would
+  // previously have done nothing at all. Catch it at boot instead of
+  // letting an unconfigurable pool (max=0 hangs every query forever, or
+  // min > max is nonsensical to pg-pool) surface later as a mysterious
+  // connection timeout.
+  if (config.database.poolMax < 1) {
+    errors.push('DATABASE_POOL_MAX must be at least 1');
+  }
+  if (config.database.poolMin < 0) {
+    errors.push('DATABASE_POOL_MIN must be zero or positive');
+  }
+  if (config.database.poolMin > config.database.poolMax) {
+    errors.push('DATABASE_POOL_MIN cannot exceed DATABASE_POOL_MAX');
   }
 
   // Validate JWT secret - only warn in production if too short, don't fail

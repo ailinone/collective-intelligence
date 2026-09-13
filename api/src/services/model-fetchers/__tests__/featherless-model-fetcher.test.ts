@@ -8,7 +8,23 @@
 // Source: https://github.com/ailinone/collective-intelligence
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
+
+vi.mock('@/utils/logger', () => {
+  const child = { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() };
+  // `child` itself is a plain function (NOT vi.fn()-wrapped): the fetcher's
+  // constructor calls logger.child(...) once and stores the result, so this
+  // factory must keep returning the same object across the whole file. A
+  // vi.fn() wrapper here would get its implementation wiped by the
+  // `vi.restoreAllMocks()` in afterEach (used below to reset the fetch spy),
+  // which would make logger.child(...) return undefined after the first
+  // test and crash every fetcher instantiated afterward.
+  return { logger: { child: () => child, ...child } };
+});
+
 import { FeatherlessModelFetcher } from '@/services/model-fetchers/featherless-model-fetcher';
+import { logger } from '@/utils/logger';
+
+const mockLog = logger.child();
 
 function jsonResponse(payload: unknown, status = 200): Response {
   return new Response(JSON.stringify(payload), {
@@ -200,5 +216,112 @@ describe('featherless-model-fetcher', () => {
 
     expect(models).toHaveLength(1);
     expect(models[0].id).toBe('a/valid');
+  });
+
+  // maxPages ceiling (2026-09-08/09): this was `const MAX_PAGES = 100`, a
+  // fixed module-level constant with no env override — an arbitrary
+  // round-number stop, not a documented safety margin. Read-only COUNT(*)
+  // against the production database confirms provider_id='featherless-ai' currently
+  // holds 22,150 rows (~22% of the old 100-page/100k-model ceiling), so
+  // headroom existed today but shrank as the catalog grows toward the
+  // mandate's 150k-200k+ target — and there was no way to raise it without a
+  // code change, nor any signal if a run ever silently hit it. Same failure
+  // shape as the HF Hub fetcher's fixed 60k cap (hf-hub-model-fetcher.ts) and
+  // the Bytez fetcher's fixed 100k parity cap. The default was subsequently
+  // raised to 500 pages (500k models, see the "at least 150,000" test below)
+  // to give the same order-of-magnitude headroom as those two fetchers.
+  describe('maxPages ceiling (env-overridable + loud on hit)', () => {
+    const ENV_KEY = 'FEATHERLESS_DISCOVERY_MAX_PAGES';
+    const originalEnv = process.env[ENV_KEY];
+
+    afterEach(() => {
+      if (originalEnv === undefined) delete process.env[ENV_KEY];
+      else process.env[ENV_KEY] = originalEnv;
+    });
+
+    it('an explicit maxPages override (3rd constructor arg) stops pagination early', async () => {
+      const fetchSpy = vi
+        .spyOn(globalThis, 'fetch')
+        .mockResolvedValueOnce(page([{ id: 'p1/m0' }], 1, 5))
+        .mockResolvedValueOnce(page([{ id: 'p2/m0' }], 2, 5));
+
+      const fetcher = new FeatherlessModelFetcher('live-key', 15000, 2);
+      const models = await fetcher.getModels();
+
+      // total_pages (5) exceeds the override (2): pagination stops at page 2
+      // and never requests page 3+, even though the API says more exist.
+      expect(fetchSpy).toHaveBeenCalledTimes(2);
+      expect(models).toHaveLength(2);
+    });
+
+    it('the ceiling is overridable via FEATHERLESS_DISCOVERY_MAX_PAGES with no constructor arg (env-overridable, no code change needed)', async () => {
+      process.env[ENV_KEY] = '2';
+      vi.spyOn(globalThis, 'fetch')
+        .mockResolvedValueOnce(page([{ id: 'p1/m0' }], 1, 5))
+        .mockResolvedValueOnce(page([{ id: 'p2/m0' }], 2, 5));
+
+      // No 3rd arg: picks up the env override via the constructor default.
+      const fetcher = new FeatherlessModelFetcher('live-key');
+      const models = await fetcher.getModels();
+
+      expect(models).toHaveLength(2);
+    });
+
+    it('logs a warning (not just info) when a run actually hits the ceiling', async () => {
+      vi.spyOn(globalThis, 'fetch')
+        .mockResolvedValueOnce(page([{ id: 'p1/m0' }], 1, 5))
+        .mockResolvedValueOnce(page([{ id: 'p2/m0' }], 2, 5));
+
+      await new FeatherlessModelFetcher('live-key', 15000, 2).getModels();
+
+      expect(mockLog.warn).toHaveBeenCalledWith(
+        expect.objectContaining({ capped: true, pagesFetched: 2 }),
+        expect.stringContaining('FEATHERLESS_DISCOVERY_MAX_PAGES')
+      );
+      expect(mockLog.info).not.toHaveBeenCalledWith(
+        expect.anything(),
+        'Featherless AI discovery completed'
+      );
+    });
+
+    it('logs at info (not warn) when the full catalog fits under the ceiling', async () => {
+      vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(page([{ id: 'p1/m0' }], 1, 1));
+
+      await new FeatherlessModelFetcher('live-key', 15000, 5).getModels();
+
+      expect(mockLog.warn).not.toHaveBeenCalled();
+      expect(mockLog.info).toHaveBeenCalledWith(
+        expect.objectContaining({ capped: false }),
+        'Featherless AI discovery completed'
+      );
+    });
+
+    // Scale-target headroom guard (2026-09-09): unlike the tests above, this
+    // does NOT construct the fetcher with an explicit maxPages override, and
+    // does NOT read/set FEATHERLESS_DISCOVERY_MAX_PAGES — it exercises the
+    // REAL production default. Walks 151 pages (151,000 models), just past
+    // the platform's 150k scale target and well past the OLD 100-page/100k
+    // landmine, so this fails immediately if a future change ever lowers the
+    // default back toward (or below) 150,000 models of headroom.
+    it(
+      'the real default (no override) does not truncate at 150,000 models (scale-target headroom)',
+      async () => {
+        const TOTAL_PAGES = 151;
+        vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+          const requestedPage = Number(new URL(String(input)).searchParams.get('page'));
+          const models = Array.from({ length: 1000 }, (_, i) => ({
+            id: `org/model-p${requestedPage}-${i}`,
+          }));
+          return page(models, requestedPage, TOTAL_PAGES);
+        });
+
+        const fetcher = new FeatherlessModelFetcher('live-key');
+        const models = await fetcher.getModels();
+
+        expect(models).toHaveLength(TOTAL_PAGES * 1000);
+        expect(models.length).toBeGreaterThan(150000);
+      },
+      20000
+    );
   });
 });

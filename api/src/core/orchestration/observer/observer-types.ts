@@ -44,6 +44,16 @@ export interface ObserverConfig {
 export interface ObserverFeed {
   /** Emit an event for the observer to narrate. Non-blocking. */
   emit(event: ObserverEvent): void;
+  /**
+   * Enqueue an ALREADY-WRITTEN narration for `event` immediately — no LLM
+   * call, no network round-trip, no `await`. Used for the deterministic,
+   * template-built opening line (see `buildImmediateOpeningNarration`) so a
+   * viewer gets narration content at t≈0 regardless of the LLM-backed
+   * narrator's multi-second floor (10s Ollama / 15s cloud timeout). The
+   * richer LLM-generated narration for the same milestone still runs via
+   * `emit()` and layers in afterward; this is not a replacement for it.
+   */
+  emitImmediate(event: ObserverEvent, narrationText: string): void;
   /** Get all narrations generated so far (for final metadata). */
   getNarrations(): ObserverNarration[];
   /** Whether the observer is active (has a model loaded). */

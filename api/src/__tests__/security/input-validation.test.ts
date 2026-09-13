@@ -362,28 +362,48 @@ describe('Input Validation Security Tests', () => {
 
   describe('Oversized Payload Protection', () => {
     it('should reject oversized JSON payload', async () => {
-      const hugeMessage = 'A'.repeat(15 * 1024 * 1024); // 15MB (over 10MB limit)
+      // WAS VACUOUS (fixed 2026-09-05, CI-coverage audit): this case used to
+      // POST a 15MB body to /v1/chat/completions. Two independent problems,
+      // both invisible because no pipeline ever ran this file:
+      //   1. `server` here is createTestServerWithAuthOnly(), which registers
+      //      ONLY auth + user routes — /v1/chat/completions 404s, and 404 was
+      //      silently accepted as "rejected".
+      //   2. createServer()'s bodyLimit is MAX_REQUEST_SIZE_MB (default 50MB
+      //      since the 10M-token context change), so 15MB is UNDER the limit
+      //      and would never have tripped it anyway.
+      // Now: boot a throwaway server with a small, explicit limit and prove
+      // the configured bodyLimit actually rejects a body above it.
+      const previousLimit = process.env.MAX_REQUEST_SIZE_MB;
+      process.env.MAX_REQUEST_SIZE_MB = '1';
+      const { createServer } = await import('@/server');
+      const limitedServer = await createServer();
+      try {
+        const { authRoutesClean } = await import('@/routes/auth/auth-routes-clean');
+        await limitedServer.register(authRoutesClean);
+        await limitedServer.ready();
 
-      const response = await server.inject({
-        method: 'POST',
-        url: '/v1/chat/completions',
-        headers: {
-          'x-api-key': testApiKey,
-          'content-type': 'application/json',
-        },
-        payload: {
-          model: 'gpt-4',
-          messages: [
-            {
-              role: 'user',
-              content: hugeMessage,
-            },
-          ],
-        },
-      });
+        const hugeMessage = 'A'.repeat(2 * 1024 * 1024); // 2MB > 1MB limit
 
-      // Should reject (413 Payload Too Large or 400)
-      expect([400, 413]).toContain(response.statusCode);
+        const response = await limitedServer.inject({
+          method: 'POST',
+          url: '/v1/auth/login',
+          headers: { 'content-type': 'application/json' },
+          payload: JSON.stringify({ email: 'a@example.com', password: hugeMessage }),
+        });
+
+        // 413 Payload Too Large (Fastify FST_ERR_CTP_BODY_TOO_LARGE); 400 is
+        // accepted as an equally valid rejection shape.
+        expect([400, 413]).toContain(response.statusCode);
+      } finally {
+        await limitedServer.close().catch(() => {
+          // Ignore cleanup errors
+        });
+        if (previousLimit === undefined) {
+          delete process.env.MAX_REQUEST_SIZE_MB;
+        } else {
+          process.env.MAX_REQUEST_SIZE_MB = previousLimit;
+        }
+      }
     });
 
     it('should reject deeply nested JSON', async () => {

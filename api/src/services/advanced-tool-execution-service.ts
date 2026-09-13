@@ -186,6 +186,19 @@ export interface ToolResult {
   output?: string;
   error?: string;
   metadata?: Record<string, unknown>;
+  /**
+   * Media/document artifact produced by this tool call (e.g. an image or video
+   * generation tool). Optional and unpopulated today — plumbing only, ahead of
+   * the generation tools that will set it and the collective-strategy response
+   * handling that will read it via `ModelExecution.artifacts` / `mergeArtifacts()`
+   * in base-strategy.ts.
+   */
+  artifact?: {
+    type: 'image' | 'video' | 'audio' | 'document' | 'file';
+    url: string;
+    mimeType?: string;
+    meta?: Record<string, unknown>;
+  };
 }
 
 export interface ToolExecutionContext {

@@ -300,6 +300,16 @@ export interface CoordinationResult {
   }>;
   /** Final aggregated response text */
   finalResponseText: string;
+  /**
+   * Operator-facing coordination record: decision type/confidence/rationale,
+   * rounds, convergence, critical variables, dissent.
+   *
+   * AUDIT AND METADATA ONLY. This must never be written to
+   * `choices[].message.content` — it used to be, so users asking a question got
+   * back "**Decision: answer** (confidence: 100%) Rationale: …" instead of an
+   * answer.
+   */
+  coordinationSummary?: string;
   /** Cost breakdown */
   totalCostUsd: number;
   totalLatencyMs: number;

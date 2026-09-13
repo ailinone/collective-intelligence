@@ -10,7 +10,9 @@
 /**
  * Hermetic test for the local in-memory rate-limit fallback (scale-to-100k
  * Phase 3, issue #148) — this middleware is a live, global preHandler hook
- * (registered in server.ts) that previously failed OPEN (unlimited traffic)
+ * (registered in index.ts, after apiKeyAuthMiddleware — see the dead-hook-order
+ * fix this file's sibling, api-key-rate-limit-hook-order.test.ts, guards
+ * against) that previously failed OPEN (unlimited traffic)
  * whenever Redis was unavailable/erroring, exactly the scenario the plan doc
  * flags as dangerous (Redis saturation correlating with high load). This
  * verifies that with Redis unavailable, requests are still throttled by a

@@ -42,13 +42,30 @@ export default defineConfig({
       '**/node_modules/**',
       '**/dist/**',
       'tests/**', // Exclude top-level integration tests
-      'src/tests/**', // Exclude integration tests co-located in src/tests/
+      // CI-coverage audit (2026-09-05): this used to exclude ALL of
+      // `src/tests/**`. Only the security subtree needs its own harness
+      // (vitest.security.config.ts owns it, plus the DB-backed
+      // auth-security-matrix step); the other 11 files under src/tests/ —
+      // middleware, remediation, models-list routes, the anthropic adapter
+      // converter — are plain hermetic unit tests that the blanket exclusion
+      // dropped from EVERY pipeline. Narrowed so they run here.
+      'src/tests/security/**',
       'src/**/*.integration.test.ts', // DB-backed integration tests (run via vitest.integration.config.ts)
-      'src/routes/**/__tests__/**', // Exclude route integration tests
+      // Same audit: this used to exclude `src/routes/**/__tests__/**`
+      // wholesale as "route integration tests", but only the auth suites
+      // actually need a real DB + booted server (they register orgs/users and
+      // exercise JWT/e-mail-challenge flows). Those two run under
+      // vitest.config.ts in the "DB-backed route/security/provider tests"
+      // workflow step; the other 12 route suites are pure unit/contract tests
+      // (schema shape, source-wiring invariants, free-tier ceiling maths) and
+      // now run here.
+      'src/routes/auth/__tests__/**',
       'src/__tests__/security/**', // Exclude security integration tests
       'src/__tests__/database/**', // Exclude database tests
       'src/providers/__tests__/**', // Exclude provider integration tests (need real DB)
-      'src/core/orchestration/__tests__/**', // Exclude orchestration tests (run separately by workflow)
+      // Orchestration suites run under vitest.orchestration.config.ts (which
+      // covers the whole directory) and vitest.consensus-validation.config.ts.
+      'src/core/orchestration/__tests__/**',
       // Consensus-validation suite (all consensus-*): these REQUIRE the response-
       // aggregator + ensemble-shadow mocks from consensus-validation.setup.ts, which
       // this bare config does not load → e.g. consensus-strategy.artifacts' synthesis

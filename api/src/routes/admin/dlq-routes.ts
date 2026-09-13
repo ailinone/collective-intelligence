@@ -26,7 +26,7 @@ import {
   getRegisteredDLQQueues,
 } from '@/queue/dlq-manager';
 import { narrowAs } from '@/utils/type-guards';
-import { authenticate, requireRole } from '@/middleware/auth-middleware';
+import { authenticate, requirePlatformAdmin } from '@/middleware/auth-middleware';
 import { rejectAnonymousGuestKeyPreHandler } from '@/services/anonymous-quota-gate';
 import { rejectChatFreeTierKeyPreHandler } from '@/services/free-tier-quota-gate';
 import { logger } from '@/utils/logger';
@@ -38,12 +38,15 @@ export async function registerDLQAdminRoutes(server: FastifyInstance): Promise<v
   // PROTECTED_ROUTE_PREFIXES in the global api-key-auth middleware (which only
   // covers `/v1/...`), so without an explicit preHandler these endpoints were
   // fully unauthenticated. Replaying DLQ jobs re-runs arbitrary queued work and
-  // listing exposes job payloads, so gate every route behind admin/owner auth.
+  // listing exposes job payloads. SECURITY (platform-admin-vs-tenant-admin,
+  // 2026-09-08): these queues are named platform-wide (not per-org), so
+  // requireRole('admin','owner') alone would let any tenant's own
+  // self-promoted admin enumerate/replay every organization's queued jobs.
   const adminPreHandler = [
     authenticate,
     rejectAnonymousGuestKeyPreHandler,
     rejectChatFreeTierKeyPreHandler,
-    requireRole('admin', 'owner'),
+    requirePlatformAdmin(),
   ];
 
   /**

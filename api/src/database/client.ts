@@ -26,6 +26,13 @@ import { exec } from 'child_process';
 import { promisify } from 'util';
 import { join } from 'path';
 import { extractErrorCodeFromObject } from '@/utils/type-guards';
+import {
+  assertMigrationTargetIsDirect,
+  buildPrismaDatabaseUrl,
+  describeDatabaseTarget,
+  resolveTransactionOptions,
+} from './connection-url';
+import { attachPoolMetrics } from './pool-metrics';
 
 const execAsync = promisify(exec);
 
@@ -66,66 +73,9 @@ function buildDatabaseUrl(): string {
       ? process.env.DATABASE_URL
       : config.database.url;
 
-  // If URL doesn't look like postgres URL, return as-is
-  if (!baseUrl || (!baseUrl.includes('postgresql://') && !baseUrl.includes('postgres://'))) {
-    return baseUrl;
-  }
-
-  // Check if connection pooler (PgBouncer) is enabled
-  // For enterprise scale, use PgBouncer for connection pooling
-  // Note: This is synchronous, so we'll check the env var directly
-  // The pooler config will be validated when connection is established
-  const usePooler = process.env.DATABASE_USE_POOLER === 'true' && process.env.DATABASE_POOLER_HOST;
-
-  if (usePooler) {
-    // Use pooler URL directly from env or construct it
-    const poolerHost = process.env.DATABASE_POOLER_HOST;
-    const poolerPort = process.env.DATABASE_POOLER_PORT || '6432';
-    const url = new URL(
-      baseUrl.replace('postgresql://', 'http://').replace('postgres://', 'http://')
-    );
-    url.hostname = poolerHost!;
-    url.port = poolerPort;
-    url.searchParams.set('pgbouncer', 'true');
-    return url.toString().replace('http://', 'postgresql://');
-  }
-
-  // Parse existing URL
-  const url = new URL(
-    baseUrl.replace('postgresql://', 'http://').replace('postgres://', 'http://')
-  );
-
-  // Add/override connection pooling parameters based on environment
-  // Note: statement_timeout is set per-connection in transactions, not in connection string
-  // This allows different timeouts for different operation types
-  // For PgBouncer, connection_limit should be set at pooler level, not here
-  const poolConfig: Record<string, string> = {
-    // DATABASE_CONNECTION_LIMIT (operator override) takes precedence in
-    // every mode. Default is mode-aware: small in dev/test (5) to keep
-    // local Postgres usage modest, larger in prod (30) for real load.
-    // The override matters because dev orchestration runs 4+ concurrent
-    // background workers (auto-learning, periodic flushers) on top of
-    // request handlers, and at pool=5 they starve auth queries that
-    // then return as 401 "invalid api key" — the symptom that masks
-    // pool exhaustion.
-    connection_limit:
-      process.env.DATABASE_CONNECTION_LIMIT ||
-      (isDevelopment || process.env.NODE_ENV === 'test' ? '5' : '30'),
-    pool_timeout: '60',
-    // Increase connect_timeout to handle slower connections (e.g., Cloud SQL proxy, network latency)
-    // In Docker/Cloud environments, connections may need more time
-    connect_timeout: process.env.DATABASE_CONNECT_TIMEOUT || '20', // 20 seconds default (was 10)
-    // Default statement timeout (can be overridden per transaction)
-    // For production with PgBouncer, this should be set at pooler level
-    statement_timeout: process.env.DATABASE_STATEMENT_TIMEOUT || '30000', // 30 seconds default
-  };
-
-  for (const [key, value] of Object.entries(poolConfig)) {
-    url.searchParams.set(key, value);
-  }
-
-  // Convert back to postgresql://
-  return url.toString().replace('http://', 'postgresql://');
+  // Direct vs. pooler resolution lives in connection-url.ts (shared with the
+  // capability pool and the SAB worker so every pool follows the same target).
+  return buildPrismaDatabaseUrl(baseUrl, process.env, { isDevelopment });
 }
 
 // Re-evaluate database URL on each access in test mode
@@ -140,28 +90,45 @@ const databaseUrl = buildDatabaseUrl();
 
 // Store pool reference for cleanup in test mode
 let pgPoolInstance: pg.Pool | null = null;
+let pgPoolMetricsSampler: NodeJS.Timeout | null = null;
+let databaseTargetLogged = false;
 
 // Create PostgreSQL connection pool for Prisma 7 adapter
 // Pool size is configured based on environment
-function createPgPool(): pg.Pool {
-  const connectionString = getDatabaseUrl();
-  // C3 dev fix (2026-06-09): the model-selection fan-out fires dozens-to-hundreds of concurrent
-  // queries while background workers also draw from the pool. A dev pool of 5 forced queueing up to
-  // the connection timeout, surfacing as PrismaClientKnownRequestError and multi-second stalls. Raise
-  // the dev pool (override via DB_POOL_MAX). Pairs with the per-model query batching below so the
-  // extra connections reduce, not amplify, DB load.
-  const poolSize =
-    Number(process.env.DB_POOL_MAX) ||
-    (isDevelopment || process.env.NODE_ENV === 'test' ? 20 : 100);
-
-  const pool = new pg.Pool({
+/**
+ * Build the pg.Pool options used by the Prisma adapter's underlying
+ * connection pool.
+ *
+ * `max`/`min` come ONLY from `config.database.poolMax`/`poolMin` —
+ * `config/index.ts`'s `resolveDatabasePoolMax()`/`resolveDatabasePoolMin()`
+ * are the single source of truth for pool sizing (2026-09 footgun fix: this
+ * file used to read an undocumented `process.env.DB_POOL_MAX` directly,
+ * completely bypassing the discoverable `config.database.poolMax` field —
+ * see the resolver functions in config/index.ts for the full history and
+ * the deprecated-alias fallback that keeps existing `DB_POOL_MAX`
+ * deployments working). Exported so tests can assert the pool actually
+ * traces back to config without booting the full Prisma client singleton.
+ */
+export function buildPgPoolOptions(connectionString: string): pg.PoolConfig {
+  return {
     connectionString,
-    max: poolSize,
+    max: config.database.poolMax,
+    min: config.database.poolMin,
     idleTimeoutMillis: 60000,
     // Increase connection timeout to handle slower connections (e.g., Cloud SQL proxy)
     // In production, connections may need more time due to network latency
     connectionTimeoutMillis: parseInt(process.env.DATABASE_CONNECTION_TIMEOUT_MS || '20000', 10), // 20 seconds default
-  });
+  };
+}
+
+// C3 dev fix (2026-06-09): the model-selection fan-out fires dozens-to-hundreds of concurrent
+// queries while background workers also draw from the pool. A dev pool of 5 forced queueing up to
+// the connection timeout, surfacing as PrismaClientKnownRequestError and multi-second stalls. Raise
+// the dev pool (config.database.poolMax, overridable via DATABASE_POOL_MAX). Pairs with the
+// per-model query batching below so the extra connections reduce, not amplify, DB load.
+function createPgPool(): pg.Pool {
+  const connectionString = getDatabaseUrl();
+  const pool = new pg.Pool(buildPgPoolOptions(connectionString));
 
   // IMPORTANT: pg.Pool can emit 'error' events on idle clients (e.g., when the DB is restarted
   // or a Testcontainers-managed instance is stopped). If nobody listens, Node will crash with
@@ -187,6 +154,19 @@ function createPgPool(): pg.Pool {
       console.warn('[db pool] error', { code, message });
     }
   });
+
+  if (pgPoolMetricsSampler) {
+    clearInterval(pgPoolMetricsSampler);
+  }
+  pgPoolMetricsSampler = attachPoolMetrics(pool, 'prisma');
+
+  // Grep anchor for the pooler canary runbook: 'Database target'.
+  if (!databaseTargetLogged && process.env.NODE_ENV !== 'test') {
+    databaseTargetLogged = true;
+    if (typeof logger?.info === 'function') {
+      logger.info(describeDatabaseTarget(connectionString), 'Database target');
+    }
+  }
 
   // Store pool reference for cleanup
   pgPoolInstance = pool;
@@ -226,6 +206,8 @@ function createPrismaClient(): PrismaClient {
   return new PrismaClient({
     adapter,
     log: logConfig,
+    // undefined in direct mode (Prisma defaults); see connection-url.ts.
+    transactionOptions: resolveTransactionOptions(),
   });
 }
 
@@ -453,12 +435,30 @@ prisma.$on('warn' as never, (e: PrismaLogEvent) => {
  * Run Prisma migrations in production
  * Uses `prisma migrate deploy` which is safe for production environments
  */
+/**
+ * `SKIP_DB_MIGRATIONS` is the canonical flag (it is what index.ts checks
+ * before even calling runMigrations). `SKIP_MIGRATIONS` used to be checked
+ * only here, so the two names silently disagreed; it is kept as a deprecated
+ * alias so an environment already setting it keeps working.
+ */
+export function shouldSkipMigrations(env: Record<string, string | undefined> = process.env): boolean {
+  if (env.SKIP_DB_MIGRATIONS === 'true') {
+    return true;
+  }
+  if (env.SKIP_MIGRATIONS === 'true') {
+    logger.warn(
+      'SKIP_MIGRATIONS is a deprecated alias and will stop being read; set SKIP_DB_MIGRATIONS=true instead'
+    );
+    return true;
+  }
+  return false;
+}
+
 export async function runMigrations(): Promise<void> {
-  // CRITICAL: Always run migrations to ensure database schema is up-to-date
-  // Even in development/containers, we must ensure migrations are applied
-  // Only skip if explicitly disabled via environment variable
-  if (process.env.SKIP_MIGRATIONS === 'true') {
-    logger.warn('Migrations skipped via SKIP_MIGRATIONS environment variable');
+  // Migrations run on every boot so the schema is up-to-date in all
+  // environments; skipping is an explicit operator decision.
+  if (shouldSkipMigrations()) {
+    logger.warn('Migrations skipped via SKIP_DB_MIGRATIONS');
     return;
   }
 
@@ -498,11 +498,21 @@ export async function runMigrations(): Promise<void> {
       'Running database migrations'
     );
 
-    // Ensure DATABASE_URL is set for migrations
+    // Deliberately the BASE (direct) URL, never getRuntimeDatabaseUrl():
+    // prisma migrate's Schema Engine takes a session-level pg_advisory_lock
+    // on a single connection, which pgbouncer's transaction pooling cannot
+    // honour. config.database.url is direct by construction (compose builds
+    // it from DB_HOST:-db); DATABASE_USE_POOLER only reroutes query traffic.
     const databaseUrl = config.database.url || process.env.DATABASE_URL;
     if (!databaseUrl) {
       throw new Error('DATABASE_URL is required to run migrations');
     }
+    assertMigrationTargetIsDirect(databaseUrl);
+    const migrationTarget = describeDatabaseTarget(databaseUrl, {});
+    logger.info(
+      { host: migrationTarget.host, port: migrationTarget.port },
+      'Migration target (always direct, never via pooler)'
+    );
 
     const { stdout, stderr } = await execAsync(
       `"${prismaBinToUse}" migrate deploy --schema "${prismaSchemaPath}" --config "${prismaConfigPath}"`,

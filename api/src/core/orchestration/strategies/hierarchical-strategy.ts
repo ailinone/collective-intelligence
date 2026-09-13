@@ -7,7 +7,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Source: https://github.com/ailinone/collective-intelligence
 
-import { BaseStrategy, type StrategyMetadata } from '../base-strategy';
+import { BaseStrategy, mergeArtifacts, type StrategyMetadata } from '../base-strategy';
 import { resolvePreferredExecutor } from './preferred-model-helper';
 import type { ChatRequest, OrchestrationContext, OrchestrationResult, Model } from '@/types';
 import { logger } from '@/utils/logger';
@@ -111,6 +111,7 @@ export class HierarchicalStrategy extends BaseStrategy {
       totalCost: execution.cost,
       totalDuration: Date.now() - startTime,
       qualityScore: 0.85,
+      toolArtifacts: mergeArtifacts([execution]),
       metadata: {
         manager: manager.id,
         // HONEST metadata: single-model stub. No plan drives execution and no

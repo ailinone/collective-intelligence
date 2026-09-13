@@ -54,15 +54,31 @@ import type { ModelCapability } from '@/types';
  *
  * - name-regex: Last-resort heuristic match against the model id/description.
  *   Will produce false positives ("agent" in name ≠ agent capability).
+ *
+ * - runtime-probe: We ASKED the provider to do the thing and recorded whether
+ *   it accepted (function-calling-probe.ts). Empirical rather than declarative,
+ *   which makes it the strongest non-human source: a provider can be wrong or
+ *   stale about its own capability list, but it cannot be wrong about whether
+ *   it just accepted the request. Added 2026-09-05 (GAP-A13) so the empirical
+ *   probe contributes to the SAME evidence log as everything else instead of
+ *   living in a parallel Redis-only cache.
  */
 export type CapabilitySource =
-  'provider-declared' | 'helicone-oracle' | 'modality-derived' | 'parameter-derived' | 'name-regex';
+  | 'provider-declared'
+  | 'helicone-oracle'
+  | 'modality-derived'
+  | 'parameter-derived'
+  | 'name-regex'
+  | 'runtime-probe';
 
 /**
  * Numeric priority for sorting (lower = stronger). Used internally and exposed
  * so downstream consumers can sort the `sources` array consistently.
  */
 export const SOURCE_PRIORITY: Readonly<Record<CapabilitySource, number>> = Object.freeze({
+  // 0, ahead of provider-declared: an accepted request outranks a claim about
+  // what would be accepted.
+  'runtime-probe': 0,
   'provider-declared': 1,
   'helicone-oracle': 2,
   'modality-derived': 3,
@@ -80,6 +96,7 @@ export const SOURCE_PRIORITY: Readonly<Record<CapabilitySource, number>> = Objec
  * positives that currently dominate the catalog.
  */
 export const STRONG_SOURCES: ReadonlySet<CapabilitySource> = new Set<CapabilitySource>([
+  'runtime-probe',
   'provider-declared',
   'helicone-oracle',
 ]);

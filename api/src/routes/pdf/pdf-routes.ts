@@ -29,11 +29,41 @@ import { createOrchestrationContext } from '@/utils/orchestration-context';
 
 const log = logger.child({ module: 'pdf-routes' });
 
+/**
+ * Read a text field off a `@fastify/multipart` file part.
+ *
+ * In stream mode the non-file parts that arrived BEFORE the file are attached
+ * to it as `fields`, each a `{ value }` wrapper (or an array of them when the
+ * field repeats). Nothing here assumes the field exists — a caller sending
+ * only the file is the normal case.
+ */
+function readMultipartField(
+  fields: Record<string, unknown> | undefined,
+  name: string
+): string | undefined {
+  const raw = fields?.[name];
+  if (raw === undefined || raw === null) return undefined;
+
+  const entry: unknown = Array.isArray(raw) ? (raw as unknown[])[0] : raw;
+  if (entry && typeof entry === 'object' && 'value' in entry) {
+    const value = (entry as { value?: unknown }).value;
+    if (typeof value === 'string' && value.trim().length > 0) return value.trim();
+    if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+    return undefined;
+  }
+
+  return typeof entry === 'string' && entry.trim().length > 0 ? entry.trim() : undefined;
+}
+
 export async function registerPDFRoutes(server: FastifyInstance): Promise<void> {
   const pdfService = new PDFService();
 
   // POST /v1/pdf/analyze
   server.post('/v1/pdf/analyze', {
+    // Skip body schema validation for multipart/form-data endpoints.
+    // Fastify's JSON schema validator runs BEFORE the multipart parser and rejects
+    // raw form-data bytes as invalid JSON objects. Validation is done in the handler.
+    validatorCompiler: () => () => true,
     schema: {
       tags: ['PDF'],
       summary: 'Analyze PDF with AI',
@@ -60,6 +90,18 @@ export async function registerPDFRoutes(server: FastifyInstance): Promise<void> 
             description:
               'Model ID or "auto" for intelligent selection. When "auto", Ailin selects the best model with PDF understanding capabilities.',
           },
+          max_pages: {
+            type: 'integer',
+            minimum: 1,
+            description: 'Cap the number of pages processed. Omit to process the whole document.',
+          },
+          force_ocr: {
+            type: 'boolean',
+            default: false,
+            description:
+              'Rasterize every page and read it with a vision model, ignoring the native text layer. ' +
+              'Only useful for documents whose embedded text is known to be wrong.',
+          },
         },
       },
       response: {
@@ -80,6 +122,20 @@ export async function registerPDFRoutes(server: FastifyInstance): Promise<void> 
                 pageCount: { type: 'integer' },
                 title: { type: 'string', nullable: true },
                 author: { type: 'string', nullable: true },
+              },
+            },
+            extraction: {
+              type: 'object',
+              description:
+                'How the document text was obtained: `native_text` (embedded text layer), ' +
+                '`vision_ocr` (pages rasterized and read by a vision model), or `hybrid`.',
+              additionalProperties: true,
+              properties: {
+                path: { type: 'string' },
+                nativeTextPages: { type: 'integer' },
+                ocrPages: { type: 'integer' },
+                emptyPages: { type: 'integer' },
+                truncated: { type: 'boolean' },
               },
             },
             _ailin: {
@@ -178,7 +234,14 @@ export async function registerPDFRoutes(server: FastifyInstance): Promise<void> 
         // Handle multipart/form-data for PDF upload
         // Note: Requires @fastify/multipart plugin to be registered
         const multipartRequest = request as FastifyRequest & {
-          file?: () => Promise<{ filename?: string; toBuffer: () => Promise<Buffer> } | undefined>;
+          file?: () => Promise<
+            | {
+                filename?: string;
+                toBuffer: () => Promise<Buffer>;
+                fields?: Record<string, unknown>;
+              }
+            | undefined
+          >;
         };
         const data = multipartRequest.file ? await multipartRequest.file() : undefined;
 
@@ -193,32 +256,52 @@ export async function registerPDFRoutes(server: FastifyInstance): Promise<void> 
 
         const pdfBuffer = await data.toBuffer();
         const filename = data.filename || 'document.pdf';
-        const body = request.body;
-        const promptValue =
-          body &&
-          typeof body === 'object' &&
-          'prompt' in body &&
-          typeof (body as { prompt?: unknown }).prompt === 'string'
-            ? (body as { prompt: string }).prompt
-            : undefined;
-        const modelValue =
-          body &&
-          typeof body === 'object' &&
-          'model' in body &&
-          typeof (body as { model?: unknown }).model === 'string'
-            ? (body as { model: string }).model
-            : undefined;
+
+        // `@fastify/multipart` is registered in STREAM mode (no
+        // `attachFieldsToBody`), so `request.body` is `undefined` on this
+        // route and the previous body-based extraction meant the documented
+        // `prompt` and `model` form fields were silently unreachable — every
+        // request ran the default summarization prompt with auto model
+        // selection no matter what the caller sent. The fields live on the
+        // file part's `fields` map instead.
+        const promptValue = readMultipartField(data.fields, 'prompt');
+        const modelRaw = readMultipartField(data.fields, 'model');
+        const modelValue = modelRaw && modelRaw !== 'auto' ? modelRaw : undefined;
+        const maxPagesRaw = readMultipartField(data.fields, 'max_pages');
+        const maxPages = maxPagesRaw !== undefined ? Number(maxPagesRaw) : undefined;
+        const forceOcr = readMultipartField(data.fields, 'force_ocr') === 'true';
 
         const result = await pdfService.analyzePDF({
           pdfBuffer,
           filename,
-          prompt: promptValue,
-          model: modelValue,
+          ...(promptValue ? { prompt: promptValue } : {}),
+          ...(modelValue ? { model: modelValue } : {}),
+          ...(maxPages !== undefined && Number.isFinite(maxPages) ? { maxPages } : {}),
+          ...(forceOcr ? { forceOcr: true } : {}),
           userContext,
           requestId: request.id,
         });
 
-        return reply.send(result);
+        // Response shaped to the route's declared 200 schema. The previous
+        // handler returned the raw service result, whose keys (`modelUsed`,
+        // `provider`, `durationMs`) did not match the documented envelope at
+        // all — the OpenAPI contract and the wire disagreed.
+        return reply.send({
+          text: result.text,
+          summary: result.summary ?? null,
+          answer: result.answer ?? null,
+          metadata: {
+            pageCount: result.metadata.pageCount,
+            title: result.metadata.title ?? null,
+            author: result.metadata.author ?? null,
+          },
+          extraction: result.extraction,
+          _ailin: {
+            model_used: result.modelUsed,
+            provider_used: result.provider,
+            duration_ms: result.durationMs,
+          },
+        });
       } catch (error: unknown) {
         const { getErrorMessage, extractStatusCode, extractErrorType, extractErrorCodeFromObject } =
           await import('@/utils/type-guards');

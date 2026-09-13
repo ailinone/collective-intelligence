@@ -8,18 +8,27 @@
 // Source: https://github.com/ailinone/collective-intelligence
 
 /**
- * CerebrasAdapter — max_completion_tokens normalization tests.
+ * CerebrasAdapter — max_completion_tokens normalization + prompt-cache-key
+ * tests.
  *
  * Cerebras docs recommend `max_completion_tokens` for newer reasoning models;
  * older models still accept `max_tokens`. The hub's payload builder only
  * knows `max_tokens` — so this adapter must thread `max_completion_tokens`
  * through the extension hook and back-fill `max_tokens` when only the new
  * field was provided.
+ *
+ * ADR-025 follow-up (2026-09-09): every request also carries
+ * `prompt_cache_key` (Cerebras's documented, optional cache-routing hint —
+ * see the adapter's own comment for the citation), so every assertion below
+ * accounts for that field being present unconditionally.
  */
 
 import { describe, expect, it } from 'vitest';
 import { CerebrasAdapter } from '../cerebras-adapter';
 import type { ChatRequest } from '@/types';
+
+/** Matches either branch of `deriveSessionKey()` — this suite only cares that SOME stable key is sent. */
+const ANY_CACHE_KEY = expect.stringMatching(/^(conv|prefix):/);
 
 function makeAdapter(): CerebrasAdapter {
   return new CerebrasAdapter({
@@ -40,23 +49,23 @@ function invokeHook(adapter: CerebrasAdapter, request: ChatRequest): Record<stri
 }
 
 describe('CerebrasAdapter — getExtraChatPayloadFields hook', () => {
-  it('returns empty when neither max_tokens nor max_completion_tokens set', () => {
+  it('sends only prompt_cache_key when neither max_tokens nor max_completion_tokens set', () => {
     const adapter = makeAdapter();
     const req: ChatRequest = {
       model: 'fixture-chat-model',
       messages: [{ role: 'user', content: 'hi' }],
     };
-    expect(invokeHook(adapter, req)).toEqual({});
+    expect(invokeHook(adapter, req)).toEqual({ prompt_cache_key: ANY_CACHE_KEY });
   });
 
-  it('returns empty when only max_tokens set (hub handles canonically)', () => {
+  it('sends only prompt_cache_key when only max_tokens set (hub handles canonically)', () => {
     const adapter = makeAdapter();
     const req = {
       model: 'fixture-chat-model',
       messages: [{ role: 'user', content: 'hi' }],
       max_tokens: 512,
     } as unknown as ChatRequest;
-    expect(invokeHook(adapter, req)).toEqual({});
+    expect(invokeHook(adapter, req)).toEqual({ prompt_cache_key: ANY_CACHE_KEY });
   });
 
   it('lifts max_completion_tokens into BOTH fields when only new name set', () => {
@@ -67,6 +76,7 @@ describe('CerebrasAdapter — getExtraChatPayloadFields hook', () => {
       max_completion_tokens: 2048,
     } as unknown as ChatRequest;
     expect(invokeHook(adapter, req)).toEqual({
+      prompt_cache_key: ANY_CACHE_KEY,
       max_completion_tokens: 2048,
       max_tokens: 2048,
     });
@@ -93,6 +103,18 @@ describe('CerebrasAdapter — getExtraChatPayloadFields hook', () => {
       messages: [{ role: 'user', content: 'x' }],
       max_completion_tokens: 'unlimited', // invalid
     } as unknown as ChatRequest;
-    expect(invokeHook(adapter, req)).toEqual({});
+    expect(invokeHook(adapter, req)).toEqual({ prompt_cache_key: ANY_CACHE_KEY });
+  });
+
+  it('derives a stable prompt_cache_key from deriveSessionKey (ADR-025 follow-up)', () => {
+    const adapter = makeAdapter();
+    const req: ChatRequest = {
+      model: 'fixture-chat-model',
+      messages: [{ role: 'user', content: 'same prefix' }],
+    };
+    const first = invokeHook(adapter, req).prompt_cache_key;
+    const second = invokeHook(adapter, req).prompt_cache_key;
+    expect(typeof first).toBe('string');
+    expect(first).toBe(second); // same request shape → same key, turn-to-turn stable
   });
 });

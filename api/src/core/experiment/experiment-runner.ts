@@ -34,6 +34,7 @@ import {
   JUDGE_OUTPUT_CONTRACT_INSTRUCTIONS,
   normalizeJudgeOutput,
 } from '@/core/quality/judge-schema';
+import { LANGUAGE_MIRROR_DIRECTIVE } from '@/core/orchestration/prompts/language-directive';
 import type { ChatResponse, ChatRequest, OrchestrationContext } from '@/types';
 import {
   STRATEGY_INPUT_VALUES,
@@ -2383,7 +2384,11 @@ export async function judgeResponse(content: string, rubric: string): Promise<Ju
               role: 'system',
               content:
                 `You are a strict scoring machine. Return ONLY a canonical Ailin¹ JudgeVerdict JSON. No other text.\n\n` +
-                `${JUDGE_OUTPUT_CONTRACT_INSTRUCTIONS}`,
+                `${JUDGE_OUTPUT_CONTRACT_INSTRUCTIONS}\n\n` +
+                // Language mirror (audit F-06): free-text verdict fields (issues,
+                // summary, reasoning) must follow the evaluated response's
+                // language; the JSON structure stays canonical/English-keyed.
+                `${LANGUAGE_MIRROR_DIRECTIVE}`,
             },
             {
               role: 'user',

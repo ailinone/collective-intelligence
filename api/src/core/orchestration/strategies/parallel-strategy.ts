@@ -13,7 +13,7 @@
  * Provides redundancy and quality improvement
  */
 
-import { BaseStrategy, safeResponseContent, type StrategyMetadata } from '../base-strategy';
+import { BaseStrategy, safeResponseContent, mergeArtifacts, type StrategyMetadata } from '../base-strategy';
 import { PROMPTS } from '../prompts/sota-system-prompts';
 import { resolvePreferredExecutor } from './preferred-model-helper';
 import { PoolBuilder } from '@/core/pool/pool-builder';
@@ -31,6 +31,7 @@ import type {
 } from '@/types';
 import type { ProviderAdapter } from '@/providers/base/provider-adapter';
 import { getTaskType } from '@/types/chat-request-extended';
+import { estimateContextSize as estimateContextSizeShared } from '../context-size-estimator';
 
 /**
  * Parallel Strategy
@@ -230,6 +231,7 @@ export class ParallelStrategy extends BaseStrategy {
       totalCost,
       totalDuration,
       qualityScore: this.calculateQualityScore(bestExecution),
+      toolArtifacts: mergeArtifacts(executions),
       metadata: {
         strategyId: metadata.id,
         modelCount: executions.length,
@@ -740,11 +742,7 @@ export class ParallelStrategy extends BaseStrategy {
    * Estimate context size in tokens for DynamicModelSelector
    */
   private estimateContextSize(request: ChatRequest): number {
-    const totalChars =
-      request.messages?.reduce((sum, msg) => sum + (msg.content?.toString() || '').length, 0) || 0;
-
-    // Rough estimation: ~4 chars per token
-    return Math.ceil(totalChars / 4);
+    return estimateContextSizeShared(request);
   }
 
   /**

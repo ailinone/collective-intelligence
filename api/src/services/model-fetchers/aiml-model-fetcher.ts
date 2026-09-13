@@ -14,9 +14,24 @@
  *
  * The proprietary API at GET https://api.aimlapi.com/models returns models with:
  * - type: "chat-completion", "video", "tts", "image", "stt", "embedding", etc.
- * - info: { name, developer, description, context_length, max_tokens }
+ * - info: { name, developer, description, contextLength, outputMax }
  * - features: array of capabilities
  * - endpoints: array of supported API paths
+ *
+ * `info.contextLength`/`info.outputMax` are the field names live-verified
+ * 2026-09 against `curl https://api.aimlapi.com/models` (937 real entries,
+ * e.g. `anthropic/claude-sonnet-4.6` → `contextLength: 200000, outputMax:
+ * 64000`). The interface previously declared `context_length`/`max_tokens`
+ * (snake_case), which never matches — every model silently fell back to the
+ * generic 8192/4096 defaults below, including flagship models with
+ * documented 1M-token context windows (`amazon/nova-2-lite-v1`: 1,000,000).
+ * `info` also NEVER carries a price field of any kind (confirmed by
+ * substring-searching the full raw payload for "price"/"cost" — zero
+ * matches outside prose descriptions) — AIML's own API has no per-model
+ * pricing endpoint, so `pricing` below stays a deliberate `{0, 0}` (means
+ * "unknown", not "free" — see `PricingMode.none` in provider-catalog.types.ts)
+ * rather than a guessed value. See providers.catalog.ts's `aiml` entry,
+ * corrected from `pricingMode: 'remote'` to `'none'` to match this reality.
  */
 
 import {
@@ -40,6 +55,14 @@ interface AimlRawModel {
     name?: string;
     developer?: string;
     description?: string;
+    /** Real live field name (camelCase). See file header for verification. */
+    contextLength?: number;
+    /** Real live field name (camelCase). See file header for verification. */
+    outputMax?: number;
+    /** Legacy/defensive: older docs and some third-party mirrors describe
+     *  this endpoint with snake_case field names. Never observed live, but
+     *  cheap to also accept in case AIML serves a different shape to some
+     *  accounts/tiers. */
     context_length?: number;
     max_tokens?: number;
   };
@@ -49,19 +72,61 @@ interface AimlRawModel {
 
 /**
  * Maps AIML's `type` field to a set of base capabilities.
+ *
+ * Exact-match table for the short-form values AIML has historically returned
+ * (`image`, `tts`, `stt`, ...).
  */
 const TYPE_CAPABILITY_MAP: Record<string, ModelCapability[]> = {
   'chat-completion': ['chat', 'text_generation', 'streaming'],
+  'chat-completions': ['chat', 'text_generation', 'streaming'],
   video: ['video_generation'],
   image: ['image_generation'],
   tts: ['text_to_speech', 'tts'],
   stt: ['speech_to_text', 'transcription'],
   embedding: ['embedding', 'embeddings'],
+  embeddings: ['embedding', 'embeddings'],
   audio: ['audio'],
   responses: ['chat', 'tool_use', 'function_calling'],
   document: ['pdf_understanding'],
   'language-completion': ['completions'],
 };
+
+/**
+ * AIML's LIVE `/models` endpoint actually returns `type` as a namespaced
+ * endpoint path (`openai/image-generations`, `internal/video-generations/
+ * submit`, `openai/embeddings`, ...), not the short form
+ * `TYPE_CAPABILITY_MAP` was written against. An exact-key lookup misses
+ * every one of these, and `buildCapabilities` silently defaults the model to
+ * `['chat', 'text_generation']` — confirmed live in production (2026-09):
+ * of AIML's real `type` values, `internal/video-generations/submit` (269
+ * models), `openai/image-generations` (160), `internal/text-to-speech` (87),
+ * `internal/speech-to-text/submit` (46), `openai/embeddings` (30),
+ * `internal/optical-character-recognition` (12) and `openai/image-editing`
+ * (4) all fell through to the chat default — ~600 non-chat models (video,
+ * image, tts, stt, embedding, OCR generation/editing endpoints) mislabelled
+ * as generic chat completions.
+ *
+ * Matched only when the exact-key lookup above misses. Ordered so a more
+ * specific substring (`image-editing`) is not shadowed by a broader one
+ * that happens to also occur in the same string family (`image`) — though
+ * with the substrings actually observed there is no real overlap, order is
+ * kept defensive for future additions.
+ */
+const TYPE_SUBSTRING_CAPABILITY_RULES: ReadonlyArray<{
+  pattern: RegExp;
+  capabilities: ModelCapability[];
+}> = [
+  { pattern: /image-editing/, capabilities: ['image_generation', 'image_editing'] },
+  { pattern: /image-generation/, capabilities: ['image_generation'] },
+  { pattern: /video-generation/, capabilities: ['video_generation'] },
+  { pattern: /text-to-speech/, capabilities: ['text_to_speech', 'tts'] },
+  { pattern: /speech-to-text/, capabilities: ['speech_to_text', 'transcription'] },
+  { pattern: /embedding/, capabilities: ['embedding', 'embeddings'] },
+  { pattern: /optical-character-recognition/, capabilities: ['vision'] },
+  { pattern: /audio-generation/, capabilities: ['audio', 'audio_generation'] },
+  { pattern: /responses/, capabilities: ['chat', 'tool_use', 'function_calling'] },
+  { pattern: /chat-completion/, capabilities: ['chat', 'text_generation', 'streaming'] },
+];
 
 export class AimlModelFetcher extends BaseProviderModelFetcher {
   protected providerName = 'aiml';
@@ -172,10 +237,15 @@ export class AimlModelFetcher extends BaseProviderModelFetcher {
       id: modelId,
       name: modelId,
       displayName: raw.info?.name || modelId,
-      contextWindow: raw.info?.context_length || 8192,
-      maxOutputTokens: raw.info?.max_tokens || 4096,
+      // contextLength/outputMax are the real live field names; context_length/
+      // max_tokens are kept as a defensive fallback (see AimlRawModel).
+      contextWindow: raw.info?.contextLength || raw.info?.context_length || 8192,
+      maxOutputTokens: raw.info?.outputMax || raw.info?.max_tokens || 4096,
       capabilities,
       pricing: {
+        // AIML's /models response never carries a price field (live-verified
+        // 2026-09 — see file header). 0 means "unknown", not "free"; do not
+        // replace with a guessed/heuristic value here.
         inputCostPer1M: 0,
         outputCostPer1M: 0,
         currency: 'USD',
@@ -190,11 +260,20 @@ export class AimlModelFetcher extends BaseProviderModelFetcher {
   private buildCapabilities(modelType: string, features: string[]): ModelCapability[] {
     const capSet = new Set<ModelCapability>();
 
-    // Map from the model type
+    // Map from the model type: exact short-form key first, then the
+    // namespaced-path substring rules AIML's live API actually returns
+    // (see TYPE_SUBSTRING_CAPABILITY_RULES for why this second pass exists).
     const typeCaps = TYPE_CAPABILITY_MAP[modelType];
     if (typeCaps) {
       for (const cap of typeCaps) {
         capSet.add(cap);
+      }
+    } else if (modelType) {
+      const rule = TYPE_SUBSTRING_CAPABILITY_RULES.find((r) => r.pattern.test(modelType));
+      if (rule) {
+        for (const cap of rule.capabilities) {
+          capSet.add(cap);
+        }
       }
     }
 

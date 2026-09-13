@@ -38,12 +38,26 @@ import { getProviderOperabilityHub } from '../provider-operability-hub';
 import { extractModelFamily } from '../operability/operability-snapshot';
 import { popularityPriorFromMetadata } from '../selection/popularity-prior';
 import { isNonGenerativeModel } from './non-generative-filter';
+import { capabilityOntology } from '../capabilities/capability-ontology';
 import type { PoolResult, PoolStage } from './pool-types';
 
+// A 'classification' entry was removed here (2026-09-09): it was never a
+// member of ModelCapability (types/index.ts), never an id/alias in the
+// unified capabilityOntology (capability-ontology.ts, which explicitly
+// aliases the closest real concepts, safety_classifier/safety-classifier, to
+// 'moderation' — already listed below), and no fetcher ever emits it as a
+// capability tag: the HF fetcher maps HuggingFace's text-classification /
+// token-classification / zero-shot-classification pipeline tags to
+// 'analysis', never to 'classification' (hf-hub-model-fetcher.ts). It
+// matched nothing, on any model, ever: dead weight from the same
+// phantom-string class as the image_upscaling typo fixed in GAP-AP-3, but
+// with no real intended target to fix it TO. See
+// pool-builder-non-chat-capability-typo.test.ts.
 const NON_CHAT_CAPABILITIES = new Set([
   'image_generation',
   'image_editing',
-  'image_upscaling',
+  'image_upscale',
+  'image_denoise',
   'video_generation',
   'video_editing',
   'audio_generation',
@@ -52,7 +66,6 @@ const NON_CHAT_CAPABILITIES = new Set([
   'embedding',
   'reranking',
   'moderation',
-  'classification',
 ]);
 
 const SOURCE_PRIORITY: Record<string, number> = {
@@ -91,9 +104,18 @@ export class PoolBuilder {
           reasons['no_chat_capability'] = (reasons['no_chat_capability'] ?? 0) + 1;
           return false;
         }
-        // Exclude models that ONLY have non-chat caps + streaming
-        const hasOnlyNonChat =
-          caps.length > 0 && caps.every((c) => NON_CHAT_CAPABILITIES.has(c) || c === 'streaming');
+        // Exclude models that ONLY have non-chat caps + streaming, once the
+        // 'chat'/'text_generation' gate tag itself is set aside. Catalog
+        // capability tags are unreliable (see non-generative-filter.ts) — a
+        // model can carry 'chat' while its only REAL declared skill is e.g.
+        // image_upscale. Checking caps.every() against the raw array
+        // (including the gate tag) can never be true, since neither 'chat'
+        // nor 'text_generation' is itself a member of NON_CHAT_CAPABILITIES —
+        // that made this branch permanently unreachable regardless of the
+        // set's contents (found while fixing the image_upscaling/image_upscale
+        // typo in NON_CHAT_CAPABILITIES above, GAP-AP-3).
+        const declaredCaps = caps.filter((c) => c !== 'chat' && c !== 'text_generation' && c !== 'streaming');
+        const hasOnlyNonChat = declaredCaps.length > 0 && declaredCaps.every((c) => NON_CHAT_CAPABILITIES.has(c));
         if (hasOnlyNonChat) {
           reasons['only_non_chat_capabilities'] = (reasons['only_non_chat_capabilities'] ?? 0) + 1;
           return false;
@@ -127,10 +149,27 @@ export class PoolBuilder {
    * tools-request pools to a handful of mostly-dead models. Selection RANKS
    * declared-FC first (see base-strategy) and the execution gate verifies
    * unknowns with the lazy cached probe (function-calling-probe.ts).
+   *
+   * Alias-aware (2026-09-08 fix): `mapInferredCapabilities`
+   * (orchestration-engine.ts) always emits BOTH `tool_use` and
+   * `function_calling` together for a tools-bearing request, and the
+   * ontology (capability-ontology.ts) treats them as the SAME capability
+   * (canonical id `tools`). Excluding only the literal string
+   * `function_calling` left `tool_use` hard-required, silently re-imposing
+   * the exact hard-filter this deferral exists to avoid — confirmed real
+   * for Baidu ERNIE-4.x models (baidu-model-fetcher.ts), which declare
+   * `function_calling` but were never independently tagged `tool_use` by
+   * their fetcher, and so were hard-rejected from every multi-model pool
+   * (consensus, collaborative, hybrid, debate, ...) for a tools-bearing
+   * request. Resolve through the ontology instead of hardcoding a second
+   * exclusion literal, so ANY alias of the same capability defers together.
    */
   filterByCapabilities(requiredCaps: string[]): this {
-    const hardRequired = requiredCaps.filter((rc) => rc !== 'function_calling');
-    if (hardRequired.length === 0 && requiredCaps.includes('function_calling')) {
+    const functionCallingCanonical = capabilityOntology.normalize('function_calling');
+    const isFunctionCallingAlias = (rc: string) =>
+      capabilityOntology.normalize(rc) === functionCallingCanonical;
+    const hardRequired = requiredCaps.filter((rc) => !isFunctionCallingAlias(rc));
+    if (hardRequired.length === 0 && requiredCaps.some(isFunctionCallingAlias)) {
       this.stages.push({
         name: 'capability_filter',
         inputCount: this.models.length,

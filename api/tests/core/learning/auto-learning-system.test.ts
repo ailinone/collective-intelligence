@@ -215,4 +215,83 @@ describe('Auto-Learning System - Real Tests (NO Hardcoded Models, NO Mocks)', ()
 
     await prisma.learningBucket.deleteMany({ where: { strategyId: realModel.id } }).catch(() => {});
   }, 60000);
+
+  it('creates a brand-new hourly learning_data bucket without hitting 42P18 (jsonb_build_object needs an explicit ::text cast)', async () => {
+    // Regression test for the production bug found via live log inspection
+    // (2026-09-08): `updateBucket()`'s INSERT branch built
+    //   jsonb_build_object(${insight.strategy}, 1)
+    // — a bare parameter with no other type context passed into a
+    // `jsonb_build_object(VARIADIC "any")` call. Postgres cannot infer the
+    // parameter's type from that alone, so the very first learn() call for a
+    // never-before-seen (bucket, task_type, complexity) triple failed with
+    //   Invalid `prisma.$executeRaw()` invocation ... Code: `42P18`.
+    //   Message: `could not determine data type of parameter $8`
+    // `updateBucket()` swallows the error internally (logs it, does not
+    // rethrow — see `learn()`'s own top-level try/catch too), so the only
+    // externally observable symptom is that the row is silently never
+    // created. This test proves the row IS created post-fix by asserting on
+    // the persisted state, not on a thrown exception.
+    const uniqueTaskType = `regression-42p18-${Date.now()}`;
+    const complexity = 'medium';
+    const strategy = 'parallel';
+
+    // Guarantee we exercise the INSERT branch (new bucket), not UPDATE.
+    await prisma.learningData.deleteMany({ where: { taskType: uniqueTaskType } }).catch(() => {});
+
+    const finalResponse: ChatResponse = {
+      id: `t-${Date.now()}`,
+      object: 'chat.completion',
+      created: Math.floor(Date.now() / 1000),
+      model: 'test-model',
+      choices: [{ index: 0, message: { role: 'assistant', content: 'a' }, finish_reason: 'stop' }],
+      usage: { prompt_tokens: 10, completion_tokens: 20, total_tokens: 30 },
+    };
+
+    const result: OrchestrationResult = {
+      strategyUsed: strategy,
+      modelsUsed: [],
+      finalResponse,
+      totalCost: 0.018,
+      totalDuration: 2500,
+      qualityScore: 0.85,
+      metadata: {},
+    };
+
+    // learn() awaits updateBucket() internally, so by the time this resolves
+    // the INSERT (success or logged failure) has already happened.
+    await autoLearningSystem.learn(result, {
+      type: uniqueTaskType,
+      complexity,
+      contextSize: 500,
+    });
+
+    const rows = await prisma.learningData.findMany({
+      where: { taskType: uniqueTaskType, complexity },
+    });
+
+    expect(rows).toHaveLength(1);
+    expect(rows[0].count).toBe(1);
+    expect(rows[0].successCount).toBe(1);
+    expect(Number(rows[0].avgQuality)).toBeCloseTo(0.85, 2);
+    expect(Number(rows[0].avgCost)).toBeCloseTo(0.018, 6);
+    expect(rows[0].strategyDistribution).toEqual({ [strategy]: 1 });
+
+    // A second learn() call in the same hour must hit the UPDATE branch and
+    // increment the existing row rather than creating a duplicate.
+    await autoLearningSystem.learn(
+      { ...result, qualityScore: 0.65 },
+      { type: uniqueTaskType, complexity, contextSize: 500 }
+    );
+
+    const afterSecond = await prisma.learningData.findMany({
+      where: { taskType: uniqueTaskType, complexity },
+    });
+    expect(afterSecond).toHaveLength(1);
+    expect(afterSecond[0].count).toBe(2);
+    expect(afterSecond[0].successCount).toBe(2);
+    expect(Number(afterSecond[0].avgQuality)).toBeCloseTo((0.85 + 0.65) / 2, 2);
+    expect(afterSecond[0].strategyDistribution).toEqual({ [strategy]: 2 });
+
+    await prisma.learningData.deleteMany({ where: { taskType: uniqueTaskType } }).catch(() => {});
+  }, 30000);
 });

@@ -115,6 +115,18 @@ const LOTE_M_PROMOTED_TO_LIVE_2026_07_29 = ['arcee'] as const;
 // (LOTE W) for the full evidence writeup.
 const LOTE_M_MOVED_TO_AUTH_INCOMPLETE_D1 = [] as const;
 const LOTE_M_PROMOTED_TO_LIVE_2026_07_30 = ['siliconflow', 'stepfun'] as const;
+// inflection: 2026-09-10 moved credentials-missing/secret-absent ->
+// defunct-unreachable. PR #555 live-re-probed the entire api.inflection.ai
+// host with a real, locally-provisioned INFLECTION_API_KEY and found an
+// identical generic 404 for every path/method/auth combination tried
+// (including the previously-confirmed /v1/chat/completions), plus a DNS
+// failure on the docsUrl domain. This is not a missing-secret problem —
+// a real-looking key already exists locally — so secret-absent was never
+// the right subclass; the root cause is the vendor host itself being
+// unreachable, which is exactly what defunct-unreachable is for. See
+// consolidation-matrix.ts's defunct-unreachable bucket for the full
+// evidence writeup.
+const LOTE_M_PROMOTED_TO_DEFUNCT_UNREACHABLE_2026_09_10 = ['inflection'] as const;
 
 function findEntry(providerId: string) {
   return PROVIDER_CATALOG.find((e) => e.providerId === providerId);
@@ -158,7 +170,7 @@ describe('LOTE M inventory — all 13 additions exist as catalog rows', () => {
   //                                        rejected (stays credentials-
   //                                        missing, sub-class changes)
 
-  it('every LOTE M id is in credentials-missing OR partial OR live OR upstream-suspended (post Sublote A/B/D1/2026-07-29/2026-07-30)', () => {
+  it('every LOTE M id is in credentials-missing OR partial OR live OR upstream-suspended OR defunct-unreachable (post Sublote A/B/D1/2026-07-29/2026-07-30/2026-09-10)', () => {
     // Sublotes A/B promoted 5 LOTE M ids from credentials-missing →
     // partial (via public /models probe evidence). Sublote D1 promoted
     // 1 LOTE M id (infermatic) → live-validation (real /chat/200) and
@@ -178,6 +190,7 @@ describe('LOTE M inventory — all 13 additions exist as catalog rows', () => {
     const partial = new Set(CONSOLIDATION_MATRIX['partial']);
     const live = new Set(CONSOLIDATION_MATRIX['live-validation']);
     const upstreamSuspended = new Set(CONSOLIDATION_MATRIX['upstream-suspended']);
+    const defunctUnreachable = new Set(CONSOLIDATION_MATRIX['defunct-unreachable']);
     const partialSet = new Set<string>(LOTE_M_PROMOTED_TO_PARTIAL);
     const liveSet = new Set<string>([
       ...LOTE_M_PROMOTED_TO_LIVE_D1,
@@ -185,15 +198,30 @@ describe('LOTE M inventory — all 13 additions exist as catalog rows', () => {
       ...LOTE_M_PROMOTED_TO_LIVE_2026_07_30,
     ]);
     const upstreamSet = new Set<string>(LOTE_M_PROMOTED_TO_UPSTREAM_SUSPENDED_D1);
+    const defunctSet = new Set<string>(LOTE_M_PROMOTED_TO_DEFUNCT_UNREACHABLE_2026_09_10);
     const misplaced: string[] = [];
     for (const id of LOTE_M_IDS) {
       const okInCreds = credMissing.has(id);
       const okInPartial = partialSet.has(id) && partial.has(id);
       const okInLive = liveSet.has(id) && live.has(id);
       const okInUpstream = upstreamSet.has(id) && upstreamSuspended.has(id);
-      if (!okInCreds && !okInPartial && !okInLive && !okInUpstream) misplaced.push(id);
+      const okInDefunct = defunctSet.has(id) && defunctUnreachable.has(id);
+      if (!okInCreds && !okInPartial && !okInLive && !okInUpstream && !okInDefunct)
+        misplaced.push(id);
     }
     expect(misplaced).toEqual([]);
+  });
+
+  it('all `LOTE_M_PROMOTED_TO_DEFUNCT_UNREACHABLE_2026_09_10` ids live in the `defunct-unreachable` bucket', () => {
+    // 2026-09-10 promotion lock: inflection (entire api.inflection.ai host
+    // proven unreachable — identical generic 404 for real key, garbage
+    // key, and no key alike; docsUrl domain fails DNS). No longer
+    // credentials-missing, and no longer in any CREDENTIALS_MISSING_SUBCLASS
+    // list (checked separately below).
+    for (const id of LOTE_M_PROMOTED_TO_DEFUNCT_UNREACHABLE_2026_09_10) {
+      expect(CONSOLIDATION_MATRIX['defunct-unreachable']).toContain(id);
+      expect(CONSOLIDATION_MATRIX['credentials-missing']).not.toContain(id);
+    }
   });
 
   it('all `LOTE_M_PROMOTED_TO_PARTIAL` ids live in the `partial` bucket', () => {
@@ -279,14 +307,15 @@ describe('LOTE M inventory — all 13 additions exist as catalog rows', () => {
     }
   });
 
-  it('remaining LOTE M ids (not qianfan, not promoted) are sub-classified as secret-absent', () => {
+  it('remaining LOTE M ids (not qianfan, not promoted, not defunct-unreachable) are sub-classified as secret-absent', () => {
     // After Sublote A (venice → partial), Sublote B (atlascloud, avian,
     // mancer, phala → partial), Sublote D1 (infermatic → live, arcee →
     // upstream-suspended [since re-promoted 2026-07-29 → live],
     // siliconflow/stepfun → auth-incomplete sub-class [since re-promoted
-    // 2026-07-30 → live]), the LOTE M ids still in credentials-missing
-    // that should also be in secret-absent are: gmi, inflection, relace.
-    // qianfan is auth-incomplete.
+    // 2026-07-30 → live]), 2026-09-10 (inflection → defunct-unreachable,
+    // see LOTE_M_PROMOTED_TO_DEFUNCT_UNREACHABLE_2026_09_10), the LOTE M
+    // ids still in credentials-missing that should also be in
+    // secret-absent are: gmi, relace. qianfan is auth-incomplete.
     // If this test fires, either a LOTE M id was wrongly kept in
     // secret-absent after being promoted/moved, or it was removed from
     // secret-absent without being promoted/moved.
@@ -299,6 +328,7 @@ describe('LOTE M inventory — all 13 additions exist as catalog rows', () => {
     ]);
     const upstreamSet = new Set<string>(LOTE_M_PROMOTED_TO_UPSTREAM_SUSPENDED_D1);
     const authIncompleteSet = new Set<string>(LOTE_M_MOVED_TO_AUTH_INCOMPLETE_D1);
+    const defunctSet = new Set<string>(LOTE_M_PROMOTED_TO_DEFUNCT_UNREACHABLE_2026_09_10);
     const misclassified: string[] = [];
     for (const id of LOTE_M_IDS) {
       if (id === 'qianfan') continue;
@@ -306,12 +336,13 @@ describe('LOTE M inventory — all 13 additions exist as catalog rows', () => {
       if (liveSet.has(id)) continue;
       if (upstreamSet.has(id)) continue;
       if (authIncompleteSet.has(id)) continue;
+      if (defunctSet.has(id)) continue;
       if (!secretAbsent.has(id)) misclassified.push(id);
     }
     expect(misclassified).toEqual([]);
   });
 
-  it('partial/live/upstream-promoted LOTE M ids are NOT in any CREDENTIALS_MISSING_SUBCLASS list', () => {
+  it('partial/live/upstream/defunct-unreachable-promoted LOTE M ids are NOT in any CREDENTIALS_MISSING_SUBCLASS list', () => {
     // Invariant: once a provider LEAVES credentials-missing, it must
     // also leave every sub-class. Sublote A (venice) + Sublote B
     // (atlascloud, avian, mancer, phala) + Sublote D1 (infermatic,
@@ -323,6 +354,7 @@ describe('LOTE M inventory — all 13 additions exist as catalog rows', () => {
       ...LOTE_M_PROMOTED_TO_UPSTREAM_SUSPENDED_D1,
       ...LOTE_M_PROMOTED_TO_LIVE_2026_07_29,
       ...LOTE_M_PROMOTED_TO_LIVE_2026_07_30,
+      ...LOTE_M_PROMOTED_TO_DEFUNCT_UNREACHABLE_2026_09_10,
     ];
     for (const id of allLeft) {
       for (const subclass of Object.keys(CREDENTIALS_MISSING_SUBCLASS)) {
@@ -432,24 +464,44 @@ describe('LOTE M provider-specific invariants', () => {
     expect(entry!.enabledByDefault).toBe(true);
   });
 
-  it('inflection is oai-compat-pure execution-only (OpenAI-compatible API, 2026-06-15)', () => {
+  it('inflection is oai-compat-pure catalog-only (host proven unreachable, reverted 2026-09-10)', () => {
     const entry = findEntry('inflection');
     // 2026-06-15: Inflection shipped a standard OpenAI-compatible API at
     // https://api.inflection.ai/v1 (chat/completions + embeddings, Bearer) — no
     // custom adapter needed. Promoted catalog-only → execution-only with the
     // documented pinnedFallback SKUs (no /v1/models listing endpoint).
-    expect(entry!.integrationMode).toBe('execution-only');
+    //
+    // 2026-09-10: REVERTED back to catalog-only. PR #555 live-re-probed
+    // with a real INFLECTION_API_KEY and found the entire
+    // api.inflection.ai host — not just /v1/discovery/configs — returns
+    // an identical generic 404 for every path/method/auth combination,
+    // including the previously-confirmed /v1/chat/completions; the
+    // docsUrl domain fails DNS outright. The 2026-06-15 promotion's
+    // premise (a working OAI-compat execution surface) is disproven, so
+    // catalog-only — the same gate already used for relace below — is
+    // what stops catalog-loader.ts from wiring a real execution plugin
+    // for a dead host, without violating the "habilitado e nunca
+    // censurado" policy (enabledByDefault stays true; see
+    // consolidation-matrix.ts's defunct-unreachable bucket for the
+    // operational-classification counterpart).
+    expect(entry!.integrationMode).toBe('catalog-only');
     expect(entry!.integrationClass).toBe('oai-compat-pure');
+    expect(entry!.enabledByDefault).toBe(true);
   });
 
-  it('relace has integrationMode=catalog-only (specialty code-edit)', () => {
+  it('relace is oai-compat-pure discovery+execution (LOTE AT, 2026-09-09 — general open-weight model hosting)', () => {
     const entry = findEntry('relace');
-    // Relace's /v1/code/apply merge endpoint is proprietary and not
-    // a standard chat surface. Like Morph (the precedent case), Relace
-    // needs a dedicated adapter with custom surfaces (codeApply,
-    // codeRerank) that don't exist yet.
-    expect(entry!.integrationMode).toBe('catalog-only');
-    expect(entry!.integrationClass).toBe('first-party-native');
+    // Superseded 2026-09-09 (LOTE AT, GAP-AK-6 closure — see
+    // lote-at-relace-discovery-closure.test.ts for the full evidence trail):
+    // Relace's proprietary /v1/code/apply merge endpoint (and rerank/
+    // compact/search siblings) remain out of scope for this row — they are
+    // fixed single-purpose tool contracts, not a family of interchangeable
+    // chat models. But the official OpenAPI spec also documents a SEPARATE,
+    // genuinely OAI-compatible surface at models.relace.ai (/v1/chat/
+    // completions + real GET /models discovery) hosting open-weight models
+    // — no custom adapter needed, same pattern as morph/chutes/gmi.
+    expect(entry!.integrationMode).toBe('discovery+execution');
+    expect(entry!.integrationClass).toBe('oai-compat-pure');
   });
 
   it('all LOTE M rows ship with enabledByDefault=true (universal "habilitado" policy)', () => {
@@ -472,7 +524,7 @@ describe('LOTE M provider-specific invariants', () => {
     expect(violators).toEqual([]);
   });
 
-  it('all LOTE M rows have lastReviewedAt in {2026-04-23, 2026-04-24, 2026-04-28, 2026-07-17, 2026-07-29, 2026-07-30} (dated closure + D1 re-review + Phase 4b + later re-verifications)', () => {
+  it('all LOTE M rows have lastReviewedAt in {2026-04-23, 2026-04-24, 2026-04-28, 2026-07-17, 2026-07-29, 2026-07-30, 2026-09-04, 2026-09-05, 2026-09-09, 2026-09-10} (dated closure + D1 re-review + Phase 4b + later re-verifications)', () => {
     // Every row in this lot was originally reviewed on the LOTE M
     // closure date (2026-04-23). Rows touched by Sublote D1
     // (2026-04-24) during credential-arrival re-classification legally
@@ -513,11 +565,54 @@ describe('LOTE M provider-specific invariants', () => {
     const LIVE_REVERIFICATION_2026_07_30_TOUCHED = new Set<string>(
       LOTE_M_PROMOTED_TO_LIVE_2026_07_30,
     );
+    // 2026-09-04 (LOTE AK) discovery-closure sweep: atlascloud and avian were
+    // promoted execution-only → discovery+execution and their pinnedFallback
+    // deleted, after a discriminated probe showed each serves a PUBLIC
+    // GET /v1/models (200) while a nonsense control path on the same host
+    // does not. Both rows were re-stamped; same lockstep rule — extend this
+    // set only together with the entry's stamp bump.
+    const DISCOVERY_CLOSURE_2026_09_04_TOUCHED = new Set<string>(['atlascloud', 'avian']);
+    // 2026-09-04 (LOTE AL) GAP-R1: mancer's row gained `apiKeyOptional: true`
+    // after consolidation-matrix.ts's own Sublote-B evidence showed its
+    // /models route already serves a public, unauthenticated 200 — the
+    // catalog's own credential gate was stricter than the vendor requires.
+    // Re-stamped alongside that one-field fix; same lockstep rule.
+    const APIKEYOPTIONAL_FIX_2026_09_04_TOUCHED = new Set<string>(['mancer']);
+    // 2026-09-05 (LOTE AL) GAP-AK-6 closure: qianfan promoted execution-only
+    // -> discovery+execution (pinnedFallback removed, official docs confirm
+    // GET /v2/models' shape); relace's notes updated documenting the
+    // models.relace.ai host-mismatch finding (row itself unchanged —
+    // still catalog-only pending a dedicated adapter). Both re-stamped;
+    // same lockstep rule.
+    const GAP_AK6_CLOSURE_2026_09_05_TOUCHED = new Set<string>(['qianfan']);
+    // 2026-09-09 (LOTE AT) GAP-AK-6 closure follow-up: relace promoted
+    // catalog-only -> discovery+execution (pinnedFallback removed, official
+    // OpenAPI spec confirms GET /models on models.relace.ai — resolving the
+    // exact host-mismatch this row's 2026-09-05 note flagged as the
+    // remaining blocker). Re-stamped; same lockstep rule.
+    const LOTE_AT_2026_09_09_TOUCHED = new Set<string>(['relace']);
+    // 2026-09-10: inflection reverted execution-only -> catalog-only after
+    // a live-re-probe with a real INFLECTION_API_KEY found the entire
+    // api.inflection.ai host unreachable (identical generic 404 for every
+    // path/method/auth combination, including the previously-confirmed
+    // /v1/chat/completions). Row re-stamped alongside that integrationMode
+    // change; same lockstep rule as every set above.
+    const HOST_UNREACHABLE_REVERT_2026_09_10_TOUCHED = new Set<string>(['inflection']);
     const violators: string[] = [];
     for (const id of LOTE_M_IDS) {
       const entry = findEntry(id);
       const reviewedAt = entry?.lastReviewedAt;
-      const expected = LIVE_REVERIFICATION_2026_07_30_TOUCHED.has(id)
+      const expected = HOST_UNREACHABLE_REVERT_2026_09_10_TOUCHED.has(id)
+        ? '2026-09-10'
+        : LOTE_AT_2026_09_09_TOUCHED.has(id)
+        ? '2026-09-09'
+        : GAP_AK6_CLOSURE_2026_09_05_TOUCHED.has(id)
+        ? '2026-09-05'
+        : APIKEYOPTIONAL_FIX_2026_09_04_TOUCHED.has(id)
+        ? '2026-09-04'
+        : DISCOVERY_CLOSURE_2026_09_04_TOUCHED.has(id)
+        ? '2026-09-04'
+        : LIVE_REVERIFICATION_2026_07_30_TOUCHED.has(id)
         ? '2026-07-30'
         : LIVE_REVERIFICATION_2026_07_29_TOUCHED.has(id)
           ? '2026-07-29'

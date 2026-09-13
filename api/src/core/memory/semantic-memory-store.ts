@@ -34,8 +34,21 @@ import { nanoid } from 'nanoid';
 import type { EmbeddingRequest } from '@/types';
 import { isCacheEnabled } from '@/cache/cache-runtime-state';
 import { getErrorMessage } from '@/utils/type-guards';
+import { sanitizeForPromptContext } from '@/core/coordination/collective-prompt-safety';
 
 const log = logger.child({ component: 'semantic-memory-store' });
+
+/**
+ * TM-07 (memory poisoning): memory content is model/user-derived free text that
+ * is re-injected into future prompts (e.g. `enrichWithMemories` system context).
+ * Sanitize at the write AND read points so poisoned rows — including legacy
+ * rows written before this guard — can never carry structural prompt injection.
+ */
+const MEMORY_CONTENT_MAX_LENGTH = 2000;
+
+function sanitizeMemoryContent(content: unknown): string {
+  return sanitizeForPromptContext(content, MEMORY_CONTENT_MAX_LENGTH);
+}
 
 /**
  * Convert Prisma SemanticMemory to MemoryEntry
@@ -82,7 +95,7 @@ function mapPrismaToMemoryEntry(prismaMemory: SemanticMemory, embedding?: number
     organizationId: prismaMemory.organizationId,
     userId: prismaMemory.userId ?? undefined,
     type: prismaMemory.type as MemoryType,
-    content: prismaMemory.content,
+    content: sanitizeMemoryContent(prismaMemory.content),
     embedding,
     metadata,
     importance: prismaMemory.importance,
@@ -193,8 +206,12 @@ export class SemanticMemoryStore {
 
     log.debug({ id, organizationId, type }, 'Storing new memory');
 
+    // TM-07: sanitize BEFORE embedding/persisting so poisoned content never
+    // reaches the DB (or a future prompt) intact.
+    const safeContent = sanitizeMemoryContent(content);
+
     // Generate embedding for the content
-    const embedding = await this.generateEmbedding(content);
+    const embedding = await this.generateEmbedding(safeContent);
 
     // Store in database using raw SQL for pgvector
     // Note: embedding is stored separately due to pgvector type
@@ -209,7 +226,7 @@ export class SemanticMemoryStore {
       organizationId,
       userId || null,
       type,
-      content,
+      safeContent,
       `[${embedding.join(',')}]`,
       metadataJson,
       importance,
@@ -224,7 +241,7 @@ export class SemanticMemoryStore {
       organizationId,
       userId: userId || undefined,
       type,
-      content,
+      content: safeContent,
       embedding,
       metadata,
       importance,
@@ -647,7 +664,7 @@ export class SemanticMemoryStore {
           organizationId: row.organization_id,
           userId: row.user_id || undefined,
           type: row.type as MemoryType,
-          content: row.content,
+          content: sanitizeMemoryContent(row.content),
           metadata: row.metadata as Record<string, unknown>,
           importance: row.importance,
           accessCount: row.access_count,

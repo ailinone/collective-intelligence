@@ -54,10 +54,13 @@ function buildCatalogModel(name: string): unknown {
   };
 }
 
-function createAdapter(metadata?: Record<string, unknown>): OpenAICompatibleHubAdapter {
+function createAdapter(
+  metadata?: Record<string, unknown>,
+  providerName = 'testhub'
+): OpenAICompatibleHubAdapter {
   return new OpenAICompatibleHubAdapter({
-    name: 'testhub',
-    providerName: 'testhub',
+    name: providerName,
+    providerName,
     apiKey: 'test-key',
     baseUrl: 'https://api.testhub.example/api/v1',
     enabled: true,
@@ -366,5 +369,281 @@ describe('hub videoGenerate — payload-wrap request style (Together)', () => {
     expect(body.model).toBe('veo-3');
     expect(body.prompt).toBe('flat body');
     expect(body.payload).toBeUndefined();
+  });
+});
+
+describe('hub videoGenerate — native audio-in-video forwarding (LOTE AX pt.1)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('forwards generate_audio to zai as with_audio', async () => {
+    mockedGetModelsByProvider.mockResolvedValue([buildCatalogModel('cogvideox-3')] as never);
+    const fetchSpy = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(
+        jsonResponse({ data: [{ id: 'v1', url: 'https://cdn.example.com/zai.mp4' }] })
+      );
+
+    const adapter = createAdapter(undefined, 'zai');
+    await adapter.videoGenerate(
+      { id: 'cogvideox-3', name: 'cogvideox-3' } as never,
+      { prompt: 'a cat playing with a ball', options: { generate_audio: true } } as never
+    );
+
+    const [, init] = fetchSpy.mock.calls[0] as [string, RequestInit];
+    const body = JSON.parse(init.body as string) as Record<string, unknown>;
+    expect(body.with_audio).toBe(true);
+    expect(body.audio).toBeUndefined();
+    expect(body.generate_audio).toBeUndefined();
+  });
+
+  it('forwards generate_audio to venice as audio', async () => {
+    mockedGetModelsByProvider.mockResolvedValue([buildCatalogModel('seedance-2-0')] as never);
+    const fetchSpy = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(
+        jsonResponse({ data: [{ id: 'v1', url: 'https://cdn.example.com/venice.mp4' }] })
+      );
+
+    const adapter = createAdapter(undefined, 'venice');
+    await adapter.videoGenerate(
+      { id: 'seedance-2-0', name: 'seedance-2-0' } as never,
+      { prompt: 'a sunset over the ocean', options: { generate_audio: true } } as never
+    );
+
+    const [, init] = fetchSpy.mock.calls[0] as [string, RequestInit];
+    const body = JSON.parse(init.body as string) as Record<string, unknown>;
+    expect(body.audio).toBe(true);
+    expect(body.with_audio).toBeUndefined();
+    expect(body.generate_audio).toBeUndefined();
+  });
+
+  it('forwards generate_audio:false to venice as audio:false (not dropped as falsy)', async () => {
+    mockedGetModelsByProvider.mockResolvedValue([buildCatalogModel('seedance-2-0')] as never);
+    const fetchSpy = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(
+        jsonResponse({ data: [{ id: 'v1', url: 'https://cdn.example.com/venice.mp4' }] })
+      );
+
+    const adapter = createAdapter(undefined, 'venice');
+    await adapter.videoGenerate(
+      { id: 'seedance-2-0', name: 'seedance-2-0' } as never,
+      { prompt: 'silent clip', options: { generate_audio: false } } as never
+    );
+
+    const [, init] = fetchSpy.mock.calls[0] as [string, RequestInit];
+    const body = JSON.parse(init.body as string) as Record<string, unknown>;
+    expect(body.audio).toBe(false);
+  });
+
+  it('is a no-op for every other hub-routed provider (e.g. togetherai)', async () => {
+    mockedGetModelsByProvider.mockResolvedValue([buildCatalogModel('togetherai-model')] as never);
+    const fetchSpy = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(
+        jsonResponse({ data: [{ id: 'v1', url: 'https://cdn.example.com/together.mp4' }] })
+      );
+
+    const adapter = createAdapter(undefined, 'togetherai');
+    await adapter.videoGenerate(
+      { id: 'togetherai-model', name: 'togetherai-model' } as never,
+      { prompt: 'no audio field expected', options: { generate_audio: true } } as never
+    );
+
+    const [, init] = fetchSpy.mock.calls[0] as [string, RequestInit];
+    const body = JSON.parse(init.body as string) as Record<string, unknown>;
+    expect(body.with_audio).toBeUndefined();
+    expect(body.audio).toBeUndefined();
+    expect(body.generate_audio).toBeUndefined();
+  });
+});
+
+/**
+ * PRODUCTION INCIDENT (2026-09-08): a real "Gere um video..." request against
+ * ailin.chat production timed out after ~2 minutes with a generic "Server
+ * Connection Error". Logs showed empiriolabs/wan-3-0 polling for the full
+ * 300000ms budget with `HTTP 404 {"detail":"Not Found"}` on EVERY poll.
+ *
+ * Root cause confirmed against EmpirioLabs' own docs (docs.empiriolabs.ai/
+ * api-reference/api-reference/jobs/retrieve-job, and its OpenAPI create-video
+ * description: "Always async. Returns a job_id and polling URL immediately;
+ * poll GET /v1/jobs/<job-id> for the final video URL."): EmpirioLabs polls
+ * through a single UNIFIED `/v1/jobs/{id}` endpoint shared by every async
+ * capability — never nested under the submit path the way FastRouter is —
+ * and its completed-job body nests output under `result.data[].url`, not the
+ * generic `data[]`/`generations[]` shapes this adapter otherwise recognizes.
+ * The catalog fix adds `paths.videoPoll: '/jobs/{taskId}'` for empiriolabs;
+ * these tests pin the adapter behavior that fix depends on.
+ */
+describe('hub videoGenerate — EmpirioLabs unified jobs endpoint contract (Bug 1 fix, 2026-09-08)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    process.env.HUB_VIDEO_POLL_INTERVAL_MS = '500';
+    process.env.HUB_VIDEO_POLL_TIMEOUT_MS = '10000';
+  });
+  afterEach(() => {
+    delete process.env.HUB_VIDEO_POLL_INTERVAL_MS;
+    delete process.env.HUB_VIDEO_POLL_TIMEOUT_MS;
+    vi.restoreAllMocks();
+  });
+
+  it("polls the configured unified jobs endpoint, not <videoGenerate>/{taskId} — matches EmpirioLabs' real API contract", async () => {
+    mockedGetModelsByProvider.mockResolvedValue([buildCatalogModel('wan-3-0')] as never);
+    const fetchSpy = vi
+      .spyOn(globalThis, 'fetch')
+      // Submit: EmpirioLabs' real shape — top-level job_id/status/poll_url,
+      // no `data` wrapper (confirmed against its create-video endpoint doc).
+      .mockResolvedValueOnce(
+        jsonResponse({
+          job_id: 'job_01HV3KABCDE',
+          status: 'processing',
+          poll_url: '/v1/jobs/job_01HV3KABCDE',
+          created_at: '2026-09-08T11:45:00Z',
+        })
+      )
+      // Poll 1: still processing.
+      .mockResolvedValueOnce(
+        jsonResponse({ job_id: 'job_01HV3KABCDE', status: 'processing', progress: 0.5 })
+      )
+      // Poll 2: completed — output nested under result.data[].url (EmpirioLabs'
+      // real shape, confirmed against its retrieve-job endpoint doc).
+      .mockResolvedValueOnce(
+        jsonResponse({
+          job_id: 'job_01HV3KABCDE',
+          status: 'completed',
+          progress: 1,
+          result: { data: [{ url: 'https://media.empiriolabs.ai/out.mp4' }] },
+        })
+      );
+
+    // Mirrors the catalog fix: paths.videoPoll = '/jobs/{taskId}' — a
+    // completely separate route from videoGenerate, not a sub-path of it.
+    const adapter = createAdapter(
+      { videosPath: '/videos/generations', videoPollPath: '/jobs/{taskId}' },
+      'empiriolabs'
+    );
+    const response = await adapter.videoGenerate(
+      { id: 'wan-3-0', name: 'wan-3-0' } as never,
+      { prompt: 'ondas do mar ao entardecer' } as never
+    );
+
+    expect(response.video).toEqual([{ url: 'https://media.empiriolabs.ai/out.mp4' }]);
+    expect(fetchSpy).toHaveBeenCalledTimes(3);
+    const [submitUrl] = fetchSpy.mock.calls[0] as [string];
+    expect(submitUrl).toContain('/videos/generations');
+    const [poll1Url] = fetchSpy.mock.calls[1] as [string];
+    // THE regression this test locks in: before the fix, the default poll
+    // path fallback (`<videoGenerate>/{taskId}`) would have hit
+    // `/videos/generations/job_01HV3KABCDE` here — a route EmpirioLabs' real
+    // API 404s on every single attempt (production incident, task
+    // 5bd00840-7c59-42d3-9891-7371138ee963).
+    expect(poll1Url).toContain('/jobs/job_01HV3KABCDE');
+    expect(poll1Url).not.toContain('/videos/generations/job_01HV3KABCDE');
+  });
+
+  it('extracts result.data[].url on the completed poll response (EmpirioLabs shape, distinct from data[]/generations[])', async () => {
+    mockedGetModelsByProvider.mockResolvedValue([buildCatalogModel('wan-3-0')] as never);
+    vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(jsonResponse({ job_id: 'job_2', status: 'processing' }))
+      .mockResolvedValueOnce(
+        jsonResponse({
+          job_id: 'job_2',
+          status: 'completed',
+          result: { data: [{ url: 'https://media.empiriolabs.ai/second.mp4' }] },
+        })
+      );
+
+    const adapter = createAdapter(
+      { videosPath: '/videos/generations', videoPollPath: '/jobs/{taskId}' },
+      'empiriolabs'
+    );
+    const response = await adapter.videoGenerate(
+      { id: 'wan-3-0', name: 'wan-3-0' } as never,
+      { prompt: 'another clip' } as never
+    );
+
+    expect(response.video).toEqual([{ url: 'https://media.empiriolabs.ai/second.mp4' }]);
+  });
+});
+
+/**
+ * Bug 2 (found in the SAME production incident): the per-candidate poll
+ * budget (HUB_VIDEO_POLL_TIMEOUT_MS, defaults to 300000ms) is independent of
+ * the cross-provider fallback search's overall deadline (logged as 30000ms
+ * for this exact request) — so a candidate stuck polling can run 10x past
+ * the search's own declared budget before the between-candidate check in
+ * execute-with-fallback.ts ever gets a chance to stop it, starving every
+ * other candidate in the pool. `options.orchestrationDeadlineAt` (threaded
+ * down from video-orchestration-service.ts's `execute` hook) now bounds the
+ * poll loop by whichever of the two deadlines is sooner.
+ */
+describe('hub videoGenerate — orchestration deadline bounds the poll loop (Bug 2 fix, 2026-09-08)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    process.env.HUB_VIDEO_POLL_INTERVAL_MS = '500';
+    // Own poll budget deliberately large (mirrors the real 300000ms default)
+    // to prove it is the ORCHESTRATION deadline, not the own budget, that
+    // cuts the loop short below.
+    process.env.HUB_VIDEO_POLL_TIMEOUT_MS = '60000';
+  });
+  afterEach(() => {
+    delete process.env.HUB_VIDEO_POLL_INTERVAL_MS;
+    delete process.env.HUB_VIDEO_POLL_TIMEOUT_MS;
+    vi.restoreAllMocks();
+  });
+
+  it('cuts the poll loop short at options.orchestrationDeadlineAt when it is sooner than the own poll budget', async () => {
+    mockedGetModelsByProvider.mockResolvedValue([buildCatalogModel('wan-3-0')] as never);
+    // Every poll comes back "still processing" — a permanently-hanging
+    // candidate, matching the production incident where every poll 404'd.
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      jsonResponse({ data: { taskId: 't-hang', status: 'processing' } })
+    );
+
+    const adapter = createAdapter({ videosPath: '/videos', videoPollPath: '/videos/{taskId}' });
+    const start = Date.now();
+    await expect(
+      adapter.videoGenerate(
+        { id: 'openai/sora-2', name: 'openai/sora-2' } as never,
+        {
+          prompt: 'a slow provider',
+          options: { orchestrationDeadlineAt: Date.now() + 700 },
+        } as never
+      )
+    ).rejects.toThrow(/cut short by the overall fallback search deadline/);
+    // Cut off close to the 700ms orchestration deadline — nowhere near the
+    // 60000ms own poll budget the env vars configured above.
+    expect(Date.now() - start).toBeLessThan(5000);
+  });
+
+  it('does not shorten the poll loop when orchestrationDeadlineAt is far in the future — the normal success path is unaffected', async () => {
+    mockedGetModelsByProvider.mockResolvedValue([buildCatalogModel('wan-3-0')] as never);
+    vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(jsonResponse({ data: { taskId: 't-ok', status: 'processing' } }))
+      .mockResolvedValueOnce(
+        jsonResponse({
+          data: {
+            taskId: 't-ok',
+            status: 'succeeded',
+            generations: [{ id: 'g1', url: 'https://cdn.example.com/ok.mp4' }],
+          },
+        })
+      );
+
+    const adapter = createAdapter({ videosPath: '/videos', videoPollPath: '/videos/{taskId}' });
+    const response = await adapter.videoGenerate(
+      { id: 'openai/sora-2', name: 'openai/sora-2' } as never,
+      {
+        prompt: 'a fine provider',
+        options: { orchestrationDeadlineAt: Date.now() + 3_600_000 },
+      } as never
+    );
+
+    expect(response.video).toEqual([{ id: 'g1', url: 'https://cdn.example.com/ok.mp4' }]);
   });
 });

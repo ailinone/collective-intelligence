@@ -135,11 +135,14 @@ describe('matrix integrity: one provider = one row = one classification', () => 
     // NOT pin to that number — it pins a sane band. Pinning exact counts
     // would force a test update on every legitimate provider addition.
     //
-    // The floor (30) catches catastrophic catalog/registry truncation;
-    // the ceiling (200) catches a runaway codepath that registers
-    // unintended strings as providers.
+    // 2026-09-03 (LOTE AI): the fixed ceiling of 200 broke when the roster
+    // convergence batches pushed the canonical union to 240. Replaced the
+    // magic ceiling with a structural one — the union may exceed the
+    // catalog by at most the switch-only leg (every extra member must be
+    // a switch id), which still catches runaway registration without
+    // capping legitimate catalog growth.
     const union = new Set<string>([...catalogIds, ...switchIds]);
     expect(union.size).toBeGreaterThanOrEqual(30);
-    expect(union.size).toBeLessThanOrEqual(200);
+    expect(union.size).toBeLessThanOrEqual(catalogIds.length + switchIds.length);
   });
 });

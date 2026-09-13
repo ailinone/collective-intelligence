@@ -341,6 +341,63 @@ describe('parseEndpointResponse — openai schema', () => {
     );
     expect(chat.choices[0].message?.content).toBe('plain-text-reply');
   });
+
+  it('extracts message.tool_calls when the container returns a tool call', () => {
+    const chat = parseEndpointResponse(
+      {
+        Body: bytesOf({
+          choices: [
+            {
+              message: {
+                role: 'assistant',
+                content: null,
+                tool_calls: [
+                  {
+                    id: 'call_abc123',
+                    type: 'function',
+                    function: { name: 'get_weather', arguments: '{"city":"SF"}' },
+                  },
+                ],
+              },
+              finish_reason: 'tool_calls',
+            },
+          ],
+        }),
+      } as unknown as Parameters<typeof parseEndpointResponse>[0],
+      'my-endpoint',
+      'openai'
+    );
+    expect(chat.choices[0].finish_reason).toBe('tool_calls');
+    expect(chat.choices[0].message?.tool_calls).toEqual([
+      {
+        id: 'call_abc123',
+        type: 'function',
+        function: { name: 'get_weather', arguments: '{"city":"SF"}' },
+        index: 0,
+      },
+    ]);
+  });
+
+  it('drops a malformed tool_calls entry (no id/name) rather than forwarding it half-formed', () => {
+    const chat = parseEndpointResponse(
+      {
+        Body: bytesOf({
+          choices: [
+            {
+              message: {
+                content: '',
+                tool_calls: [{ type: 'function', function: { arguments: '{}' } }],
+              },
+              finish_reason: 'tool_calls',
+            },
+          ],
+        }),
+      } as unknown as Parameters<typeof parseEndpointResponse>[0],
+      'ep',
+      'openai'
+    );
+    expect(chat.choices[0].message?.tool_calls).toBeUndefined();
+  });
 });
 
 describe('parseEndpointResponse — jumpstart/hf-tgi schemas', () => {
@@ -627,6 +684,111 @@ describe('AWSSageMakerAdapter — chatCompletion integration (openai schema)', (
         messages: [{ role: 'user', content: 'Hi' }],
       })
     ).rejects.toThrow(/no endpoint to invoke/);
+  });
+});
+
+// ═══ chatCompletionStream ═════════════════════════════════════════════
+//
+// SageMaker has no real incremental-delta wire format available here (see
+// the fallback's own doc comment) — `chatCompletionStream` blocks on the
+// full non-streaming response and re-emits it as two synthetic chunks. The
+// bug this guards against is not fragment-parsing (there are no fragments)
+// but a tool call silently vanishing in the fake-stream re-emission even
+// though the exact same response is left intact by `chatCompletion`.
+describe('AWSSageMakerAdapter — chatCompletionStream (openai schema)', () => {
+  beforeEach(() => {
+    process.env.AWS_ACCESS_KEY_ID = 'k';
+    process.env.AWS_SECRET_ACCESS_KEY = 's';
+    process.env.AWS_SAGEMAKER_REGION = 'us-east-1';
+  });
+
+  async function collect(gen: AsyncGenerator<unknown, void, unknown>): Promise<unknown[]> {
+    const out: unknown[] = [];
+    for await (const chunk of gen) out.push(chunk);
+    return out;
+  }
+
+  it('forwards a complete tool_calls array in the fake-stream instead of dropping it', async () => {
+    mockRuntimeSend.mockResolvedValueOnce({
+      Body: bytesOf({
+        choices: [
+          {
+            message: {
+              role: 'assistant',
+              content: null,
+              tool_calls: [
+                {
+                  id: 'call_1',
+                  type: 'function',
+                  function: { name: 'get_weather', arguments: '{"city":"SF"}' },
+                },
+              ],
+            },
+            finish_reason: 'tool_calls',
+          },
+        ],
+      }),
+    });
+
+    const adapter = new AWSSageMakerAdapter({
+      apiKey: 'k',
+      endpointName: 'chat-endpoint',
+      payloadSchema: 'openai',
+    });
+
+    const chunks = (await collect(
+      adapter.chatCompletionStream({
+        model: 'chat-endpoint',
+        messages: [{ role: 'user', content: 'weather in SF?' }],
+        tools: [
+          {
+            type: 'function',
+            function: { name: 'get_weather', parameters: { type: 'object', properties: {} } },
+          },
+        ],
+      })
+    )) as Array<{
+      choices: Array<{
+        delta: { tool_calls?: unknown };
+        finish_reason: string | null;
+      }>;
+    }>;
+
+    expect(chunks).toHaveLength(2);
+    expect(chunks[0].choices[0].delta.tool_calls).toEqual([
+      {
+        id: 'call_1',
+        type: 'function',
+        function: { name: 'get_weather', arguments: '{"city":"SF"}' },
+        index: 0,
+      },
+    ]);
+    expect(chunks[1].choices[0].finish_reason).toBe('tool_calls');
+  });
+
+  it('still streams plain content with no tool_calls key when there is none', async () => {
+    mockRuntimeSend.mockResolvedValueOnce({
+      Body: bytesOf({
+        choices: [{ message: { content: 'Hi back' }, finish_reason: 'stop' }],
+      }),
+    });
+
+    const adapter = new AWSSageMakerAdapter({
+      apiKey: 'k',
+      endpointName: 'chat-endpoint',
+      payloadSchema: 'openai',
+    });
+
+    const chunks = (await collect(
+      adapter.chatCompletionStream({
+        model: 'chat-endpoint',
+        messages: [{ role: 'user', content: 'Hi' }],
+      })
+    )) as Array<{ choices: Array<{ delta: Record<string, unknown>; finish_reason: string | null }> }>;
+
+    expect(chunks[0].choices[0].delta.content).toBe('Hi back');
+    expect(chunks[0].choices[0].delta.tool_calls).toBeUndefined();
+    expect(chunks[1].choices[0].finish_reason).toBe('stop');
   });
 });
 

@@ -198,14 +198,17 @@ const DOCUMENTED_MISSING_2026_04_28: Record<string, string> = {
     'wired discovery+execution (SnowflakeCortexAdapter); creds-missing in local env; expected in prod via GCP',
   topaz: 'catalog-only; Topaz needs adapter (Phase 9 evaluation)',
   inflection:
-    'oai-compat-pure execution-only (api.inflection.ai/v1); creds-missing in local env; expected in prod via GCP',
-  relace: 'catalog-only; specialty code-edit, pinnedFallback used',
+    '2026-09-10: reverted execution-only (2026-06-15 promotion) back to catalog-only — live-re-probed the entire api.inflection.ai host with a real, locally-provisioned INFLECTION_API_KEY and found every path/method/auth combination (including the confirmed /v1/chat/completions) returns an identical generic nginx 404; developers.inflection.ai fails DNS. Not a credentials gap — the vendor host itself is unreachable. See consolidation-matrix.ts defunct-unreachable bucket.',
+  relace:
+    'LOTE AT (2026-09-09): promoted catalog-only -> discovery+execution (real GET /models on models.relace.ai, official OpenAPI spec); creds-missing in local env (no RELACE_API_KEY), expected to materialise in prod via GCP',
   recraft:
     'image-only specialty, pinnedFallback — live-probed 2026-08-01 (real key, POST /images/generations 200 + fetched image confirmed genuine png); postdates this frozen snapshot',
   runwayml:
     'video-only specialty, pinnedFallback — live-probed 2026-08-01 (real key, GET /v1/organization 200); blocked on billing (creditBalance 0), not credentials; postdates this frozen snapshot',
   bfl: 'image-only specialty, pinnedFallback — live-probed 2026-08-01 (real key, auth accepted); blocked on billing (402 insufficient credits), not credentials; postdates this frozen snapshot',
   'azure-openai': 'per-deployment, no list endpoint, pinnedFallback',
+  'aws-bedrock':
+    'LOTE AN (2026-09-05, GAP-AK-6): promoted to discovery+execution — ListFoundationModels is wired via the aws-bedrock-hub source and the 13 pins were removed. It cannot materialise in this snapshot because no AWS credential exists in the local env (the fetcher returns [] rather than a fabricated roster, by design). Expected to materialise in prod once AWS_ACCESS_KEY_ID/SECRET or a role is provisioned; NOT live-validated.',
   // Credentials missing in local .env — expected to materialise in prod with GCP
   nscale:
     'creds-missing in local env; live-probed 2026-08-01 from GCP secret — GET /v1/models 200 (23 models) + POST /v1/chat/completions 200; postdates this frozen snapshot',
@@ -225,16 +228,18 @@ const DOCUMENTED_MISSING_2026_04_28: Record<string, string> = {
     'creds-missing in local env; live-probed 2026-08-01 from GCP secret — GET /v1/models 200 (312 models), but POST /v1/chat/completions 402 insufficient_funds (account-wide billing gate); postdates this frozen snapshot',
   volcano: 'creds-missing in local env; expected in prod via GCP',
   byteplus:
-    'creds-missing in local env; live-probed 2026-08-02 from GCP secret ailin--byteplus-key THROUGH the new BytePlusModelArkAdapter — GET /api/v3/models 200 (52 records, 40 non-Shutdown), /ping 200, /tokenization 200 with real token ids; every inference route 404s ModelNotOpen because account 3003814011 has zero models activated in the Ark Console (auth itself is proven: 401 without a key). Operator entitlement action, not an integration defect; postdates this frozen snapshot',
+    'creds-missing in local env; live-probed 2026-08-02 from GCP secret <prefix>--byteplus-key THROUGH the new BytePlusModelArkAdapter — GET /api/v3/models 200 (52 records, 40 non-Shutdown), /ping 200, /tokenization 200 with real token ids; every inference route 404s ModelNotOpen because account 3003814011 has zero models activated in the Ark Console (auth itself is proven: 401 without a key). Operator entitlement action, not an integration defect; postdates this frozen snapshot',
   watsonx:
     'creds-missing in local env; 2026-08-01 auth-completeness review (no live call attempted) — WATSONX_APIKEY is real/provisioned, but WATSONX_PROJECT_ID (hard blocker) and WATSONX_URL are not; postdates this frozen snapshot',
   ai302: 'creds-missing in local env; expected in prod via GCP',
   'cloudflare-workers-ai': 'creds-missing in local env; expected in prod via GCP',
   'gemini-openai': 'creds-missing in local env; expected in prod via GCP',
-  'github-models': 'creds-missing in local env; expected in prod via GCP',
+  'github-models':
+    'creds-missing in local env; GITHUB_TOKEN secret IS provisioned in prod GCP (<prefix>-github-models-token, since 2026-04-24) — catalog-completeness audit 2026-09-09 found the real cause is external: unauthenticated GET https://models.github.ai/catalog/models returns HTTP 410 github_models_retirement_brownout (GitHub itself retiring the product), confirmed live. Not a credential or wiring defect; postdates this frozen snapshot.',
   imagerouter: 'creds-missing in local env; expected in prod via GCP',
   // Single-cycle regressions (operator follow-up)
-  bytez: 'BytezNativeModelFetcher regression; Phase 4d promotion did not survive rebuild',
+  bytez:
+    'creds-missing in local env; expected in prod via GCP — root-caused 2026-09-09: BYTEZ_API_KEY IS loaded in production (candidate-trace + catalog-provider-plugin logs confirm apiKeyPresent=true on every boot); the historical "Phase 4d promotion did not survive rebuild" note above was never verified against a real request and was wrong. The real symptom (production logs, 2026-09-09) was the native list endpoint returning HTTP 500 on most discovery cycles and HTTP 200 with an empty output[] on the rest, traced to bytez-native-model-fetcher.ts sending `Authorization: Bearer <key>` where Bytez\'s docs for this endpoint require the bare token with no prefix; fixed alongside this snapshot update. 2026-09-10 follow-up: live re-probe shows the 500/empty-output pattern persists regardless of auth header format — it is a vendor-side bug on GET /models/v2/list/models (undocumented modelId requirement, empty output even when satisfied), not something fixable from our request header; see bytez-native-model-fetcher.ts class-level doc comment for the live-probe evidence.',
   voyage: 'creds-revoked; needs operator rotation',
   replicate: 'API not enabled in current GCP project',
   qianfan: 'creds-format mismatch; needs operator',
@@ -320,6 +325,306 @@ const DOCUMENTED_MISSING_2026_04_28: Record<string, string> = {
   // sakana-ai/maritaca-ai above — not a gap.
   digitalocean:
     'live-probed 2026-08-10 (200 on /v1/models + /v1/chat/completions, including streaming/tools/jsonMode/embeddings); postdates the 2026-04-28 DB snapshot',
+  // LOTE AC (2026-08-21) — wafer. Onboarded from docs with NO live probe:
+  // gcloud ADC expired before the <prefix>-waferai-key secret could be
+  // fetched, so neither discovery nor execution was confirmed this
+  // session (see consolidation-matrix.ts `no-live-validation`). Absent
+  // from RUNTIME_MATERIALIZED_2026_04_28 simply because that capture
+  // predates this onboarding, same as sakana-ai/maritaca-ai/digitalocean
+  // above — not a gap.
+  wafer:
+    'not yet live-probed (docs-only onboarding 2026-08-21; gcloud ADC expired — see consolidation-matrix no-live-validation); postdates the 2026-04-28 DB snapshot',
+  // LOTE AD-AG (2026-08-21) — vivgrid / unorouter / umans / trustedrouter.
+  // None executed with a real key this session (gcloud ADC locked — see
+  // consolidation-matrix no-live-validation). Unauthenticated discovery
+  // evidence: umans + trustedrouter /v1/models 200 (live-proven),
+  // unorouter 401-vs-404 endpoint proof, vivgrid nothing (global gate).
+  // All postdate the 2026-04-28 DB snapshot, same as wafer above.
+  vivgrid:
+    'not live-probed (docs-only onboarding 2026-08-21; gcloud ADC expired; unauthenticated probes inconclusive — global 401 gate); postdates the 2026-04-28 DB snapshot',
+  unorouter:
+    'discovery endpoint existence proven 2026-08-21 (401 on /v1/models vs 404 on bogus path); execution not probed (gcloud ADC expired); postdates the 2026-04-28 DB snapshot',
+  umans:
+    'discovery live-probed 2026-08-21 (unauthenticated 200 on /v1/models, 7 models); chat/completions not probed (gcloud ADC expired); postdates the 2026-04-28 DB snapshot',
+  trustedrouter:
+    'discovery live-probed 2026-08-21 (unauthenticated 200 on /v1/models, 559 models, OpenRouter shape); chat/completions not probed (gcloud ADC expired); postdates the 2026-04-28 DB snapshot',
+  // LOTE AH (2026-09-03) — 25 docs-onboarded providers (baseten, kilo-
+  // gateway, llama, longcat, iflow, modelscope, near-ai, ollama-cloud,
+  // regolo, sarvam, stackit, tinfoil, vultr, ovhcloud, crusoe, hetzner,
+  // io-intelligence, lilac, kimi-coding, alibaba-cn, moonshot-cn,
+  // siliconflow-cn, stepfun-cn, minimax-cn, xiaomi-token-plan). None
+  // probed this session (session execution tooling unavailable + no
+  // credentials provisioned for any of them — see consolidation-matrix
+  // `no-live-validation`). All postdate the 2026-04-28 DB snapshot, same
+  // as wafer above — not a gap.
+  baseten:
+    'onboarded 2026-09-03 (LOTE AH); postdates the 2026-04-28 DB snapshot; not yet live-probed (docs-only onboarding — see consolidation-matrix no-live-validation)',
+  'kilo-gateway':
+    'onboarded 2026-09-03 (LOTE AH); postdates the 2026-04-28 DB snapshot; not yet live-probed (docs-only onboarding — see consolidation-matrix no-live-validation)',
+  llama:
+    'onboarded 2026-09-03 (LOTE AH); postdates the 2026-04-28 DB snapshot; not yet live-probed (docs-only onboarding — see consolidation-matrix no-live-validation)',
+  longcat:
+    'onboarded 2026-09-03 (LOTE AH); postdates the 2026-04-28 DB snapshot; not yet live-probed (docs-only onboarding — see consolidation-matrix no-live-validation)',
+  iflow:
+    'onboarded 2026-09-03 (LOTE AH); postdates the 2026-04-28 DB snapshot; not yet live-probed (docs-only onboarding — see consolidation-matrix no-live-validation)',
+  modelscope:
+    'onboarded 2026-09-03 (LOTE AH); postdates the 2026-04-28 DB snapshot; not yet live-probed (docs-only onboarding — see consolidation-matrix no-live-validation)',
+  'near-ai':
+    'onboarded 2026-09-03 (LOTE AH); postdates the 2026-04-28 DB snapshot; not yet live-probed (docs-only onboarding — see consolidation-matrix no-live-validation)',
+  'ollama-cloud':
+    'onboarded 2026-09-03 (LOTE AH); postdates the 2026-04-28 DB snapshot; not yet live-probed (docs-only onboarding — see consolidation-matrix no-live-validation)',
+  regolo:
+    'onboarded 2026-09-03 (LOTE AH); postdates the 2026-04-28 DB snapshot; not yet live-probed (docs-only onboarding — see consolidation-matrix no-live-validation)',
+  sarvam:
+    'onboarded 2026-09-03 (LOTE AH); postdates the 2026-04-28 DB snapshot; not yet live-probed (docs-only onboarding — see consolidation-matrix no-live-validation)',
+  stackit:
+    'onboarded 2026-09-03 (LOTE AH); postdates the 2026-04-28 DB snapshot; not yet live-probed (docs-only onboarding — see consolidation-matrix no-live-validation)',
+  tinfoil:
+    'onboarded 2026-09-03 (LOTE AH); postdates the 2026-04-28 DB snapshot; not yet live-probed (docs-only onboarding — see consolidation-matrix no-live-validation)',
+  vultr:
+    'onboarded 2026-09-03 (LOTE AH); postdates the 2026-04-28 DB snapshot; not yet live-probed (docs-only onboarding — see consolidation-matrix no-live-validation)',
+  ovhcloud:
+    'onboarded 2026-09-03 (LOTE AH); postdates the 2026-04-28 DB snapshot; not yet live-probed (docs-only onboarding — see consolidation-matrix no-live-validation)',
+  crusoe:
+    'onboarded 2026-09-03 (LOTE AH); postdates the 2026-04-28 DB snapshot; not yet live-probed (docs-only onboarding — see consolidation-matrix no-live-validation)',
+  hetzner:
+    'onboarded 2026-09-03 (LOTE AH); postdates the 2026-04-28 DB snapshot; not yet live-probed (docs-only onboarding — see consolidation-matrix no-live-validation)',
+  'io-intelligence':
+    'onboarded 2026-09-03 (LOTE AH); postdates the 2026-04-28 DB snapshot; not yet live-probed (docs-only onboarding — see consolidation-matrix no-live-validation)',
+  lilac:
+    'onboarded 2026-09-03 (LOTE AH); postdates the 2026-04-28 DB snapshot; not yet live-probed (docs-only onboarding — see consolidation-matrix no-live-validation)',
+  'kimi-coding':
+    'onboarded 2026-09-03 (LOTE AH); postdates the 2026-04-28 DB snapshot; not yet live-probed (docs-only onboarding — see consolidation-matrix no-live-validation)',
+  'alibaba-cn':
+    'onboarded 2026-09-03 (LOTE AH); postdates the 2026-04-28 DB snapshot; not yet live-probed (docs-only onboarding — see consolidation-matrix no-live-validation)',
+  'moonshot-cn':
+    'onboarded 2026-09-03 (LOTE AH); postdates the 2026-04-28 DB snapshot; not yet live-probed (docs-only onboarding — see consolidation-matrix no-live-validation)',
+  'siliconflow-cn':
+    'onboarded 2026-09-03 (LOTE AH); postdates the 2026-04-28 DB snapshot; not yet live-probed (docs-only onboarding — see consolidation-matrix no-live-validation)',
+  'stepfun-cn':
+    'onboarded 2026-09-03 (LOTE AH); postdates the 2026-04-28 DB snapshot; not yet live-probed (docs-only onboarding — see consolidation-matrix no-live-validation)',
+  'minimax-cn':
+    'onboarded 2026-09-03 (LOTE AH); postdates the 2026-04-28 DB snapshot; not yet live-probed (docs-only onboarding — see consolidation-matrix no-live-validation)',
+  'xiaomi-token-plan':
+    'onboarded 2026-09-03 (LOTE AH); postdates the 2026-04-28 DB snapshot; not yet live-probed (docs-only onboarding — see consolidation-matrix no-live-validation)',
+  // LOTE AI (2026-09-03) — 95 docs-onboarded rows (92 hosted + 3
+  // self-hosted localhost runtimes). None probed this session (no
+  // credentials provisioned; self-hosted rows have no reachable local
+  // runtime from CI — see consolidation-matrix no-live-validation). All
+  // postdate the 2026-04-28 DB snapshot, same as LOTE AH above — not a gap.
+  abacus:
+    'onboarded 2026-09-03 (LOTE AI); postdates the 2026-04-28 DB snapshot; not yet live-probed (docs-only onboarding — see consolidation-matrix no-live-validation)',
+  abliteration:
+    'onboarded 2026-09-03 (LOTE AI); postdates the 2026-04-28 DB snapshot; not yet live-probed (docs-only onboarding — see consolidation-matrix no-live-validation)',
+  abovedev:
+    'onboarded 2026-09-03 (LOTE AI); postdates the 2026-04-28 DB snapshot; not yet live-probed (docs-only onboarding — see consolidation-matrix no-live-validation)',
+  agentrouter:
+    'onboarded 2026-09-03 (LOTE AI); postdates the 2026-04-28 DB snapshot; not yet live-probed (docs-only onboarding — see consolidation-matrix no-live-validation)',
+  agnes:
+    'onboarded 2026-09-03 (LOTE AI); postdates the 2026-04-28 DB snapshot; not yet live-probed (docs-only onboarding — see consolidation-matrix no-live-validation)',
+  'ai-router':
+    'onboarded 2026-09-03 (LOTE AI); postdates the 2026-04-28 DB snapshot; not yet live-probed (docs-only onboarding — see consolidation-matrix no-live-validation)',
+  aiand:
+    'onboarded 2026-09-03 (LOTE AI); postdates the 2026-04-28 DB snapshot; not yet live-probed (docs-only onboarding — see consolidation-matrix no-live-validation)',
+  aixy:
+    'onboarded 2026-09-03 (LOTE AI); postdates the 2026-04-28 DB snapshot; not yet live-probed (docs-only onboarding — see consolidation-matrix no-live-validation)',
+  aki:
+    'onboarded 2026-09-03 (LOTE AI); postdates the 2026-04-28 DB snapshot; not yet live-probed (docs-only onboarding — see consolidation-matrix no-live-validation)',
+  berget:
+    'onboarded 2026-09-03 (LOTE AI); postdates the 2026-04-28 DB snapshot; not yet live-probed (docs-only onboarding — see consolidation-matrix no-live-validation)',
+  blueclaw:
+    'onboarded 2026-09-03 (LOTE AI); postdates the 2026-04-28 DB snapshot; not yet live-probed (docs-only onboarding — see consolidation-matrix no-live-validation)',
+  bothub:
+    'onboarded 2026-09-03 (LOTE AI); postdates the 2026-04-28 DB snapshot; not yet live-probed (docs-only onboarding — see consolidation-matrix no-live-validation)',
+  'charm-hyper':
+    'onboarded 2026-09-03 (LOTE AI); postdates the 2026-04-28 DB snapshot; not yet live-probed (docs-only onboarding — see consolidation-matrix no-live-validation)',
+  claudin:
+    'onboarded 2026-09-03 (LOTE AI); postdates the 2026-04-28 DB snapshot; not yet live-probed (docs-only onboarding — see consolidation-matrix no-live-validation)',
+  sherlock:
+    'onboarded 2026-09-03 (LOTE AI); postdates the 2026-04-28 DB snapshot; not yet live-probed (docs-only onboarding — see consolidation-matrix no-live-validation)',
+  coralbricks:
+    'onboarded 2026-09-03 (LOTE AI); postdates the 2026-04-28 DB snapshot; not yet live-probed (docs-only onboarding — see consolidation-matrix no-live-validation)',
+  cortecs:
+    'onboarded 2026-09-03 (LOTE AI); postdates the 2026-04-28 DB snapshot; not yet live-probed (docs-only onboarding — see consolidation-matrix no-live-validation)',
+  crofai:
+    'onboarded 2026-09-03 (LOTE AI); postdates the 2026-04-28 DB snapshot; not yet live-probed (docs-only onboarding — see consolidation-matrix no-live-validation)',
+  crossmodel:
+    'onboarded 2026-09-03 (LOTE AI); postdates the 2026-04-28 DB snapshot; not yet live-probed (docs-only onboarding — see consolidation-matrix no-live-validation)',
+  drun:
+    'onboarded 2026-09-03 (LOTE AI); postdates the 2026-04-28 DB snapshot; not yet live-probed (docs-only onboarding — see consolidation-matrix no-live-validation)',
+  daoxe:
+    'onboarded 2026-09-03 (LOTE AI); postdates the 2026-04-28 DB snapshot; not yet live-probed (docs-only onboarding — see consolidation-matrix no-live-validation)',
+  dinference:
+    'onboarded 2026-09-03 (LOTE AI); postdates the 2026-04-28 DB snapshot; not yet live-probed (docs-only onboarding — see consolidation-matrix no-live-validation)',
+  echo:
+    'onboarded 2026-09-03 (LOTE AI); postdates the 2026-04-28 DB snapshot; not yet live-probed (docs-only onboarding — see consolidation-matrix no-live-validation)',
+  evroc:
+    'onboarded 2026-09-03 (LOTE AI); postdates the 2026-04-28 DB snapshot; not yet live-probed (docs-only onboarding — see consolidation-matrix no-live-validation)',
+  freemodel:
+    'onboarded 2026-09-03 (LOTE AI); postdates the 2026-04-28 DB snapshot; not yet live-probed (docs-only onboarding — see consolidation-matrix no-live-validation)',
+  frogbot:
+    'onboarded 2026-09-03 (LOTE AI); postdates the 2026-04-28 DB snapshot; not yet live-probed (docs-only onboarding — see consolidation-matrix no-live-validation)',
+  greenpt:
+    'onboarded 2026-09-03 (LOTE AI); postdates the 2026-04-28 DB snapshot; not yet live-probed (docs-only onboarding — see consolidation-matrix no-live-validation)',
+  hpcai:
+    'onboarded 2026-09-03 (LOTE AI); postdates the 2026-04-28 DB snapshot; not yet live-probed (docs-only onboarding — see consolidation-matrix no-live-validation)',
+  impossibl:
+    'onboarded 2026-09-03 (LOTE AI); postdates the 2026-04-28 DB snapshot; not yet live-probed (docs-only onboarding — see consolidation-matrix no-live-validation)',
+  inceptron:
+    'onboarded 2026-09-03 (LOTE AI); postdates the 2026-04-28 DB snapshot; not yet live-probed (docs-only onboarding — see consolidation-matrix no-live-validation)',
+  'inference-net':
+    'onboarded 2026-09-03 (LOTE AI); postdates the 2026-04-28 DB snapshot; not yet live-probed (docs-only onboarding — see consolidation-matrix no-live-validation)',
+  inferx:
+    'onboarded 2026-09-03 (LOTE AI); postdates the 2026-04-28 DB snapshot; not yet live-probed (docs-only onboarding — see consolidation-matrix no-live-validation)',
+  iteracompute:
+    'onboarded 2026-09-03 (LOTE AI); postdates the 2026-04-28 DB snapshot; not yet live-probed (docs-only onboarding — see consolidation-matrix no-live-validation)',
+  jalapeno:
+    'onboarded 2026-09-03 (LOTE AI); postdates the 2026-04-28 DB snapshot; not yet live-probed (docs-only onboarding — see consolidation-matrix no-live-validation)',
+  jieko:
+    'onboarded 2026-09-03 (LOTE AI); postdates the 2026-04-28 DB snapshot; not yet live-probed (docs-only onboarding — see consolidation-matrix no-live-validation)',
+  kenari:
+    'onboarded 2026-09-03 (LOTE AI); postdates the 2026-04-28 DB snapshot; not yet live-probed (docs-only onboarding — see consolidation-matrix no-live-validation)',
+  klok:
+    'onboarded 2026-09-03 (LOTE AI); postdates the 2026-04-28 DB snapshot; not yet live-probed (docs-only onboarding — see consolidation-matrix no-live-validation)',
+  kosmik:
+    'onboarded 2026-09-03 (LOTE AI); postdates the 2026-04-28 DB snapshot; not yet live-probed (docs-only onboarding — see consolidation-matrix no-live-validation)',
+  llmtech:
+    'onboarded 2026-09-03 (LOTE AI); postdates the 2026-04-28 DB snapshot; not yet live-probed (docs-only onboarding — see consolidation-matrix no-live-validation)',
+  llmtr:
+    'onboarded 2026-09-03 (LOTE AI); postdates the 2026-04-28 DB snapshot; not yet live-probed (docs-only onboarding — see consolidation-matrix no-live-validation)',
+  lucidquery:
+    'onboarded 2026-09-03 (LOTE AI); postdates the 2026-04-28 DB snapshot; not yet live-probed (docs-only onboarding — see consolidation-matrix no-live-validation)',
+  meganova:
+    'onboarded 2026-09-03 (LOTE AI); postdates the 2026-04-28 DB snapshot; not yet live-probed (docs-only onboarding — see consolidation-matrix no-live-validation)',
+  mixlayer:
+    'onboarded 2026-09-03 (LOTE AI); postdates the 2026-04-28 DB snapshot; not yet live-probed (docs-only onboarding — see consolidation-matrix no-live-validation)',
+  moark:
+    'onboarded 2026-09-03 (LOTE AI); postdates the 2026-04-28 DB snapshot; not yet live-probed (docs-only onboarding — see consolidation-matrix no-live-validation)',
+  modeloracle:
+    'onboarded 2026-09-03 (LOTE AI); postdates the 2026-04-28 DB snapshot; not yet live-probed (docs-only onboarding — see consolidation-matrix no-live-validation)',
+  modelis:
+    'onboarded 2026-09-03 (LOTE AI); postdates the 2026-04-28 DB snapshot; not yet live-probed (docs-only onboarding — see consolidation-matrix no-live-validation)',
+  neosmith:
+    'onboarded 2026-09-03 (LOTE AI); postdates the 2026-04-28 DB snapshot; not yet live-probed (docs-only onboarding — see consolidation-matrix no-live-validation)',
+  neuralwatt:
+    'onboarded 2026-09-03 (LOTE AI); postdates the 2026-04-28 DB snapshot; not yet live-probed (docs-only onboarding — see consolidation-matrix no-live-validation)',
+  nova:
+    'onboarded 2026-09-03 (LOTE AI); postdates the 2026-04-28 DB snapshot; not yet live-probed (docs-only onboarding — see consolidation-matrix no-live-validation)',
+  ofox:
+    'onboarded 2026-09-03 (LOTE AI); postdates the 2026-04-28 DB snapshot; not yet live-probed (docs-only onboarding — see consolidation-matrix no-live-validation)',
+  openreason:
+    'onboarded 2026-09-03 (LOTE AI); postdates the 2026-04-28 DB snapshot; not yet live-probed (docs-only onboarding — see consolidation-matrix no-live-validation)',
+  opper:
+    'onboarded 2026-09-03 (LOTE AI); postdates the 2026-04-28 DB snapshot; not yet live-probed (docs-only onboarding — see consolidation-matrix no-live-validation)',
+  orcarouter:
+    'onboarded 2026-09-03 (LOTE AI); postdates the 2026-04-28 DB snapshot; not yet live-probed (docs-only onboarding — see consolidation-matrix no-live-validation)',
+  pendra:
+    'onboarded 2026-09-03 (LOTE AI); postdates the 2026-04-28 DB snapshot; not yet live-probed (docs-only onboarding — see consolidation-matrix no-live-validation)',
+  pioneer:
+    'onboarded 2026-09-03 (LOTE AI); postdates the 2026-04-28 DB snapshot; not yet live-probed (docs-only onboarding — see consolidation-matrix no-live-validation)',
+  poolside:
+    'onboarded 2026-09-03 (LOTE AI); postdates the 2026-04-28 DB snapshot; not yet live-probed (docs-only onboarding — see consolidation-matrix no-live-validation)',
+  qihang:
+    'onboarded 2026-09-03 (LOTE AI); postdates the 2026-04-28 DB snapshot; not yet live-probed (docs-only onboarding — see consolidation-matrix no-live-validation)',
+  qiniu:
+    'onboarded 2026-09-03 (LOTE AI); postdates the 2026-04-28 DB snapshot; not yet live-probed (docs-only onboarding — see consolidation-matrix no-live-validation)',
+  routingrun:
+    'onboarded 2026-09-03 (LOTE AI); postdates the 2026-04-28 DB snapshot; not yet live-probed (docs-only onboarding — see consolidation-matrix no-live-validation)',
+  runinfra:
+    'onboarded 2026-09-03 (LOTE AI); postdates the 2026-04-28 DB snapshot; not yet live-probed (docs-only onboarding — see consolidation-matrix no-live-validation)',
+  scx:
+    'onboarded 2026-09-03 (LOTE AI); postdates the 2026-04-28 DB snapshot; not yet live-probed (docs-only onboarding — see consolidation-matrix no-live-validation)',
+  sensenova:
+    'onboarded 2026-09-03 (LOTE AI); postdates the 2026-04-28 DB snapshot; not yet live-probed (docs-only onboarding — see consolidation-matrix no-live-validation)',
+  standardcompute:
+    'onboarded 2026-09-03 (LOTE AI); postdates the 2026-04-28 DB snapshot; not yet live-probed (docs-only onboarding — see consolidation-matrix no-live-validation)',
+  subconscious:
+    'onboarded 2026-09-03 (LOTE AI); postdates the 2026-04-28 DB snapshot; not yet live-probed (docs-only onboarding — see consolidation-matrix no-live-validation)',
+  submodel:
+    'onboarded 2026-09-03 (LOTE AI); postdates the 2026-04-28 DB snapshot; not yet live-probed (docs-only onboarding — see consolidation-matrix no-live-validation)',
+  tensorx:
+    'onboarded 2026-09-03 (LOTE AI); postdates the 2026-04-28 DB snapshot; not yet live-probed (docs-only onboarding — see consolidation-matrix no-live-validation)',
+  thegrid:
+    'onboarded 2026-09-03 (LOTE AI); postdates the 2026-04-28 DB snapshot; not yet live-probed (docs-only onboarding — see consolidation-matrix no-live-validation)',
+  tokengo:
+    'onboarded 2026-09-03 (LOTE AI); postdates the 2026-04-28 DB snapshot; not yet live-probed (docs-only onboarding — see consolidation-matrix no-live-validation)',
+  tokenrouter:
+    'onboarded 2026-09-03 (LOTE AI); postdates the 2026-04-28 DB snapshot; not yet live-probed (docs-only onboarding — see consolidation-matrix no-live-validation)',
+  vancine:
+    'onboarded 2026-09-03 (LOTE AI); postdates the 2026-04-28 DB snapshot; not yet live-probed (docs-only onboarding — see consolidation-matrix no-live-validation)',
+  xpersona:
+    'onboarded 2026-09-03 (LOTE AI); postdates the 2026-04-28 DB snapshot; not yet live-probed (docs-only onboarding — see consolidation-matrix no-live-validation)',
+  zeldoc:
+    'onboarded 2026-09-03 (LOTE AI); postdates the 2026-04-28 DB snapshot; not yet live-probed (docs-only onboarding — see consolidation-matrix no-live-validation)',
+  zenifra:
+    'onboarded 2026-09-03 (LOTE AI); postdates the 2026-04-28 DB snapshot; not yet live-probed (docs-only onboarding — see consolidation-matrix no-live-validation)',
+  zenmux:
+    'onboarded 2026-09-03 (LOTE AI); postdates the 2026-04-28 DB snapshot; not yet live-probed (docs-only onboarding — see consolidation-matrix no-live-validation)',
+  clarifai:
+    'onboarded 2026-09-03 (LOTE AI); postdates the 2026-04-28 DB snapshot; not yet live-probed (docs-only onboarding — see consolidation-matrix no-live-validation)',
+  'opencode-zen':
+    'onboarded 2026-09-03 (LOTE AI); postdates the 2026-04-28 DB snapshot; not yet live-probed (docs-only onboarding — see consolidation-matrix no-live-validation)',
+  'opencode-go':
+    'onboarded 2026-09-03 (LOTE AI); postdates the 2026-04-28 DB snapshot; not yet live-probed (docs-only onboarding — see consolidation-matrix no-live-validation)',
+  kuae:
+    'onboarded 2026-09-03 (LOTE AI); postdates the 2026-04-28 DB snapshot; not yet live-probed (docs-only onboarding — see consolidation-matrix no-live-validation)',
+  scnet:
+    'onboarded 2026-09-03 (LOTE AI); postdates the 2026-04-28 DB snapshot; not yet live-probed (docs-only onboarding — see consolidation-matrix no-live-validation)',
+  clinepass:
+    'onboarded 2026-09-03 (LOTE AI); postdates the 2026-04-28 DB snapshot; not yet live-probed (docs-only onboarding — see consolidation-matrix no-live-validation)',
+  'tencent-coding':
+    'onboarded 2026-09-03 (LOTE AI); postdates the 2026-04-28 DB snapshot; not yet live-probed (docs-only onboarding — see consolidation-matrix no-live-validation)',
+  'tencent-plan':
+    'onboarded 2026-09-03 (LOTE AI); postdates the 2026-04-28 DB snapshot; not yet live-probed (docs-only onboarding — see consolidation-matrix no-live-validation)',
+  'tencent-tokenhub':
+    'onboarded 2026-09-03 (LOTE AI); postdates the 2026-04-28 DB snapshot; not yet live-probed (docs-only onboarding — see consolidation-matrix no-live-validation)',
+  'alibaba-coding':
+    'onboarded 2026-09-03 (LOTE AI); postdates the 2026-04-28 DB snapshot; not yet live-probed (docs-only onboarding — see consolidation-matrix no-live-validation)',
+  'alibaba-coding-cn':
+    'onboarded 2026-09-03 (LOTE AI); postdates the 2026-04-28 DB snapshot; not yet live-probed (docs-only onboarding — see consolidation-matrix no-live-validation)',
+  'alibaba-token-plan':
+    'onboarded 2026-09-03 (LOTE AI); postdates the 2026-04-28 DB snapshot; not yet live-probed (docs-only onboarding — see consolidation-matrix no-live-validation)',
+  'alibaba-token-plan-cn':
+    'onboarded 2026-09-03 (LOTE AI); postdates the 2026-04-28 DB snapshot; not yet live-probed (docs-only onboarding — see consolidation-matrix no-live-validation)',
+  'zai-coding':
+    'onboarded 2026-09-03 (LOTE AI); postdates the 2026-04-28 DB snapshot; not yet live-probed (docs-only onboarding — see consolidation-matrix no-live-validation)',
+  'zai-coding-cn':
+    'onboarded 2026-09-03 (LOTE AI); postdates the 2026-04-28 DB snapshot; not yet live-probed (docs-only onboarding — see consolidation-matrix no-live-validation)',
+  'volcano-coding':
+    'onboarded 2026-09-03 (LOTE AI); postdates the 2026-04-28 DB snapshot; not yet live-probed (docs-only onboarding — see consolidation-matrix no-live-validation)',
+  'stepfun-step-plan':
+    'onboarded 2026-09-03 (LOTE AI); postdates the 2026-04-28 DB snapshot; not yet live-probed (docs-only onboarding — see consolidation-matrix no-live-validation)',
+  'stepfun-step-plan-cn':
+    'onboarded 2026-09-03 (LOTE AI); postdates the 2026-04-28 DB snapshot; not yet live-probed (docs-only onboarding — see consolidation-matrix no-live-validation)',
+  'atomic-chat':
+    'onboarded 2026-09-03 (LOTE AI); self-hosted local runtime (opt-in URL env); postdates the 2026-04-28 DB snapshot; not yet live-probed',
+  lynkr:
+    'onboarded 2026-09-03 (LOTE AI); self-hosted local runtime (opt-in URL env); postdates the 2026-04-28 DB snapshot; not yet live-probed',
+  privatemode:
+    'onboarded 2026-09-03 (LOTE AI); self-hosted local runtime (opt-in URL env); postdates the 2026-04-28 DB snapshot; not yet live-probed',
+  merge:
+    'onboarded 2026-09-03 (LOTE AJ); postdates the 2026-04-28 DB snapshot; not yet live-probed (docs-only onboarding — see consolidation-matrix no-live-validation)',
+  infomaniak:
+    'onboarded 2026-09-03 (LOTE AJ); postdates the 2026-04-28 DB snapshot; not yet live-probed (docs-only onboarding — see consolidation-matrix no-live-validation)',
+  'minimax-token-plan':
+    'onboarded 2026-09-03 (LOTE AJ); postdates the 2026-04-28 DB snapshot; not yet live-probed (docs-only onboarding — see consolidation-matrix no-live-validation)',
+  'minimax-token-plan-cn':
+    'onboarded 2026-09-03 (LOTE AJ); postdates the 2026-04-28 DB snapshot; not yet live-probed (docs-only onboarding — see consolidation-matrix no-live-validation)',
+  llmgateway:
+    'onboarded 2026-09-03 (LOTE AJ); postdates the 2026-04-28 DB snapshot; not yet live-probed (docs-only onboarding — see consolidation-matrix no-live-validation)',
+  auriko:
+    'onboarded 2026-09-03 (LOTE AJ); postdates the 2026-04-28 DB snapshot; not yet live-probed (docs-only onboarding — see consolidation-matrix no-live-validation)',
+  saladcloud:
+    'onboarded 2026-09-03 (LOTE AJ); postdates the 2026-04-28 DB snapshot; not yet live-probed (docs-only onboarding — see consolidation-matrix no-live-validation)',
+  ebcloud:
+    'onboarded 2026-09-03 (LOTE AJ); postdates the 2026-04-28 DB snapshot; not yet live-probed (docs-only onboarding — see consolidation-matrix no-live-validation)',
+  ambient:
+    'onboarded 2026-09-05 (LOTE AL, reopened false-NPI); postdates the 2026-04-28 DB snapshot; not yet live-probed (docs-only onboarding — see consolidation-matrix no-live-validation)',
+  amd: 'onboarded 2026-09-05 (LOTE AL, reopened false-NPI); postdates the 2026-04-28 DB snapshot; not yet live-probed (docs-only onboarding — see consolidation-matrix no-live-validation)',
+  anyapi:
+    'onboarded 2026-09-05 (LOTE AL, reopened false-NPI); postdates the 2026-04-28 DB snapshot; not yet live-probed (docs-only onboarding — see consolidation-matrix no-live-validation)',
+  bailing:
+    'onboarded 2026-09-05 (LOTE AL, reopened false-NPI); postdates the 2026-04-28 DB snapshot; not yet live-probed (docs-only onboarding — see consolidation-matrix no-live-validation)',
 };
 
 // ──────────────────────────────────────────────────────────────────────────

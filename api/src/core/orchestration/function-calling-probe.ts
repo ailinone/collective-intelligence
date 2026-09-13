@@ -37,8 +37,29 @@
 
 import type { ProviderAdapter } from '@/providers/base/provider-adapter';
 import { logger } from '@/utils/logger';
+import { incrementCounter, observeHistogram, METRIC_NAMES } from '@/core/operability/metrics';
+import { isProviderLivenessError } from './probe-liveness-classifier';
 
 const log = logger.child({ component: 'function-calling-probe' });
+
+/**
+ * Capability this probe decides. Kept as a constant so the metric label is
+ * stable if a second capability probe is added on the same pattern.
+ */
+const PROBED_CAPABILITY = 'function_calling';
+
+/**
+ * Map a verdict to a metric outcome. `supported`/`unsupported` are real
+ * capability conclusions (cached long-term); `inconclusive` and
+ * `provider-dead` are NOT conclusions — they mean the probe learned nothing
+ * about the capability, which is a different thing to alert on.
+ */
+function probeOutcome(verdict: FunctionCallingVerdict): string {
+  if (verdict === true) return 'supported';
+  if (verdict === false) return 'unsupported';
+  if (verdict === 'provider-dead') return 'provider-dead';
+  return 'inconclusive';
+}
 
 export type FunctionCallingVerdict = true | false | null | 'provider-dead';
 
@@ -91,24 +112,6 @@ const TOOLS_UNSUPPORTED_PATTERNS: readonly RegExp[] = [
   /tools?\s+not\s+available/,
 ];
 
-/** Billing/auth/quota shapes — provider liveness, NOT an FC verdict. */
-const PROVIDER_LIVENESS_PATTERNS: readonly RegExp[] = [
-  /insufficient/i,
-  /credit/i,
-  /quota/i,
-  /billing/i,
-  /unauthorized/i,
-  /api\s*key/i,
-  /forbidden/i,
-  /rate.?limit/i,
-  /timeout/i,
-  /timed?\s*out/i,
-  /econnreset/i,
-  /socket\s+hang\s+up/i,
-  /network/i,
-  /fetch\s+failed/i,
-];
-
 /**
  * Classify a probe error.
  *   false            — explicit tools-not-supported (FC verdict, cached)
@@ -117,11 +120,14 @@ const PROVIDER_LIVENESS_PATTERNS: readonly RegExp[] = [
  *                      skip it (recorded in the operability hub so ranking
  *                      learns) without caching any FC conclusion.
  *   null             — ambiguous; keep the pre-probe behavior.
+ *
+ * The provider-liveness check is shared with every other empirical capability
+ * probe — see `probe-liveness-classifier.ts`.
  */
 function classifyProbeError(message: string): FunctionCallingVerdict {
   const text = message.toLowerCase();
   if (TOOLS_UNSUPPORTED_PATTERNS.some((p) => p.test(text))) return false;
-  if (PROVIDER_LIVENESS_PATTERNS.some((p) => p.test(text))) return 'provider-dead';
+  if (isProviderLivenessError(text)) return 'provider-dead';
   return null;
 }
 
@@ -143,6 +149,31 @@ async function writeRedis(key: string, verdict: boolean): Promise<void> {
     await getGlobalRedisClient().set(key, verdict ? '1' : '0', 'EX', TTL_SECONDS);
   } catch {
     /* best-effort */
+  }
+}
+
+/**
+ * Persist a definitive verdict into the capability-assertion log (GAP-A13).
+ *
+ * Dynamically imported so this module keeps its current dependency shape: the
+ * probe is reachable from the execution hot path and must not pull the Prisma
+ * client into every consumer's import graph just to record evidence.
+ */
+async function persistVerdict(
+  provider: string,
+  modelId: string,
+  supported: boolean
+): Promise<void> {
+  try {
+    const { recordProbeAssertion } = await import('@/capability/assertions/probe-emitter');
+    await recordProbeAssertion({
+      providerId: provider,
+      modelId,
+      capability: PROBED_CAPABILITY,
+      supported,
+    });
+  } catch {
+    /* best-effort — recordProbeAssertion already logs and never throws */
   }
 }
 
@@ -245,6 +276,11 @@ export async function getFunctionCallingVerdict(
   // Budget guard: probing is bounded so a pathological loop can't mint calls.
   if (probesStarted >= MAX_PROBES_PER_PROCESS) {
     log.warn({ probesStarted }, 'FC probe budget exhausted — returning inconclusive');
+    incrementCounter(METRIC_NAMES.CAPABILITY_PROBE_TOTAL, {
+      capability: PROBED_CAPABILITY,
+      providerId: provider,
+      outcome: 'budget-exhausted',
+    });
     return null;
   }
 
@@ -252,11 +288,21 @@ export async function getFunctionCallingVerdict(
   if (existing) return existing;
 
   probeMisses++;
+  const probeStartedAt = Date.now();
   const p = runProbe(adapter, provider, modelId)
     .then((verdict): FunctionCallingVerdict => {
       if (verdict === true || verdict === false) {
         memoryCache.set(key, verdict);
         void writeRedis(key, verdict);
+        // GAP-A13 — the verdict is real evidence, so it goes into the SAME
+        // append-only assertion log as everything else, not only into a
+        // process/Redis cache that no other subsystem can read. The
+        // materialiser fuses it into `capability_uris`, which is what the
+        // selector's fail-closed hard filter reads, so an empirically
+        // demonstrated capability is promoted through the ordinary path
+        // without the catalog's unreliable `tools` flag ever being trusted.
+        // Fire-and-forget: never blocks the caller, never throws.
+        void persistVerdict(provider, modelId, verdict);
       } else {
         // null | 'provider-dead': short-lived memory-only negative cache.
         memoryCache.set(key, verdict);
@@ -269,6 +315,24 @@ export async function getFunctionCallingVerdict(
       return verdict;
     })
     .catch((): FunctionCallingVerdict => null)
+    .then((verdict): FunctionCallingVerdict => {
+      // Emitted after the catch so a thrown probe is still counted — an
+      // uncounted failure is exactly the case that makes probe metrics
+      // untrustworthy. Before this (2026-09-04, LOTE AK) the probe's only
+      // observability was `getProbeStats()`, a process-local counter no
+      // scrape could reach, plus log lines.
+      const outcome = probeOutcome(verdict);
+      incrementCounter(METRIC_NAMES.CAPABILITY_PROBE_TOTAL, {
+        capability: PROBED_CAPABILITY,
+        providerId: provider,
+        outcome,
+      });
+      observeHistogram(METRIC_NAMES.CAPABILITY_PROBE_LATENCY_MS, Date.now() - probeStartedAt, {
+        capability: PROBED_CAPABILITY,
+        outcome,
+      });
+      return verdict;
+    })
     .finally(() => {
       inFlight.delete(key);
     });

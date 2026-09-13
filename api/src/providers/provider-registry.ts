@@ -31,7 +31,8 @@ import { CohereAdapter } from './cohere/cohere-adapter';
 import { OpenRouterAdapter, type OpenRouterConfig } from './openrouter/openrouter-adapter';
 import { JinaAdapter } from './jina/jina-adapter';
 import { DeepgramAdapter } from './deepgram/deepgram-adapter';
-import { CartesiaAdapter } from './cartesia/cartesia-adapter';
+// CartesiaAdapter is constructed via its catalog factory binding (see
+// providers.catalog.ts) — the legacy switch case was removed 2026-09-12.
 import { ElevenLabsAdapter } from './elevenlabs/elevenlabs-adapter';
 import { SelfHostedAdapter } from './self-hosted/self-hosted-adapter';
 import { PalabraAIAdapter } from './palabraai/palabraai-adapter';
@@ -670,9 +671,11 @@ export async function initializeProviderRegistry(
           adapter = new DeepgramAdapter(config);
           break;
 
-        case 'cartesia':
-          adapter = new CartesiaAdapter(config);
-          break;
+        // 'cartesia' is intentionally NOT a switch case: it is served by
+        // its catalog entry (integrationClass=speech-only,
+        // integrationMode=execution-only, CartesiaAdapter factory binding
+        // — see providers.catalog.ts). The legacy case here was removed
+        // 2026-09-12 (matrix-integrity's catalog∩switch=∅ invariant).
 
         case 'elevenlabs':
           adapter = new ElevenLabsAdapter(config);

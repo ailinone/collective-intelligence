@@ -261,6 +261,14 @@ async function registerAllRoutesForDocs(server: FastifyInstance): Promise<void> 
       },
     },
     {
+      name: 'rerank routes',
+      critical: false,
+      register: async () => {
+        const { registerRerankRoutes } = await import('../src/routes/rerank/rerank-routes.js');
+        await registerRerankRoutes(server);
+      },
+    },
+    {
       name: 'responses routes',
       critical: true,
       register: async () => {

@@ -28,6 +28,7 @@ import {
   normalizeJudgeOutput,
 } from '@/core/quality/judge-schema';
 import { narrowAs } from '@/utils/type-guards';
+import { LANGUAGE_MIRROR_DIRECTIVE } from '@/core/orchestration/prompts/language-directive';
 import type { ChatResponse, ChatRequest, OrchestrationContext } from '@/types';
 
 const log = logger.child({ component: 'judge-calibration' });
@@ -327,7 +328,9 @@ ${testCase.response}
 Score from 0.0 (completely wrong) to 1.0 (perfect).
 Consider: accuracy, completeness, actionability, and depth.
 
-${JUDGE_OUTPUT_CONTRACT_INSTRUCTIONS}`,
+${JUDGE_OUTPUT_CONTRACT_INSTRUCTIONS}
+
+${LANGUAGE_MIRROR_DIRECTIVE}`,
               },
             ],
           }),

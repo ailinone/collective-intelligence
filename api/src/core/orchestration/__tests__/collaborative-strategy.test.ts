@@ -14,7 +14,7 @@
  * Uses dynamic model discovery - no hardcoded models
  */
 
-import { describe, it, expect, beforeEach, beforeAll } from 'vitest';
+import { describe, it, expect, afterAll, beforeEach, beforeAll } from 'vitest';
 import { CollaborativeStrategy } from '../strategies/collaborative-strategy';
 import { prisma } from '@/database/client';
 import type { ChatRequest, OrchestrationContext, TaskType, Model } from '@/types';
@@ -61,6 +61,15 @@ describe('CollaborativeStrategy', () => {
   });
 
   beforeEach(() => {
+    // BaseStrategy.getEligibleModelsRaw() memoizes the eligible pool in a
+    // module-level 5s TTL cache (base-strategy.ts, P0.8) whose key is
+    // (qualityThreshold | maxCost | requiredCapabilities | selfHosted) — the
+    // MODEL LIST is not part of it. The "insufficient models" cases below
+    // shrink context.models to 2 and would otherwise be served the full pool
+    // cached microseconds earlier by a previous case, so `isSuitable` returns
+    // true and `scoreForRequest` returns a non-zero score. Disable the cache
+    // (0 = off) so every case filters the pool it was actually given.
+    process.env.ELIGIBLE_POOL_CACHE_TTL_MS = '0';
     strategy = new CollaborativeStrategy();
 
     // Use dynamically discovered models (at least 3 for collaborative strategy)
@@ -89,6 +98,10 @@ describe('CollaborativeStrategy', () => {
       temperature: 0.7,
       max_tokens: 1000,
     };
+  });
+
+  afterAll(() => {
+    delete process.env.ELIGIBLE_POOL_CACHE_TTL_MS;
   });
 
   describe('Metadata', () => {

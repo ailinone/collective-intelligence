@@ -50,6 +50,7 @@ import {
   type OpenAICompatibleHubAdapterConfig,
 } from '../openai-compatible-hub/openai-compatible-hub-adapter';
 import { narrowAs } from '@/utils/type-guards';
+import { resolveReasoningEffort } from '@/utils/reasoning-effort';
 import type { ChatRequest } from '@/types';
 
 /**
@@ -106,26 +107,46 @@ export class GroqAdapter extends OpenAICompatibleHubAdapter {
   }
 
   /**
-   * Pull Groq-specific fields off the caller's `options` bag. Only declared
-   * keys are copied to prevent arbitrary option leakage into the upstream
+   * Pull Groq-specific fields off the caller's `options` bag (or the
+   * flattened top-level fields when that bag is absent). Only declared keys
+   * are copied to prevent arbitrary option leakage into the upstream
    * payload.
+   *
+   * `reasoning_effort` additionally falls back to the canonical
+   * cross-provider `resolveReasoningEffort()` (LOTE AZ, `@/utils/reasoning-
+   * effort`) when neither of the above supplied an explicit, valid value.
+   * Without this, a request that opts into reasoning only via the bare
+   * `ailin_constraints.enable_reasoning: true` boolean (no explicit
+   * `reasoning_effort`) — which every OTHER provider adapter already
+   * defaults to Groq's own `'medium'` tier — silently sent Groq nothing,
+   * leaving its reasoning models at their upstream default with no signal
+   * from the caller's opt-in at all.
    */
   private extractReasoningOptions(request: ChatRequest): Partial<GroqReasoningOptions> | undefined {
     const opts = narrowAs<{ options?: Record<string, unknown> }>(request).options;
-    if (!opts || typeof opts !== 'object') {
-      // Also accept flattened top-level fields — some callers set them
-      // directly on the request. Groq's API accepts either.
-      const flat: Partial<GroqReasoningOptions> = {};
-      const raw = narrowAs<Record<string, unknown>>(request);
-      if (isReasoningFormat(raw.reasoning_format)) flat.reasoning_format = raw.reasoning_format;
-      if (isReasoningEffort(raw.reasoning_effort)) flat.reasoning_effort = raw.reasoning_effort;
-      if (isServiceTier(raw.service_tier)) flat.service_tier = raw.service_tier;
-      return Object.keys(flat).length > 0 ? flat : undefined;
-    }
     const picked: Partial<GroqReasoningOptions> = {};
-    if (isReasoningFormat(opts.reasoning_format)) picked.reasoning_format = opts.reasoning_format;
-    if (isReasoningEffort(opts.reasoning_effort)) picked.reasoning_effort = opts.reasoning_effort;
-    if (isServiceTier(opts.service_tier)) picked.service_tier = opts.service_tier;
+
+    if (opts && typeof opts === 'object') {
+      if (isReasoningFormat(opts.reasoning_format)) picked.reasoning_format = opts.reasoning_format;
+      if (isReasoningEffort(opts.reasoning_effort)) picked.reasoning_effort = opts.reasoning_effort;
+      if (isServiceTier(opts.service_tier)) picked.service_tier = opts.service_tier;
+    } else {
+      // Also accept flattened top-level fields — some callers set them
+      // directly on the request. Groq's API accepts either. This is also
+      // where the canonical `ChatRequest.reasoning_effort` field (the same
+      // one OpenAI/xAI/Anthropic/Google read) lands, since it lives at the
+      // top level, not inside a Groq-specific `options` bag.
+      const raw = narrowAs<Record<string, unknown>>(request);
+      if (isReasoningFormat(raw.reasoning_format)) picked.reasoning_format = raw.reasoning_format;
+      if (isReasoningEffort(raw.reasoning_effort)) picked.reasoning_effort = raw.reasoning_effort;
+      if (isServiceTier(raw.service_tier)) picked.service_tier = raw.service_tier;
+    }
+
+    if (picked.reasoning_effort === undefined) {
+      const { effort } = resolveReasoningEffort(request);
+      if (effort) picked.reasoning_effort = effort;
+    }
+
     return Object.keys(picked).length > 0 ? picked : undefined;
   }
 }

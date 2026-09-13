@@ -26,33 +26,55 @@ import { logger } from '@/utils/logger';
  */
 export class OpenAIModelFetcher extends BaseProviderModelFetcher {
   protected providerName = 'openai';
-  private client: OpenAI;
+  private client: OpenAI | null;
+  private apiKey: string;
   private log = logger.child({ component: 'openai-fetcher' });
 
   constructor(apiKey: string, baseUrl?: string, organization?: string) {
     super();
-    this.client = new OpenAI({
-      apiKey,
-      baseURL: baseUrl,
-      organization,
-      timeout: 30000,
-    });
+    this.apiKey = apiKey;
+    // Guard against constructing the raw `openai` SDK client with an empty
+    // or mock/test key: the SDK's own constructor validates credentials and
+    // throws a synchronous "Missing credentials. Please pass an `apiKey`,
+    // `workloadIdentity`, `adminAPIKey`, or set the `OPENAI_API_KEY` or
+    // `OPENAI_ADMIN_KEY` environment variable." error (see openai@7.5.0's
+    // client.ts) BEFORE getModels() below ever runs — which means the
+    // graceful mock/missing-key handling in getModels() was dead code for
+    // this exact case (2026-09-08 incident: this surfaced as a discovery
+    // failure for openai-native, and the IDENTICAL message for
+    // deepseek-native/xai-native, which construct this same SDK class as a
+    // thin OpenAI-compatible HTTP client — see DeepSeekModelFetcher /
+    // XAIModelFetcher). Constructing lazily, only once the key looks usable,
+    // means a missing/mock key always surfaces through this fetcher's own
+    // correctly-branded log line instead of the SDK's generic exception.
+    this.client = OpenAIModelFetcher.isUsableApiKey(apiKey)
+      ? new OpenAI({
+          apiKey,
+          baseURL: baseUrl,
+          organization,
+          timeout: 30000,
+        })
+      : null;
+  }
+
+  private static isUsableApiKey(key: string | undefined): key is string {
+    return Boolean(key) && !key!.includes('mock') && !key!.includes('test-');
   }
 
   async getModels(): Promise<ProviderModel[]> {
-    // Validate API key is not mock - check the client's apiKey
-    const apiKey = (this.client as { apiKey?: string }).apiKey;
-    if (!apiKey || apiKey.includes('mock') || apiKey.includes('test-')) {
+    if (!this.client) {
       this.log.warn(
-        { keyPresent: Boolean(apiKey) },
-        'OpenAI API key appears to be mock/test key - skipping model discovery'
+        { keyPresent: Boolean(this.apiKey) },
+        'OpenAI API key appears to be missing/mock/test key - skipping model discovery'
       );
       return [];
     }
 
+    const client = this.client;
+
     try {
       // OpenAI API endpoint to list models
-      const response = await this.client.models.list();
+      const response = await client.models.list();
 
       // Distinguish empty response from fetch error: the try/catch below swallows
       // thrown errors, so a 200 OK with zero data (key valid but lacks read
@@ -91,6 +113,13 @@ export class OpenAIModelFetcher extends BaseProviderModelFetcher {
       (c: string) => c === 'reasoning' || c === 'thinking_mode' || c === 'deep_research'
     );
 
+    // Note: OpenAI models.list() doesn't provide pricing or context window
+    // These will need to be fetched from a pricing API or use defaults
+    // For now, we'll use reasonable defaults based on model family
+    const { contextWindow, maxOutputTokens, pricing, pricingSource } = this.estimateModelSpecs(
+      openAIModel.id
+    );
+
     const metadata: Record<string, unknown> = {
       endpoint: this.determineEndpoint({
         capabilities,
@@ -104,14 +133,10 @@ export class OpenAIModelFetcher extends BaseProviderModelFetcher {
       // We'll infer from model ID patterns
       family: this.extractFamily(openAIModel.id),
       tier: this.extractTier(openAIModel.id),
+      pricingSource,
       // Signal to adapters which max tokens parameter to use
       ...(usesMaxCompletionTokens ? { uses_max_completion_tokens: true } : {}),
     };
-
-    // Note: OpenAI models.list() doesn't provide pricing or context window
-    // These will need to be fetched from a pricing API or use defaults
-    // For now, we'll use reasonable defaults based on model family
-    const { contextWindow, maxOutputTokens, pricing } = this.estimateModelSpecs(openAIModel.id);
 
     return {
       id: openAIModel.id,
@@ -264,6 +289,12 @@ export class OpenAIModelFetcher extends BaseProviderModelFetcher {
     contextWindow: number;
     maxOutputTokens: number;
     pricing: ProviderModel['pricing'];
+    pricingSource:
+      | 'premium-tier'
+      | 'reasoning-tier'
+      | 'fast-tier'
+      | 'specialized-tier'
+      | 'default-fallback';
   } {
     const id = modelId.toLowerCase();
 
@@ -296,15 +327,23 @@ export class OpenAIModelFetcher extends BaseProviderModelFetcher {
         contextWindow: 200000,
         maxOutputTokens: 16384,
         pricing: { inputCostPer1M: 15.0, outputCostPer1M: 60.0, currency: 'USD' },
+        pricingSource: 'premium-tier',
       };
     }
 
-    if (isReasoning) {
+    if (isReasoning && !isFast) {
       // Reasoning models - large context, medium cost
+      // Mirrors isPremium's `&& !isFast` guard above: a reasoning model whose id
+      // also matches the fast/mini/nano/lite pattern (o3-mini, o4-mini,
+      // o4-mini-deep-research, ...) is a cheap reasoning tier, not a flagship
+      // one, and must fall through to the isFast branch below instead of being
+      // priced as full flagship reasoning ($15/$60 per 1M vs its real ~30x
+      // cheaper cost tier).
       return {
         contextWindow: 200000,
         maxOutputTokens: 16384,
         pricing: { inputCostPer1M: 15.0, outputCostPer1M: 60.0, currency: 'USD' },
+        pricingSource: 'reasoning-tier',
       };
     }
 
@@ -314,6 +353,7 @@ export class OpenAIModelFetcher extends BaseProviderModelFetcher {
         contextWindow: 16384,
         maxOutputTokens: 4096,
         pricing: { inputCostPer1M: 0.5, outputCostPer1M: 1.5, currency: 'USD' },
+        pricingSource: 'fast-tier',
       };
     }
 
@@ -323,14 +363,26 @@ export class OpenAIModelFetcher extends BaseProviderModelFetcher {
         contextWindow: 8192,
         maxOutputTokens: 2048,
         pricing: { inputCostPer1M: 1.0, outputCostPer1M: 2.0, currency: 'USD' },
+        pricingSource: 'specialized-tier',
       };
     }
 
-    // Default for standard models - conservative estimates that work for any model
+    // Default for standard models - conservative estimates that work for any
+    // model that matches none of the tier keyword patterns above. Tagged
+    // 'default-fallback' (mirroring vertex-ai-model-fetcher.ts) so this catch-all
+    // estimate is never silently indistinguishable from a classified tier price.
+    this.log.warn(
+      { modelId },
+      'OpenAI pricing fell through to the unverified default fallback — model id ' +
+        'matched none of the premium/reasoning/fast/specialized keyword patterns. ' +
+        'metadata.pricingSource is tagged "default-fallback" so downstream ' +
+        'cost-accounting can flag it instead of silently trusting it.'
+    );
     return {
       contextWindow: 128000,
       maxOutputTokens: 16384,
       pricing: { inputCostPer1M: 5.0, outputCostPer1M: 15.0, currency: 'USD' },
+      pricingSource: 'default-fallback',
     };
   }
 }

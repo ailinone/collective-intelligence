@@ -10,7 +10,7 @@
 import { LRUCache } from 'lru-cache';
 import { prisma } from '@/database/client';
 import { config } from '@/config';
-import { getTierConfig } from '@/config/multi-tenancy-config';
+import { resolveEffectiveTierConfig } from '@/config/multi-tenancy-config';
 import type { AuthMode } from '@/types';
 import {
   sanitizeOrganizationSettingsOverrides,
@@ -31,8 +31,23 @@ const cache = new LRUCache<string, CachedSettings>({
   ttl: 60_000,
 });
 
-function createDefaultSettings(tier: string): OrganizationSettings {
-  const tierConfig = getTierConfig(tier);
+/**
+ * Fase 5 (cross-repo hardening): `organizationId` is used to look up the
+ * tenant's REAL billing entitlement (resolveEffectiveTierConfig), which
+ * takes priority over the hardcoded TIER_CONFIGS value when billing is
+ * reachable and has data — falls back to the unmodified hardcoded tier
+ * config otherwise. Safe to make async here: every call site
+ * (getSettings/getOverrides/updateSettings below) is already an async
+ * method, and results are cached at two layers already (this file's
+ * `cache` LRU, 60s TTL; billing-entitlements-client.ts's Redis cache, TTL
+ * BILLING_ENTITLEMENTS_CACHE_TTL_SECONDS) — a real network round-trip to
+ * billing happens at most once per organization per that TTL, fleet-wide.
+ */
+async function createDefaultSettings(
+  tier: string,
+  organizationId: string
+): Promise<OrganizationSettings> {
+  const tierConfig = await resolveEffectiveTierConfig(tier, organizationId);
 
   const defaultMode: AuthMode = config.auth.defaultMode;
   const allowPasswordFallback = config.auth.allowPasswordFallback;
@@ -125,7 +140,7 @@ class OrganizationSettingsService {
     }
 
     const overrides = sanitizeOrganizationSettingsOverrides(organization.settings);
-    const defaults = createDefaultSettings(organization.tier);
+    const defaults = await createDefaultSettings(organization.tier, organizationId);
     const effective = mergeOrganizationSettings(defaults, overrides);
 
     cache.set(organizationId, { effective, overrides });
@@ -149,8 +164,9 @@ class OrganizationSettingsService {
     }
 
     const overrides = sanitizeOrganizationSettingsOverrides(organization.settings);
+    const defaults = await createDefaultSettings(organization.tier, organizationId);
     cache.set(organizationId, {
-      effective: mergeOrganizationSettings(createDefaultSettings(organization.tier), overrides),
+      effective: mergeOrganizationSettings(defaults, overrides),
       overrides,
     });
     return overrides;
@@ -172,7 +188,7 @@ class OrganizationSettingsService {
       select: { tier: true },
     });
 
-    const defaults = createDefaultSettings(organization.tier);
+    const defaults = await createDefaultSettings(organization.tier, organizationId);
     const effective = mergeOrganizationSettings(defaults, mergedOverrides);
     cache.set(organizationId, { effective, overrides: mergedOverrides });
     this.log.info({ organizationId }, 'Organization settings updated');

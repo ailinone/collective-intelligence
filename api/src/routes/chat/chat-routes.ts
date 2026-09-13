@@ -33,6 +33,7 @@ import type { TierContext } from '@/services/pricing-tier-billing';
 import {
   OrchestrationEngine,
   detectMediaGenerationModality,
+  detectMediaGenerationModalities,
 } from '@/core/orchestration/orchestration-engine';
 import { inferCapabilities } from '@/core/orchestration/capability-inference';
 import {
@@ -40,6 +41,10 @@ import {
   explicitlyLacksFunctionCalling,
 } from '@/core/orchestration/function-calling-guard';
 import { isDeadCandidateProvider } from '@/core/orchestration/dead-candidate-skip';
+import {
+  NoFallbackCandidateError,
+  FallbackExhaustedError,
+} from '@/core/orchestration/execute-with-fallback';
 import { authenticate as _authenticate } from '@/middleware/auth-middleware';
 import {
   requireTenantContext as _requireTenantContext,
@@ -48,10 +53,7 @@ import {
 import { logger } from '@/utils/logger';
 import { nanoid } from 'nanoid';
 import { processChatRequest } from '@/services/chat-request-processor';
-import {
-  enqueueIfNeeded,
-  queueManagerMiddleware as _queueManagerMiddleware,
-} from '@/api/middleware/queue-manager';
+import { enqueueIfNeeded, queueManagerMiddleware } from '@/api/middleware/queue-manager';
 import { getRequestLogger } from '@/services/request-logger';
 import {
   setupSSEHeaders,
@@ -72,8 +74,14 @@ import { trackChatUsage } from '@/services/billing-usage-tracker';
 import { providerAvailabilityService } from '@/services/provider-availability-service';
 import { createOrchestrationContext } from '@/utils/orchestration-context';
 import { ensureStringArray, getHeaderString } from '@/utils/type-guards';
+import { ContextWindowExceededError } from '@/utils/custom-errors';
 import { isDevelopment } from '@/config';
 import { resolveAilinVirtualModelAlias } from '@/services/ailin-virtual-model-service';
+import {
+  HIGH_EFFORT_QUALITY_TARGET_FLOOR,
+  isReasoningEffort,
+} from '@/utils/reasoning-effort';
+import { checkExplicitModelExists, unknownModelErrorBody } from '@/services/explicit-model-guard';
 import {
   debitTierRequest,
   estimatePromptTokens,
@@ -154,6 +162,73 @@ export function applyFreeTierCeiling(chatRequest: ChatRequest): void {
     chatRequest.strategy = FREE_TIER_FALLBACK_STRATEGY;
   }
   chatRequest.ailin_free_tier_scope = true;
+}
+
+/**
+ * Did a completed single-model streaming attempt actually deliver something
+ * a caller could use — real assistant content, or a tool call?
+ *
+ * EMPTY-STREAM GUARD (2026-09-06 incident, ci-api production): a provider
+ * stream that never throws but also never yields content or a tool call was
+ * being recorded as a hub SUCCESS in the streaming loop below. Because
+ * `isRouteHot()` only compares `lastSuccessAt` to `lastFailureAt`, that false
+ * success kept a degenerate route "hot", so the hot-first candidate reorder
+ * put the SAME broken route back at the front of the chain for every
+ * subsequent `model=auto` request — reproduced live across four consecutive
+ * user messages (a retry of a plain question, then unrelated image- and
+ * video-generation prompts) that all surfaced the same empty/garbled output
+ * from the same provider+model. Extracted as a pure predicate so the guard
+ * can be unit-tested directly instead of only through a source-grep.
+ */
+export function hasMeaningfulStreamedOutput(
+  totalContentLength: number,
+  sawToolCalls: boolean
+): boolean {
+  return totalContentLength > 0 || sawToolCalls;
+}
+
+/**
+ * Classifies WHY the tools-required streaming fallback chain emptied
+ * (`candidates.length === 0` after the primary was demoted and every
+ * resolved fallback was rejected), so the caller can fail closed with a
+ * correctly-classified error instead of silently re-executing the
+ * already-rejected primary.
+ *
+ * FAIL-CLOSED FIX (2026-09-08, mirrors acc0efee's hard-capability
+ * fail-closed pattern): the escape hatch this replaces silently re-pushed
+ * `plan.model` — the SAME primary this code had just proven, moments
+ * earlier, to explicitly lack `function_calling` — with only a `warn` log.
+ * A tools-bearing request would then be served by a model that can only
+ * emit prose, and the calling IDE/agent either hangs waiting for a
+ * `tool_call` that never arrives or mis-parses the response — exactly the
+ * "registry resolution divergence" failure class (2026-08-20 incident) the
+ * surrounding re-validation exists to prevent, reintroduced by its own
+ * designed-in escape hatch.
+ *
+ * Two distinct outcomes (mirrors the `NoFallbackCandidateError` /
+ * `FallbackExhaustedError` split already used by `executeWithFallback` for
+ * embeddings/audio/images/rerank):
+ *   - 'unsatisfiable': at least one candidate was rejected because the
+ *     REGISTRY-resolved model explicitly lacks `function_calling` (or there
+ *     were no fallback candidates to examine at all) — the capability
+ *     genuinely cannot be satisfied for this request right now, independent
+ *     of provider health.
+ *   - 'exhausted': every rejection was instead "provider currently dead"
+ *     (open circuit / no credits) — function-calling-capable candidates
+ *     exist, they are just all transiently unreachable, which is a
+ *     retryable outage rather than an unsatisfiable requirement.
+ *
+ * Extracted as a pure function so the classification can be unit-tested
+ * directly instead of only through a source-grep (same rationale as
+ * `hasMeaningfulStreamedOutput` above).
+ */
+export function classifyEmptyToolsFallbackChain(
+  skippedNoFunctionCalling: number,
+  fallbackModelCount: number
+): 'unsatisfiable' | 'exhausted' {
+  return skippedNoFunctionCalling > 0 || fallbackModelCount === 0
+    ? 'unsatisfiable'
+    : 'exhausted';
 }
 
 /**
@@ -386,6 +461,18 @@ const chatCompletionSchema = {
         description:
           'Ailin-specific: Quality target (0-1). Higher values prioritize quality over cost/speed.',
       },
+      reasoning_effort: {
+        type: 'string',
+        enum: ['low', 'medium', 'high'],
+        description:
+          'Canonical reasoning-effort hint (matches the OpenAI o-series convention). Controls how much a model should "think" before answering: low/medium/high map to increasing internal reasoning-token budgets on models with native extended thinking, and bias model/quality selection at high effort. Reconciled with the lower-level `thinking_budget` field by resolveReasoningEffort() — an explicit `thinking_budget` always takes precedence over this enum.',
+      },
+      thinking_budget: {
+        type: 'integer',
+        minimum: 1,
+        description:
+          'Ailin-specific: explicit native-thinking token budget for models with extended-thinking support (e.g. DeepSeek-R1, QwQ). A more specific override of `reasoning_effort` — when both are set, this numeric value wins verbatim.',
+      },
       task_type: {
         type: 'string',
         description:
@@ -564,7 +651,7 @@ export const chatCompletionResponseSchema = {
   },
 };
 
-function normalizeChatRequest(chatRequest: ChatRequest): ChatRequest {
+export function normalizeChatRequest(chatRequest: ChatRequest): ChatRequest {
   const normalizedMessages = (chatRequest.messages ?? []).map((message) =>
     normalizeChatMessage(message)
   );
@@ -666,6 +753,40 @@ function normalizeChatRequest(chatRequest: ChatRequest): ChatRequest {
     normalizedRequest.user_specified_model = false;
   } else if (!hasUserFlag) {
     normalizedRequest.user_specified_model = modelProvided && !explicitlyAuto;
+  }
+
+  // LOTE AZ (2026-09) — reasoning_effort foundation.
+  //
+  // 1) Defensive validation: the JSON schema enforces the closed enum for
+  //    real HTTP callers, but `normalizeChatRequest` also runs for
+  //    internally-constructed requests (tests, the experiment harness) that
+  //    bypass Fastify validation. Drop a garbage value rather than let it
+  //    silently reach `resolveReasoningEffort()` — the object spread above
+  //    (`...chatRequest`) already carried whatever was on the incoming
+  //    request forward unchanged, so this only needs to correct it, not add
+  //    it (propagation-without-loss is the point: a VALID value survives the
+  //    whole alias-resolution pass untouched).
+  if (
+    normalizedRequest.reasoning_effort !== undefined &&
+    !isReasoningEffort(normalizedRequest.reasoning_effort)
+  ) {
+    delete normalizedRequest.reasoning_effort;
+  }
+
+  // 2) Selection-bias stretch goal: 'high' effort biases toward the SAME
+  //    quality-selection hook the alias system and the triage layer already
+  //    use for "the caller wants high quality" — `quality_target >= 0.9`
+  //    (see orchestration-engine.ts `applyTriageRoute`'s
+  //    `clientWantsHighQuality` check and the `preferQuality` alias check).
+  //    Reusing that exact, already-wired threshold instead of inventing a
+  //    new heuristic. Never overrides an explicit client-set or
+  //    alias-resolved `quality_target` — this only fills the gap when
+  //    nothing else expressed a quality preference.
+  if (
+    normalizedRequest.reasoning_effort === 'high' &&
+    normalizedRequest.quality_target === undefined
+  ) {
+    normalizedRequest.quality_target = HIGH_EFFORT_QUALITY_TARGET_FLOOR;
   }
 
   return normalizedRequest;
@@ -855,6 +976,22 @@ export async function registerChatRoutes(
               },
             },
           },
+          404: {
+            description:
+              'The explicitly requested `model` does not exist in any provider. Returned only for a client-pinned id; `auto`, `ailin-*` aliases and an absent model never reach this path.',
+            type: 'object',
+            properties: {
+              error: {
+                type: 'object',
+                properties: {
+                  message: { type: 'string' },
+                  type: { type: 'string' },
+                  code: { type: 'string', description: 'model_not_found' },
+                  param: { type: 'string' },
+                },
+              },
+            },
+          },
           429: {
             description: 'Rate limit exceeded',
             type: 'object',
@@ -885,7 +1022,22 @@ export async function registerChatRoutes(
           },
         },
       },
-      preHandler: [_authenticate],
+      // queueManagerMiddleware populates `request.queueContext` from the
+      // current system load (see request-queue-service.ts's `shouldQueue`,
+      // >80% capacity or an existing waiting job) — it requires tenantContext
+      // to already be set, which `_authenticate`/the global apiKeyAuthMiddleware
+      // hook guarantee by this point. `enqueueIfNeeded` below reads that
+      // context to decide whether to return a 202 async-acknowledgment instead
+      // of processing inline; it is only ever CONSULTED on the non-streaming
+      // branch (streaming has no 202/poll equivalent — see the "Queueing is
+      // NOT replicated here" comment further down for the deliberate
+      // streaming exclusion). Previously this hook was imported under an
+      // underscore-prefixed unused-var alias but never registered, so
+      // `queueContext` was always undefined and `enqueueIfNeeded` always took
+      // the `queued: false` branch — the load-shed protection this route's
+      // schema already documents (see the 202 response above) never actually
+      // engaged, regardless of real system load.
+      preHandler: [_authenticate, queueManagerMiddleware],
     },
     async (request, reply) => {
       // Read the RAW, client-submitted model BEFORE normalizeChatRequest
@@ -915,6 +1067,20 @@ export async function registerChatRoutes(
       // never runs, and never consults the wallet, for normal traffic.
       const requestApiKeyId = (request as ExtendedFastifyRequest).apiKey?.id;
       const anonHeaders = request.headers as Record<string, string | string[] | undefined>;
+
+      // Session affinity (LOTE AW, 2026-09): carry the resolved API-key id
+      // and, when present, the client's conversation id down through
+      // orchestrationEngine.{execute,createStreamingPlan,executeStream}'s
+      // buildContext() — see `ailin_session_scope`'s doc comment
+      // (types/index.ts). Set unconditionally, for EVERY request (not just
+      // the anonymous-quota scope above), and always overwrites whatever a
+      // client sent, mirroring `ailin_anonymous_context`'s established
+      // server-set-only pattern.
+      chatRequest.ailin_session_scope = {
+        apiKeyId: requestApiKeyId,
+        conversationId: getHeaderString(anonHeaders, 'x-ailin-conversation-id'),
+      };
+
       const anonScope = inAnonymousQuotaScope({
         apiKeyId: requestApiKeyId,
         rawModel,
@@ -1049,6 +1215,26 @@ export async function registerChatRoutes(
               'This API key is restricted to POST /v1/chat/completions with model "ailin-auto".',
           },
         });
+      }
+
+      // ── Explicit model must exist ──────────────────────────────────────
+      // A model id the client wrote that exists in NO provider is a client
+      // bug, and answering it with a silently substituted model is worse than
+      // an error: the caller never learns the id was wrong and is billed for a
+      // model it did not ask for. Measured: `"model":
+      // "definitely-not-a-real-model-xyz"` returned 200.
+      //
+      // This is NOT the same as "pinned model is currently unusable" (filtered
+      // by a health/balance/capability gate) — that case still degrades to
+      // automatic selection on purpose, downstream. See explicit-model-guard.ts.
+      // The check fails OPEN: an unreachable catalog admits the request.
+      const explicitModelCheck = await checkExplicitModelExists(chatRequest);
+      if (!explicitModelCheck.exists && explicitModelCheck.requestedModel) {
+        request.log.info(
+          { requestedModel: explicitModelCheck.requestedModel },
+          'Rejecting chat completion: pinned model does not exist in any provider'
+        );
+        return reply.status(404).send(unknownModelErrorBody(explicitModelCheck.requestedModel));
       }
 
       // Three independent gates against three different data sources (quota
@@ -1497,6 +1683,59 @@ export function extractLastUserTurnTextForMediaGate(messages: ChatMessage[]): st
   return '';
 }
 
+/**
+ * Full decision behind the streaming media-generation redirect gate below:
+ * extract the last user turn's text (see extractLastUserTurnTextForMediaGate's
+ * doc comment for why it's last-turn-only and text-only/capped), run it
+ * through the SAME capability inference the non-streaming heuristic fallback
+ * uses, then classify the result via detectMediaGenerationModality — the same
+ * function orchestration-engine.ts uses to route a triage-produced stage to
+ * executeMediaGenerationStage. Exported so the gate's redirect DECISION (not
+ * just the text-extraction step) has direct unit-test coverage without
+ * booting a full Fastify + Prisma + provider-registry stack.
+ *
+ * 2026-09-07 fix: this used to be inlined at the call site with the caller
+ * checking `=== 'file'` only — image/video/audio requests fell through this
+ * gate entirely (see the doc comment on the call site for the history of
+ * that gap). Centralizing the decision here means the call site's condition
+ * is now the only thing that needs to widen to cover all four modalities.
+ */
+export function detectStreamingMediaGateModality(
+  chatRequest: Pick<ChatRequest, 'messages' | 'tools' | 'max_tokens'>
+): ReturnType<typeof detectMediaGenerationModality> {
+  const mediaGateText = extractLastUserTurnTextForMediaGate(chatRequest.messages);
+  const mediaGateInference = inferCapabilities([{ role: 'user', content: mediaGateText }], {
+    tools: chatRequest.tools,
+    max_tokens: chatRequest.max_tokens,
+  });
+  return detectMediaGenerationModality(mediaGateInference.requiredCapabilities);
+}
+
+/**
+ * Observability-only sibling of {@link detectStreamingMediaGateModality}
+ * (LOTE AT PR4, 2026-09-07): reports EVERY modality the same gate text/
+ * inference detects, not just the first. Does NOT change the redirect
+ * gate's CONDITION below — `detectStreamingMediaGateModality(...) !== null`
+ * already redirects correctly for a composite (2+ modality) request exactly
+ * as it does for a single one (both are non-null), since the redirect only
+ * needs to know "does this need the non-streaming generation pipeline at
+ * all", not which/how-many modalities. This exists purely so the log line
+ * at the call site — and anyone debugging a composite request from logs —
+ * can see the real composite modality set instead of only the first match,
+ * matching `OrchestrationEngine.detectMediaGenerationModalities()`'s plural
+ * detection the non-streaming composite pipeline actually acts on.
+ */
+export function detectStreamingMediaGateModalities(
+  chatRequest: Pick<ChatRequest, 'messages' | 'tools' | 'max_tokens'>
+): ReturnType<typeof detectMediaGenerationModalities> {
+  const mediaGateText = extractLastUserTurnTextForMediaGate(chatRequest.messages);
+  const mediaGateInference = inferCapabilities([{ role: 'user', content: mediaGateText }], {
+    tools: chatRequest.tools,
+    max_tokens: chatRequest.max_tokens,
+  });
+  return detectMediaGenerationModalities(mediaGateInference.requiredCapabilities);
+}
+
 async function handleStreamingRequest(
   request: FastifyRequest,
   reply: FastifyReply,
@@ -1514,16 +1753,34 @@ async function handleStreamingRequest(
   const failoverService = getFailoverService();
   const startTime = Date.now();
 
-  // File-generation artifact coverage on streaming (2026-07-16/17 architecture
-  // audit, v2 after an earlier all-modality design was rejected by adversarial
-  // review, and this v2 itself fixed 3 further confirmed defects from a
-  // SECOND adversarial review — see the three points below marked "v2 fix").
-  // Scope is DELIBERATELY narrower than the original attempt:
-  //  - FILE modality only (docx/csv/json/pdf/.../code_file_generation), NOT
-  //    image/video/audio. Those media regexes (IMAGE_GEN_KEYWORDS etc.) have
-  //    no tool-noun guard the way the file-format regexes do. Media-modality
-  //    streaming coverage needs that guard hardening done first; it stays a
-  //    zero-coverage gap for now, same as before this change.
+  // Media-generation artifact coverage on streaming (2026-07-16/17
+  // architecture audit, v2 after an earlier all-modality design was
+  // rejected by adversarial review, and this v2 itself fixed 3 further
+  // confirmed defects from a SECOND adversarial review — see the three
+  // points below marked "v2 fix"; widened to all four modalities 2026-09-07,
+  // see "2026-09-07 fix" below).
+  //  - Covers all four modalities detectMediaGenerationModality recognizes:
+  //    image/video/audio generation AND file generation (docx/csv/json/
+  //    pdf/.../code_file_generation).
+  //  - (2026-09-07 fix) Originally FILE modality only. The image/video/audio
+  //    media regexes (IMAGE_GEN_KEYWORDS etc. in capability-inference.ts) do
+  //    NOT need the tool-noun guard the file-format regexes needed (that
+  //    guard exists because bare format nouns like "csv"/"pdf" collide with
+  //    unrelated tool-building requests — "create a csv parser" — the
+  //    image/video/audio keyword sets already require a generation-verb +
+  //    media-noun pair with no such collision class). Confirmed by execution
+  //    that a streaming request with clear image/video/audio generation
+  //    intent (e.g. "generate an image of a red bicycle") fell all the way
+  //    through to the ordinary single-model chat fast path
+  //    (createStreamingPlan, requiredCapabilities: ['streaming'] only) and
+  //    produced a short hallucinated non-answer instead of ever attempting
+  //    real generation — the root cause of "Ball"/"B"-style garbage
+  //    responses to media-generation requests via the default streaming
+  //    chat UI. Fixed by widening the gate condition from `=== 'file'` to
+  //    `!== null` (see detectStreamingMediaGateModality above) — every other
+  //    mechanic on this path (forced stream:false, disableVideoEarlyPath,
+  //    withIdempotency wiring, SSE re-framing below) is untouched and now
+  //    shared by all four modalities.
   //  - (v2 fix) Narrowing the GATE to file-modality does NOT, by itself,
   //    prevent chat-request-processor's separate, more permissive
   //    detectVideoGenerationIntent from firing once stream:false is forced —
@@ -1568,14 +1825,21 @@ async function handleStreamingRequest(
   //    decision that returns an async 202 with a poll-for-result contract
   //    that has no SSE equivalent. Deliberately out of scope — under load,
   //    a redirected request just runs inline like the queued===false path.
-  const mediaGateText = extractLastUserTurnTextForMediaGate(chatRequest.messages);
-  const mediaGateInference = inferCapabilities([{ role: 'user', content: mediaGateText }], {
-    tools: chatRequest.tools,
-    max_tokens: chatRequest.max_tokens,
-  });
-  if (detectMediaGenerationModality(mediaGateInference.requiredCapabilities) === 'file') {
+  const mediaGateModality = detectStreamingMediaGateModality(chatRequest);
+  if (mediaGateModality !== null) {
+    // LOTE AT PR4 (2026-09-07): observability only — see
+    // detectStreamingMediaGateModalities's doc comment. The redirect
+    // condition above is unchanged (still `!== null` on the singular
+    // detector); this just lets the log line show the full composite
+    // modality set when there is one, instead of only the first match.
+    const mediaGateModalities = detectStreamingMediaGateModalities(chatRequest);
     requestLog.info(
-      'File-generation intent detected on streaming request — redirecting to non-streaming artifact pipeline'
+      {
+        modality: mediaGateModality,
+        modalities: Array.from(mediaGateModalities),
+        composite: mediaGateModalities.size >= 2,
+      },
+      'Media-generation intent detected on streaming request — redirecting to non-streaming generation pipeline'
     );
     try {
       await withIdempotency({
@@ -1596,7 +1860,7 @@ async function handleStreamingRequest(
                 disableVideoEarlyPath: true,
               }),
             {
-              operationName: 'POST /v1/chat/completions (streaming file-artifact redirect)',
+              operationName: 'POST /v1/chat/completions (streaming media-generation redirect)',
               requestId,
               log: requestLog,
               isIdempotent: true,
@@ -1652,7 +1916,7 @@ async function handleStreamingRequest(
           } else {
             const message =
               (body as { error?: { message?: string } } | undefined)?.error?.message ??
-              'File-generation request failed';
+              'Media-generation request failed';
             sendSSEError(sseReply, new Error(message));
           }
           sendSSEDone(sseReply);
@@ -1674,7 +1938,10 @@ async function handleStreamingRequest(
         setupSSEHeaders(reply);
       }
       const errorMsg = err instanceof Error ? err.message : String(err);
-      requestLog.error({ error: errorMsg }, 'File-generation streaming redirect failed');
+      requestLog.error(
+        { error: errorMsg, modality: mediaGateModality },
+        'Media-generation streaming redirect failed'
+      );
       sendSSEError(reply, err instanceof Error ? err : new Error(errorMsg));
       sendSSEDone(reply);
       reply.raw.end();
@@ -1942,7 +2209,23 @@ async function handleStreamingRequest(
     // until maxStreamFallbacks LIVE candidates are resolved. Providers whose
     // circuit is HALF_OPEN are also skipped — a permanently-dead provider
     // oscillates OPEN→HALF_OPEN→OPEN forever (RC-3 lesson).
-    const maxStreamFallbacks = Number(process.env.STREAMING_MAX_FALLBACKS ?? 8);
+    // TOOLS-REQUIRED HEADROOM (2026-09-07 incident, requests i7fTRLVuNSY0ezeixeM3A
+    // / 5zMk-k8bZ5hBCSwVwUAwG / edAGdf-ei9h1pYFvzyqE_): a request that carries
+    // `tools` draws from a MUCH thinner, more provider-correlated eligible pool
+    // than the flat cap was sized for — both real incident requests needed to
+    // examine 324 ranked fallback candidates (237-238 rejected for lacking
+    // function_calling, 33-78 already dead) just to fill a 9-slot chain, out of
+    // 1479 total fallback options returned by selectFallbackOptions. With a flat
+    // cap of 9, a coincident multi-provider outage window (billing exhaustion on
+    // 3+ hubs, one bad API key, one Cloudflare IP-ban, one buggy tool-call JSON
+    // encoder) exhausted every slot even though ~1150 further, likely-healthy
+    // candidates sat unexamined below the cap. Give tools-required requests a
+    // deeper cap — safe now that resolution below is parallelized instead of
+    // serial (see FALLBACK_RESOLVE_CONCURRENCY). Env-tunable, not a model pin:
+    // still the same dynamic ranked list, just walked deeper.
+    const maxStreamFallbacks = toolsRequired
+      ? Number(process.env.STREAMING_MAX_FALLBACKS_TOOLS ?? 20)
+      : Number(process.env.STREAMING_MAX_FALLBACKS ?? 8);
     // PROVIDER DIVERSITY CAP (2026-08-21, request k0QPvOU6tetSXz9gOJU-k): the
     // ranked list clustered 5 of 9 chain slots on ONE provider (alibaba ×5);
     // when that provider died on attempt 1 (HTTP 400 billing), attempts 2-5
@@ -1962,33 +2245,58 @@ async function handleStreamingRequest(
       if ((model as Model & { balanceStatus?: string }).balanceStatus === 'no-credits') return true;
       return false;
     };
-    for (const fallback of fallbackModels) {
-      if (candidates.length > maxStreamFallbacks) break;
-      const result = await providerRegistry.findModel(fallback.id);
-      if (!result) continue;
-      const adapterProvider = result.adapter.getName() || result.model.provider;
-      // Tools requests: re-validate the RESOLVED registry model (see
-      // FUNCTION-CALLING RE-VALIDATION note above). Skipped candidates do
-      // not count toward the cap — we keep walking the ranked list.
-      if (toolsRequired && explicitlyLacksFunctionCalling(result.model)) {
-        skippedNoFunctionCalling += 1;
-        continue;
+    // PARALLEL RESOLUTION (2026-09-07 incident, same requests as above):
+    // `providerRegistry.findModel()` is NOT free — it does real I/O (catalog +
+    // operability lookups) averaging ~60ms/call in production. Resolving the
+    // ranked list SERIALLY (one `await` per candidate, as this loop used to)
+    // meant that whenever a request needed to walk deep into the list to find
+    // enough live/qualifying candidates, the WHOLE cost landed on the request
+    // before even the first streaming attempt started: the 5zM request above
+    // spent ~19.9s of its 26.5s total duration just resolving 324 candidates
+    // BEFORE the first byte was ever attempted. Resolving in bounded-concurrency
+    // batches (order-preserving — results are still applied in ranked-list
+    // order, so selection semantics are unchanged) cuts that wall-clock cost by
+    // roughly the concurrency factor, which is what makes raising the
+    // tools-required cap above safe rather than a straight latency trade.
+    const FALLBACK_RESOLVE_CONCURRENCY = Number(
+      process.env.STREAMING_FALLBACK_RESOLVE_CONCURRENCY ?? 10
+    );
+    for (
+      let batchStart = 0;
+      batchStart < fallbackModels.length && candidates.length <= maxStreamFallbacks;
+      batchStart += FALLBACK_RESOLVE_CONCURRENCY
+    ) {
+      const batch = fallbackModels.slice(batchStart, batchStart + FALLBACK_RESOLVE_CONCURRENCY);
+      const resolvedBatch = await Promise.all(
+        batch.map((fallback) => providerRegistry.findModel(fallback.id))
+      );
+      for (const result of resolvedBatch) {
+        if (candidates.length > maxStreamFallbacks) break;
+        if (!result) continue;
+        const adapterProvider = result.adapter.getName() || result.model.provider;
+        // Tools requests: re-validate the RESOLVED registry model (see
+        // FUNCTION-CALLING RE-VALIDATION note above). Skipped candidates do
+        // not count toward the cap — we keep walking the ranked list.
+        if (toolsRequired && explicitlyLacksFunctionCalling(result.model)) {
+          skippedNoFunctionCalling += 1;
+          continue;
+        }
+        // Keep the primary (already pushed) — only gate FALLBACK candidates, and
+        // never let the skip empty the chain entirely.
+        if (
+          (primaryPushed || candidates.length > 0) &&
+          isDeadCandidate(adapterProvider, result.model)
+        ) {
+          skippedDeadCandidates += 1;
+          continue;
+        }
+        const providerCount = perProviderCount.get(adapterProvider) ?? 0;
+        if (providerCount >= maxPerProvider) {
+          continue;
+        }
+        perProviderCount.set(adapterProvider, providerCount + 1);
+        pushCandidate(result.model, result.adapter, plan.request);
       }
-      // Keep the primary (already pushed) — only gate FALLBACK candidates, and
-      // never let the skip empty the chain entirely.
-      if (
-        (primaryPushed || candidates.length > 0) &&
-        isDeadCandidate(adapterProvider, result.model)
-      ) {
-        skippedDeadCandidates += 1;
-        continue;
-      }
-      const providerCount = perProviderCount.get(adapterProvider) ?? 0;
-      if (providerCount >= maxPerProvider) {
-        continue;
-      }
-      perProviderCount.set(adapterProvider, providerCount + 1);
-      pushCandidate(result.model, result.adapter, plan.request);
     }
     if (skippedNoFunctionCalling > 0) {
       requestLog.warn(
@@ -2004,14 +2312,45 @@ async function handleStreamingRequest(
     }
 
     if (candidates.length === 0) {
-      // Safety net: the re-validation gates above must never empty the chain
-      // (a tools request with zero FC-declared candidates still deserves the
-      // old behavior — try the primary — rather than an instant 500).
       if (toolsRequired) {
-        requestLog.warn(
-          { primaryModel: plan.model.id },
-          'No function-calling-capable live streaming candidates — falling back to primary as last resort'
+        // FAIL CLOSED (2026-09-08 fix, mirrors acc0efee's hard-capability
+        // fail-closed pattern): this branch is only reachable when
+        // toolsRequired is true — the non-tools path already pushed the
+        // primary unconditionally above, so candidates.length can never be
+        // 0 there. Reaching here means the primary was demoted for
+        // explicitly lacking function_calling AND every resolved fallback
+        // was rejected too. See classifyEmptyToolsFallbackChain's doc
+        // comment for why this fails closed instead of silently re-pushing
+        // the already-demoted primary, and for the unsatisfiable/exhausted
+        // distinction below.
+        const classification = classifyEmptyToolsFallbackChain(
+          skippedNoFunctionCalling,
+          fallbackModels.length
         );
+        requestLog.error(
+          {
+            primaryModel: plan.model.id,
+            skippedNoFunctionCalling,
+            skippedDeadCandidates,
+            fallbackModelCount: fallbackModels.length,
+            classification,
+          },
+          'No function-calling-capable live streaming candidates for tools request — failing closed instead of demoting to the already-rejected primary'
+        );
+        if (classification === 'unsatisfiable') {
+          throw new NoFallbackCandidateError('function_calling');
+        }
+        throw new FallbackExhaustedError('function_calling', [
+          {
+            model: `${skippedDeadCandidates} function-calling-capable candidate(s)`,
+            modelId: 'n/a',
+            provider: 'multiple',
+            status: 'failed',
+            errorClass: 'provider_unavailable',
+            errorMessage: 'dead (open circuit breaker / no credits) at chain-build time',
+            durationMs: 0,
+          },
+        ]);
       }
       pushCandidate(plan.model, plan.adapter, plan.request);
     }
@@ -2110,6 +2449,14 @@ async function handleStreamingRequest(
       let totalTokens = 0;
       let lastChunk: ChatResponse | null = null;
       let firstChunkSent = false;
+      // EMPTY-STREAM GUARD (2026-09-06 incident): a provider stream that
+      // completes without throwing but never delivers real content or a
+      // tool call must not be recorded as a hub SUCCESS below — see the
+      // usage site for the full incident writeup. Tracked per-candidate,
+      // across every choice (not just choices[0]) so a provider that puts
+      // its answer on a non-zero choice index is not misclassified.
+      let totalContentLength = 0;
+      let sawToolCalls = false;
 
       try {
         requestLog.info(
@@ -2220,6 +2567,15 @@ async function handleStreamingRequest(
             );
           }
           firstChunkSent = true;
+          for (const streamedChoice of chunk.choices ?? []) {
+            const streamedContent = streamedChoice.delta?.content;
+            if (typeof streamedContent === 'string') {
+              totalContentLength += streamedContent.length;
+            }
+            if (Array.isArray(streamedChoice.delta?.tool_calls) && streamedChoice.delta.tool_calls.length > 0) {
+              sawToolCalls = true;
+            }
+          }
           // Anonymous streaming: audit-accumulate, and tripwire-check BEFORE
           // the chunk goes on the wire. The overlap window re-includes the
           // tail of already-checked text so a slur split across a chunk
@@ -2397,15 +2753,74 @@ async function handleStreamingRequest(
         // streaming-only traffic, and the learning loop only saw the
         // buffered execute() path. Record the success so the route this
         // request just proved alive rises to #1 for the next request.
+        //
+        // EMPTY-STREAM GUARD (2026-09-06 incident, requests -kXgoqJ1wMeguw0,
+        // wvLk_r6pxWu-, aFyPSyapYs6, U5C1zB-Fcvcx — all served by the same
+        // route): a stream that never throws but also never delivers real
+        // content or a tool call was still being recorded as a hub SUCCESS
+        // here. Because isRouteHot() only looks at lastSuccessAt vs.
+        // lastFailureAt, that false success kept a degenerate route "hot",
+        // so the hot-first reorder above put it BACK at the front of the
+        // candidate chain for every subsequent model=auto request — the
+        // same broken route then won attempt #1 again and again, and every
+        // one of four consecutive user messages (a retry, then unrelated
+        // image/video-generation prompts) surfaced the same empty/garbled
+        // output. Recording this as a failure (not success) demotes the
+        // route out of "hot" so the next request's reorder gives a
+        // healthier candidate a turn — classifyError() defaults an
+        // unrecognized message like this one to 'unknown', not one of the
+        // auth/credit/rate-limit states, so a single fluke does not get
+        // quarantined as hard-dead the way a real 401/402 would.
+        const hadMeaningfulOutput = hasMeaningfulStreamedOutput(totalContentLength, sawToolCalls);
+        if (!hadMeaningfulOutput) {
+          requestLog.warn(
+            {
+              attempt,
+              provider: candidate.adapter.getName(),
+              model: candidate.model.name,
+              modelId: candidate.model.id,
+              chunks: chunkCount,
+            },
+            'Streaming completed with no content and no tool calls — recording as a hub failure to prevent hot-route reinforcement'
+          );
+        }
         try {
           const { getProviderOperabilityHub } = await import('@/core/provider-operability-hub');
           getProviderOperabilityHub().recordRouteExecution(
             candidate.adapter.getName(),
             candidate.model.id,
-            true
+            hadMeaningfulOutput,
+            undefined,
+            hadMeaningfulOutput
+              ? undefined
+              : 'empty streaming output (no content, no tool calls)'
           );
         } catch {
           /* hub unavailable — non-fatal */
+        }
+
+        // Session affinity write (LOTE AW, 2026-09): this streaming fast
+        // path is the dominant real-world path (stream:true, no explicit
+        // collective strategy) and never went through the
+        // strategy.recordExecution() sibling calls in
+        // orchestration-engine.ts — record the model that actually served
+        // this turn directly. Fire-and-forget; a missing
+        // `sessionAffinityKey` (buildContext() didn't run, or ran on a
+        // synthetic context) is a silent no-op.
+        if (plan.context.sessionAffinityKey) {
+          const { getSessionAffinityService } = await import(
+            '@/services/session-affinity-service'
+          );
+          getSessionAffinityService()
+            .recordOutcome({
+              organizationId: plan.context.organizationId,
+              identifier: plan.context.sessionAffinityKey.identifier,
+              sessionKey: plan.context.sessionAffinityKey.sessionKey,
+              modelId: candidate.model.id,
+              provider: candidate.model.provider || candidate.adapter.getName(),
+              triage: plan.context.triage,
+            })
+            .catch(() => {});
         }
 
         reply.raw.end();
@@ -2531,10 +2946,37 @@ async function handleStreamingRequest(
     // errorObj/errorMessage (already logged above in full, including raw
     // upstream provider text) can contain vendor account/billing details
     // (e.g. "account balance is insufficient", internal transaction ids)
-    // that must not be relayed to the API caller.
+    // that must not be relayed to the API caller. Two deliberate exceptions,
+    // both entirely our own message text (never vendor-derived, so relaying
+    // verbatim is safe) and far more actionable for an agentic caller than a
+    // generic "provider error" that invites a blind retry:
+    //  - function-calling fail-closed errors (NoFallbackCandidateError /
+    //    FallbackExhaustedError);
+    //  - context-window-exceeded (2026-09 audit): detected either via our
+    //    own pre-flight check (single-model-strategy.ts) throwing
+    //    ContextWindowExceededError directly, or a real provider rejection
+    //    whose message matches error-classification.ts's
+    //    CONTEXT_EXCEEDED_KEYWORDS (this streaming path calls provider
+    //    adapters directly, bypassing the strategy classes' own classified
+    //    throws, so this is the only place to catch a raw provider-side
+    //    rejection here) — CONTEXT_EXCEEDED_KEYWORDS never matches
+    //    vendor-account/billing text, so this carve-out doesn't weaken that
+    //    guarantee either.
+    const isClassifiedCapabilityError =
+      error instanceof NoFallbackCandidateError || error instanceof FallbackExhaustedError;
+    const { classifyProviderError } = await import('@/core/operability');
+    const isContextExceeded =
+      error instanceof ContextWindowExceededError ||
+      classifyProviderError(error).errorClass === 'context_exceeded';
     sendSSEError(
       reply,
-      new Error(`Upstream provider error while streaming (request ${requestId}).`)
+      isClassifiedCapabilityError
+        ? (error as Error)
+        : isContextExceeded
+          ? new ContextWindowExceededError(
+              `Request context size exceeds the model's context window (request ${requestId}). Reduce the request (shorter history, fewer/smaller tool results) or choose a model with a larger context window.`
+            )
+          : new Error(`Upstream provider error while streaming (request ${requestId}).`)
     );
     sendSSEDone(reply);
 

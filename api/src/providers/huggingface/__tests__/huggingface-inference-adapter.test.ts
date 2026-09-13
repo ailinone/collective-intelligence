@@ -19,6 +19,7 @@
 
 import { describe, expect, it } from 'vitest';
 import { HuggingFaceInferenceAdapter, HF_NO_CACHE_HEADER } from '../huggingface-inference-adapter';
+import type { ChatRequest } from '@/types';
 
 /**
  * Reach the protected `buildRequestHeaders` method to verify header shape.
@@ -106,5 +107,58 @@ describe('HuggingFaceInferenceAdapter — no-cache header', () => {
     expect(headers['x-trace-id']).toBe('abc-123');
     // Default still intact when caller didn't override it.
     expect(headers['x-use-cache']).toBe('false');
+  });
+});
+
+/**
+ * HF's own chat-completion.md documents `reasoning_effort` ('none'|'minimal'|
+ * 'low'|'medium'|'high'|'xhigh') as the parameter that trades off latency and
+ * depth on reasoning models (DeepSeek-R1, Qwen3-Thinking, gpt-oss). Before
+ * this fix, the shared OpenAICompatibleHubAdapter only ever forwarded
+ * `thinking_budget` (an internal-only numeric knob HF's contract does not
+ * recognize) — our public `reasoning_effort` field never reached the wire.
+ * Mirrors the equivalent GroqAdapter getExtraChatPayloadFields test pack.
+ */
+function extraFields(
+  adapter: HuggingFaceInferenceAdapter,
+  model: string,
+  request: ChatRequest
+): Record<string, unknown> {
+  return (
+    adapter as unknown as {
+      getExtraChatPayloadFields: (m: string, r: ChatRequest) => Record<string, unknown>;
+    }
+  ).getExtraChatPayloadFields(model, request);
+}
+
+describe('HuggingFaceInferenceAdapter — reasoning_effort passthrough (doc: chat-completion.md)', () => {
+  it('forwards a valid reasoning_effort verbatim as HF\'s documented parameter', () => {
+    const adapter = makeAdapter();
+    const request = { model: 'deepseek-ai/DeepSeek-R1', messages: [], reasoning_effort: 'high' } as ChatRequest;
+    expect(extraFields(adapter, 'deepseek-ai/DeepSeek-R1', request)).toEqual({
+      reasoning_effort: 'high',
+    });
+  });
+
+  it.each(['low', 'medium', 'high'] as const)('forwards "%s" unchanged', (effort) => {
+    const adapter = makeAdapter();
+    const request = { model: 'openai/gpt-oss-120b', messages: [], reasoning_effort: effort } as ChatRequest;
+    expect(extraFields(adapter, 'openai/gpt-oss-120b', request)).toEqual({ reasoning_effort: effort });
+  });
+
+  it('returns {} when reasoning_effort is absent (safe no-op for non-reasoning models)', () => {
+    const adapter = makeAdapter();
+    const request = { model: 'Qwen/Qwen3.8-27B', messages: [] } as ChatRequest;
+    expect(extraFields(adapter, 'Qwen/Qwen3.8-27B', request)).toEqual({});
+  });
+
+  it('returns {} for a garbage/non-enum reasoning_effort value rather than forwarding it blindly', () => {
+    const adapter = makeAdapter();
+    const request = {
+      model: 'org/model',
+      messages: [],
+      reasoning_effort: 'ludicrous-speed',
+    } as unknown as ChatRequest;
+    expect(extraFields(adapter, 'org/model', request)).toEqual({});
   });
 });

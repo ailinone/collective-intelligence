@@ -145,7 +145,16 @@ function candidateSatisfiesCapability(c: FilterCandidate, cap: string): boolean 
   // For capabilities without a route flag (e.g. `reasoning`, `code`,
   // `multilingual`), defer to the canonical's normalised set. Falling
   // back to "supported" when present, "missing" when absent.
-  return c.canonical.normalizedCapabilities.has(id);
+  if (c.canonical.normalizedCapabilities.has(id)) return true;
+  // `normalizedCapabilities` stores the RAW catalog tags, so a required
+  // capability that the ontology folds onto a canonical id (`code_generation`
+  // → `code`, `embedding` → `embeddings`) would miss a model tagged with the
+  // other spelling. Compare NORMALISED forms on both sides so the fold is
+  // symmetric — this can only ADD matches, never drop one (LOTE AO).
+  for (const raw of c.canonical.normalizedCapabilities) {
+    if (capabilityOntology.normalize(raw) === id) return true;
+  }
+  return false;
 }
 
 // ─── Filter: contextWindow ──────────────────────────────────────────────

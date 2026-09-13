@@ -21,6 +21,7 @@ import { prisma } from '@/database/client';
 import { getDistributedCacheService } from '@/cache/distributed-cache-service';
 import { Prisma } from '@/generated/prisma/index.js';
 import { getModelSelectionCache } from '@/core/selection/model-selection-cache';
+import { buildMeasuredPerformanceStamp } from '@/services/model-performance-baseline';
 import type { Model, ModelCapability, ModelPerformance, TaskType } from '@/types';
 import type { Model as PrismaModel } from '@/generated/prisma/index.js';
 
@@ -906,7 +907,17 @@ export class ModelRepository {
   }
 
   /**
-   * Atualiza performance de um modelo
+   * Atualiza performance de um modelo com observações REAIS.
+   *
+   * This is the only writer of measured values into `models.performance`
+   * (model-validation-service aggregates real probe results and calls it). The
+   * record is stamped with provenance — `source: 'measured'`, an accumulating
+   * `samples` count and `measuredAt` — so discovery can tell a measurement from
+   * its own prior and stop overwriting it, and so the prior can be calibrated
+   * against the measured population. See model-performance-baseline.ts.
+   *
+   * @param sampleCount how many observations this update aggregates (defaults
+   *        to 1); accumulates onto whatever the record already carried.
    */
   async updateModelPerformance(
     modelId: string,
@@ -920,7 +931,8 @@ export class ModelRepository {
       codeBackendScore?: number;
       codeFrontendScore?: number;
       codeDataScienceScore?: number;
-    }
+    },
+    sampleCount = 1
   ): Promise<void> {
     const existing = await prisma.model.findFirst({
       where: { id: modelId },
@@ -932,7 +944,11 @@ export class ModelRepository {
     }
 
     const currentPerformance = (existing.performance as Record<string, unknown> | null) || {};
-    const updatedPerformance = { ...currentPerformance, ...performance };
+    const updatedPerformance = {
+      ...currentPerformance,
+      ...performance,
+      ...buildMeasuredPerformanceStamp(currentPerformance, sampleCount),
+    };
 
     await prisma.model.update({
       where: { uid: existing.uid },

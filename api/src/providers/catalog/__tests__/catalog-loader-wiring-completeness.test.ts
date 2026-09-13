@@ -91,7 +91,22 @@ const LOAD_SECRETS_PATH = join(__dirname, '..', '..', '..', 'config', 'load-secr
 const LOAD_SECRETS_SRC = readFileSync(LOAD_SECRETS_PATH, 'utf8');
 
 const WIRING_EXEMPTIONS: ReadonlySet<string> = new Set<string>([
-  // Empty by design.
+  // cartesia (2026-09-12): `isLlmClass()` below treats `textToSpeech` as
+  // LLM-class per this file's own J8 docstring ("any of chat, embeddings,
+  // streaming, tools, or audio* capabilities"), so a TTS-only catalog row
+  // reaches the J8 check. But CARTESIA_API_KEY is deliberately absent from
+  // LLM_PROVIDER_ENV_VARS in load-secrets-into-env.ts — same treatment as
+  // its sibling specialty-audio env vars DEEPGRAM_API_KEY and
+  // ELEVENLABS_API_KEY (neither has ever appeared there either; they just
+  // never reached this test because deepgram/elevenlabs are switch-only,
+  // with no catalog row for `candidates` to pick up). A pure TTS key
+  // should not satisfy the "at least one LLM key present" boot gate any
+  // more than an image-only key does (bfl/recraft/runwayml/topaz are
+  // already excluded there for that exact reason) — this exemption keeps
+  // cartesia consistent with its actual sibling audio providers instead
+  // of silently becoming the first of the three counted as an LLM key
+  // only because it happens to be the first with a catalog row.
+  'cartesia',
 ]);
 
 /** Image-only / video-only providers do not count toward the LLM gate. */

@@ -87,7 +87,7 @@ export const ONTOLOGY_SEED: ReadonlyArray<OntologyEntry> = [
     description: 'Produces audio outputs.',
     category: 'modality',
     broader: [],
-    narrower: [uri('text_to_speech'), uri('audio_generation')],
+    narrower: [uri('text_to_speech'), uri('audio_generation'), uri('music_generation')],
   },
   {
     slug: 'audio',
@@ -458,6 +458,29 @@ export const ONTOLOGY_SEED: ReadonlyArray<OntologyEntry> = [
     narrower: [],
   },
   {
+    // Added 2026-09-05 (LOTE AO): present in the legacy union since
+    // 2026-06-11 but never seeded — `legacy-capability-uri.test.ts` only
+    // missed it because its manual union mirror was equally stale.
+    slug: 'image_upscale',
+    preferredLabel: 'Image upscaling',
+    labels: { en: 'Image upscaling', pt: 'Ampliação de imagem' },
+    synonyms: ['upscale', 'super-resolution', 'image-enhancement'],
+    description: 'Increases image resolution / restores detail (super-resolution pipelines).',
+    category: 'task',
+    broader: [uri('image_editing')],
+    narrower: [],
+  },
+  {
+    slug: 'image_denoise',
+    preferredLabel: 'Image denoising',
+    labels: { en: 'Image denoising', pt: 'Remoção de ruído de imagem' },
+    synonyms: ['denoise', 'noise-reduction'],
+    description: 'Removes noise / artifacts from an existing image.',
+    category: 'task',
+    broader: [uri('image_editing')],
+    narrower: [],
+  },
+  {
     slug: 'video_generation',
     preferredLabel: 'Video generation',
     labels: { en: 'Video generation', pt: 'Geração de vídeo' },
@@ -523,6 +546,20 @@ export const ONTOLOGY_SEED: ReadonlyArray<OntologyEntry> = [
     labels: { en: 'Audio generation', pt: 'Geração de áudio' },
     synonyms: ['music-generation', 'sound-generation'],
     description: 'Generates audio (music, SFX, ambient).',
+    category: 'task',
+    broader: [uri('audio_output')],
+    narrower: [],
+  },
+  {
+    // Added LOTE AX (2026-09-06): distinct from `audio_generation` (TTS) —
+    // structured composition plans, minutes-long output, no "spoken text"
+    // input. ElevenLabs Music (`POST /v1/music`) onboarding.
+    slug: 'music_generation',
+    preferredLabel: 'Music generation',
+    labels: { en: 'Music generation', pt: 'Geração de música' },
+    synonyms: ['music-generation', 'soundtrack-generation', 'song-generation'],
+    description:
+      'Generates musical compositions (with or without vocals) from a text prompt or a structured composition plan.',
     category: 'task',
     broader: [uri('audio_output')],
     narrower: [],
@@ -762,6 +799,129 @@ export const ONTOLOGY_SEED: ReadonlyArray<OntologyEntry> = [
       'Designed for long-input workloads (typically ≥128k usable tokens with retained attention).',
     category: 'meta',
     broader: [],
+    narrower: [],
+  },
+
+  // ── task: file generation (promoted to the legacy union 2026-09-05) ───────
+  // These describe a DOWNLOADABLE ARTIFACT the platform renders, not a
+  // provider-side model skill. They previously lived only in
+  // `orchestration/capability-inference.ts#RequiredCapability` while the
+  // triage prompt demanded them "from the capability catalog" — a catalog
+  // that did not contain them. See the note in `types/index.ts`.
+  {
+    slug: 'file_generation',
+    preferredLabel: 'File generation',
+    labels: { en: 'File generation', pt: 'Geração de arquivo' },
+    synonyms: ['file-generation', 'document-export', 'downloadable-artifact'],
+    description: 'Produces a downloadable file artifact whose format is not otherwise specified.',
+    category: 'task',
+    broader: [],
+    narrower: [
+      uri('csv_generation'),
+      uri('json_generation'),
+      uri('markdown_generation'),
+      uri('docx_generation'),
+      uri('xlsx_generation'),
+      uri('pdf_generation'),
+      uri('pptx_generation'),
+      uri('zip_generation'),
+      uri('code_file_generation'),
+    ],
+  },
+  {
+    slug: 'csv_generation',
+    preferredLabel: 'CSV generation',
+    labels: { en: 'CSV generation', pt: 'Geração de CSV' },
+    synonyms: ['csv-generation', 'csv-export'],
+    description: 'Renders tabular data as a downloadable comma-separated-values file.',
+    category: 'task',
+    broader: [uri('file_generation')],
+    narrower: [],
+  },
+  {
+    slug: 'json_generation',
+    preferredLabel: 'JSON file generation',
+    labels: { en: 'JSON file generation', pt: 'Geração de arquivo JSON' },
+    // NOT a synonym of `json_mode`: that is a decoding constraint on a chat
+    // response, this produces a downloadable .json file.
+    synonyms: ['json-generation', 'json-file-export'],
+    description: 'Renders a structured payload as a downloadable JSON file.',
+    category: 'task',
+    broader: [uri('file_generation')],
+    narrower: [],
+  },
+  {
+    slug: 'markdown_generation',
+    preferredLabel: 'Markdown generation',
+    labels: { en: 'Markdown generation', pt: 'Geração de Markdown' },
+    synonyms: ['markdown-generation', 'md-export'],
+    description: 'Renders a document as a downloadable Markdown file.',
+    category: 'task',
+    broader: [uri('file_generation')],
+    narrower: [],
+  },
+  {
+    slug: 'docx_generation',
+    preferredLabel: 'Word document generation',
+    labels: { en: 'Word document generation', pt: 'Geração de documento Word' },
+    synonyms: ['docx-generation', 'word-export'],
+    description: 'Renders a rich text document as a downloadable .docx file.',
+    category: 'task',
+    broader: [uri('file_generation')],
+    narrower: [],
+  },
+  {
+    slug: 'xlsx_generation',
+    preferredLabel: 'Spreadsheet generation',
+    labels: { en: 'Spreadsheet generation', pt: 'Geração de planilha' },
+    synonyms: ['xlsx-generation', 'excel-export', 'spreadsheet-generation'],
+    description: 'Renders one or more sheets as a downloadable .xlsx workbook.',
+    category: 'task',
+    broader: [uri('file_generation')],
+    narrower: [],
+  },
+  {
+    slug: 'pdf_generation',
+    preferredLabel: 'PDF generation',
+    labels: { en: 'PDF generation', pt: 'Geração de PDF' },
+    // NOT a synonym of `pdf_understanding`: that CONSUMES a PDF, this
+    // PRODUCES one.
+    synonyms: ['pdf-generation', 'pdf-export'],
+    description: 'Renders a document as a downloadable PDF file.',
+    category: 'task',
+    broader: [uri('file_generation')],
+    narrower: [],
+  },
+  {
+    slug: 'pptx_generation',
+    preferredLabel: 'Slide deck generation',
+    labels: { en: 'Slide deck generation', pt: 'Geração de apresentação' },
+    synonyms: ['pptx-generation', 'powerpoint-export', 'slide-generation'],
+    description: 'Renders a slide deck as a downloadable .pptx file.',
+    category: 'task',
+    broader: [uri('file_generation')],
+    narrower: [],
+  },
+  {
+    slug: 'zip_generation',
+    preferredLabel: 'Archive generation',
+    labels: { en: 'Archive generation', pt: 'Geração de arquivo compactado' },
+    synonyms: ['zip-generation', 'archive-export', 'bundle-generation'],
+    description: 'Bundles several generated files into a single downloadable archive.',
+    category: 'task',
+    broader: [uri('file_generation')],
+    narrower: [],
+  },
+  {
+    slug: 'code_file_generation',
+    preferredLabel: 'Code file generation',
+    labels: { en: 'Code file generation', pt: 'Geração de arquivo de código' },
+    // Deliberately NOT `code_generation` — that slug means "good at writing
+    // code" and the collision was an exploitable routing bug (2026-07-16).
+    synonyms: ['code-file-generation', 'source-file-export'],
+    description: 'Exports source code as a downloadable file rather than an in-chat code block.',
+    category: 'task',
+    broader: [uri('file_generation')],
     narrower: [],
   },
 ];

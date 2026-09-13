@@ -119,7 +119,8 @@ export class GoogleModelFetcher extends BaseProviderModelFetcher {
           }
 
           const capabilities = this.extractCapabilitiesFromGoogle(modelId, modelData);
-          const { contextWindow, maxOutputTokens, pricing } = this.estimateModelSpecs(modelId);
+          const { contextWindow, maxOutputTokens, pricing, pricingSource } =
+            this.estimateModelSpecs(modelId);
 
           const metadata = {
             endpoint: this.determineEndpoint({ capabilities, metadata: {} } as ProviderModel),
@@ -133,6 +134,7 @@ export class GoogleModelFetcher extends BaseProviderModelFetcher {
             supportsGenerateContent: this.supportsGenerateContent(
               modelData?.supportedGenerationMethods
             ),
+            pricingSource,
           };
 
           const model: ProviderModel = {
@@ -363,52 +365,191 @@ export class GoogleModelFetcher extends BaseProviderModelFetcher {
       .join(' ');
   }
 
+  /**
+   * Source-of-truth tag for a price returned by {@link estimateModelSpecs} —
+   * identical rationale/shape to `VertexAIModelFetcher.PRICING_SOURCES`: a
+   * model that falls through to the generic default is indistinguishable
+   * downstream from one with a confirmed price unless something says so.
+   */
+  private static readonly PRICING_SOURCES = [
+    'gemini-1.5-tier-table',
+    'gemini-2.0-tier-table',
+    'gemini-2.5-tier-table',
+    'gemini-3.1-tier-table',
+    'gemini-3.5-tier-table',
+    'gemini-pro-legacy-tier-table',
+    'bison-legacy-tier-table',
+    'default-fallback',
+  ] as const;
+
+  /**
+   * Estimate model specifications for the Google AI Studio (native Gemini
+   * API) fetcher.
+   *
+   * ## 2026-09 audit finding
+   *
+   * This table had branches ONLY for `gemini-1.5`, `gemini-pro` (the 2023-era
+   * bare model), and PaLM's `bison` — every `gemini-2.0`/`gemini-2.5`/
+   * `gemini-3.x` id (the entire current Gemini lineup) fell through to the
+   * generic default (~$0.00025/$0.0005 per 1M), roughly 1000-5000x below the
+   * real rate card. This is the SAME bug class already found and fixed in
+   * the sibling `VertexAIModelFetcher.estimateVertexModelSpecs` (2026-09-05,
+   * "82 of 89 (92%) of google/vertex-ai rows were affected") — it was never
+   * ported to this fetcher, which backs the separate native `google` catalog
+   * provider (`GOOGLE_API_KEY`, `generativelanguage.googleapis.com`) instead
+   * of Vertex AI's `aiplatform.googleapis.com`.
+   *
+   * The tier prices below mirror the already-approved Vertex table (same
+   * reference files — see that file's doc comment for exactly which field
+   * each number comes from) and were independently re-checked against
+   * ai.google.dev/gemini-api/docs/pricing (2026-09-09), which prices Gemini
+   * API and Vertex AI identically per token. A sub-pattern with no confirmed
+   * reference price (e.g. a bare `gemini-3.1-flash` with no `-lite` suffix,
+   * `gemini-3.5-pro`, or anything from the `gemini-3.6`/`3.7`/`3.8` lines
+   * that shipped after this fix) is deliberately left at the flagged
+   * `default-fallback` rather than guessed from a sibling tier.
+   */
   private estimateModelSpecs(modelId: string): {
     contextWindow: number;
     maxOutputTokens: number;
     pricing: { inputCostPer1M: number; outputCostPer1M: number; currency: string };
+    pricingSource: (typeof GoogleModelFetcher.PRICING_SOURCES)[number];
   } {
-    // Gemini 1.5 models have massive context
-    if (modelId.includes('gemini-1.5')) {
-      if (modelId.includes('pro')) {
+    const name = modelId.toLowerCase();
+
+    if (name.includes('gemini-1.5')) {
+      if (name.includes('pro')) {
         return {
-          contextWindow: 1_000_000,
+          contextWindow: 2_097_152,
           maxOutputTokens: 8_192,
-          pricing: { inputCostPer1M: 0.00125, outputCostPer1M: 0.005, currency: 'USD' },
+          pricing: { inputCostPer1M: 3.5, outputCostPer1M: 10.5, currency: 'USD' },
+          pricingSource: 'gemini-1.5-tier-table',
         };
       }
-      if (modelId.includes('flash')) {
+      if (name.includes('flash')) {
         return {
-          contextWindow: 1_000_000,
+          contextWindow: 1_048_576,
           maxOutputTokens: 8_192,
-          pricing: { inputCostPer1M: 0.000075, outputCostPer1M: 0.0003, currency: 'USD' },
+          pricing: { inputCostPer1M: 0.075, outputCostPer1M: 0.3, currency: 'USD' },
+          pricingSource: 'gemini-1.5-tier-table',
         };
       }
     }
 
-    // Gemini Pro
-    if (modelId.includes('gemini-pro')) {
+    if (name.includes('gemini-2.0')) {
+      return {
+        contextWindow: 4_194_304,
+        maxOutputTokens: 16_384,
+        pricing: { inputCostPer1M: 5.0, outputCostPer1M: 15.0, currency: 'USD' },
+        pricingSource: 'gemini-2.0-tier-table',
+      };
+    }
+
+    if (name.includes('gemini-2.5')) {
+      // ai.google.dev/gemini-api/docs/pricing (checked 2026-09-09): all three
+      // sub-tiers confirmed, base (<=200k context) rate. flash-lite MUST be
+      // checked before flash — 'gemini-2.5-flash-lite'.includes('flash') is
+      // also true.
+      if (name.includes('flash-lite')) {
+        return {
+          contextWindow: 1_048_576,
+          maxOutputTokens: 65_536,
+          pricing: { inputCostPer1M: 0.1, outputCostPer1M: 0.4, currency: 'USD' },
+          pricingSource: 'gemini-2.5-tier-table',
+        };
+      }
+      if (name.includes('flash')) {
+        return {
+          contextWindow: 1_048_576,
+          maxOutputTokens: 65_536,
+          pricing: { inputCostPer1M: 0.3, outputCostPer1M: 2.5, currency: 'USD' },
+          pricingSource: 'gemini-2.5-tier-table',
+        };
+      }
+      // "pro" and any other 2.5 variant (bare "gemini-2.5") default to the
+      // flagship 2.5 rate card.
+      return {
+        contextWindow: 1_048_576,
+        maxOutputTokens: 65_536,
+        pricing: { inputCostPer1M: 1.25, outputCostPer1M: 10.0, currency: 'USD' },
+        pricingSource: 'gemini-2.5-tier-table',
+      };
+    }
+
+    if (name.includes('gemini-3.1')) {
+      if (name.includes('flash-lite')) {
+        return {
+          contextWindow: 1_048_576,
+          maxOutputTokens: 65_536,
+          pricing: { inputCostPer1M: 0.25, outputCostPer1M: 1.5, currency: 'USD' },
+          pricingSource: 'gemini-3.1-tier-table',
+        };
+      }
+      if (name.includes('pro')) {
+        return {
+          contextWindow: 1_048_576,
+          maxOutputTokens: 65_536,
+          pricing: { inputCostPer1M: 2.0, outputCostPer1M: 12.0, currency: 'USD' },
+          pricingSource: 'gemini-3.1-tier-table',
+        };
+      }
+      // A bare "gemini-3.1-flash" (no -lite) or any other 3.1 sub-variant has
+      // no confirmed reference price — fall through to default-fallback
+      // rather than reuse flash-lite's (or pro's) price.
+    } else if (name.includes('gemini-3.5')) {
+      if (name.includes('flash-lite')) {
+        return {
+          contextWindow: 1_048_576,
+          maxOutputTokens: 65_536,
+          pricing: { inputCostPer1M: 0.3, outputCostPer1M: 2.5, currency: 'USD' },
+          pricingSource: 'gemini-3.5-tier-table',
+        };
+      }
+      if (name.includes('flash')) {
+        return {
+          contextWindow: 1_048_576,
+          maxOutputTokens: 65_536,
+          pricing: { inputCostPer1M: 1.5, outputCostPer1M: 9.0, currency: 'USD' },
+          pricingSource: 'gemini-3.5-tier-table',
+        };
+      }
+      // No confirmed reference price for gemini-3.5-pro (or any other 3.5
+      // sub-variant) — default-fallback.
+    }
+
+    // Gemini Pro (2023-era bare model, no version number)
+    if (name.includes('gemini-pro')) {
       return {
         contextWindow: 32_768,
         maxOutputTokens: 2_048,
-        pricing: { inputCostPer1M: 0.0005, outputCostPer1M: 0.0015, currency: 'USD' },
+        pricing: { inputCostPer1M: 0.5, outputCostPer1M: 1.5, currency: 'USD' },
+        pricingSource: 'gemini-pro-legacy-tier-table',
       };
     }
 
     // PaLM models
-    if (modelId.includes('bison')) {
+    if (name.includes('bison')) {
       return {
         contextWindow: 8_192,
         maxOutputTokens: 1_024,
-        pricing: { inputCostPer1M: 0.0005, outputCostPer1M: 0.001, currency: 'USD' },
+        pricing: { inputCostPer1M: 0.5, outputCostPer1M: 1.0, currency: 'USD' },
+        pricingSource: 'bison-legacy-tier-table',
       };
     }
 
-    // Default specs
+    // Default specs - tagged so downstream cost-accounting can flag/query it
+    // instead of silently trusting an unconfirmed number (identical contract
+    // to VertexAIModelFetcher's `default-fallback`).
+    this.log.warn(
+      { modelId },
+      'Google Gemini pricing fell through to the unverified default fallback — no confirmed ' +
+        'reference price exists for this model id pattern.'
+    );
     return {
       contextWindow: 32_768,
       maxOutputTokens: 2_048,
       pricing: { inputCostPer1M: 0.00025, outputCostPer1M: 0.0005, currency: 'USD' },
+      pricingSource: 'default-fallback',
     };
   }
 }

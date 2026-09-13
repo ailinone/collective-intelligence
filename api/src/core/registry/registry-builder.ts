@@ -47,6 +47,7 @@ import type { ProviderModelRoute } from './model-route';
 import { buildRouteId } from './model-route';
 import type { LegacyModelSnapshot } from './legacy-model-snapshot';
 import { RuntimeModelRegistry } from './runtime-model-registry';
+import { capabilityOntology } from '../capabilities/capability-ontology';
 import type {
   RegistryBuildDiagnostics,
   RegistryBuildInput,
@@ -104,6 +105,32 @@ function hasCapability(caps: readonly string[], ...needles: readonly string[]): 
     }
   }
   return false;
+}
+
+/**
+ * Route-flag derivation, ontology-driven (LOTE AO, 2026-09-05).
+ *
+ * Before: each `supports*` boolean was derived from a hand-written list of
+ * substring needles that had drifted from the capability vocabulary — a
+ * model tagged only `audio_input`, `transcription`, `listen` or `audio` got
+ * `supportsAudio: false`, so STT-capable routes were structurally invisible
+ * to the retrieval filters.
+ *
+ * Now: the ontology's `routeFlag` IS the mapping (one place to declare that
+ * `diarization` implies `supportsAudio`), with the legacy substring needles
+ * kept as a fallback so recall can only go UP, never down — a snapshot tag
+ * like `vision_language` still matches the `vision` needle even though it is
+ * not an ontology alias.
+ */
+function derivesRouteFlag(
+  caps: readonly string[],
+  flag: keyof ProviderModelRoute,
+  ...legacyNeedles: readonly string[]
+): boolean {
+  for (const c of caps) {
+    if (capabilityOntology.get(c)?.routeFlag === flag) return true;
+  }
+  return hasCapability(caps, ...legacyNeedles);
 }
 
 /**
@@ -263,13 +290,24 @@ export function buildRuntimeModelRegistry(input: RegistryBuildInput): RegistryBu
 
       contextWindow,
       maxOutputTokens,
-      supportsStreaming: hasCapability(capabilities, 'streaming'),
-      supportsJson: hasCapability(capabilities, 'json_mode', 'json'),
-      supportsTools: hasCapability(capabilities, 'tools', 'function_calling'),
-      supportsVision: hasCapability(capabilities, 'vision', 'image_understanding'),
-      supportsImages: hasCapability(capabilities, 'image_generation', 'image_edit'),
-      supportsAudio: hasCapability(
+      supportsStreaming: derivesRouteFlag(capabilities, 'supportsStreaming', 'streaming'),
+      supportsJson: derivesRouteFlag(capabilities, 'supportsJson', 'json_mode', 'json'),
+      supportsTools: derivesRouteFlag(capabilities, 'supportsTools', 'tools', 'function_calling'),
+      supportsVision: derivesRouteFlag(
         capabilities,
+        'supportsVision',
+        'vision',
+        'image_understanding'
+      ),
+      supportsImages: derivesRouteFlag(
+        capabilities,
+        'supportsImages',
+        'image_generation',
+        'image_edit'
+      ),
+      supportsAudio: derivesRouteFlag(
+        capabilities,
+        'supportsAudio',
         'audio_generation',
         'text_to_speech',
         'speech_to_text'

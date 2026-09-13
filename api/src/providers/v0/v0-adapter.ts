@@ -104,12 +104,33 @@ export interface V0AdapterConfig extends BaseProviderConfig {
  * create-chat and send-message reference pages). v0 has no `/v1/models`
  * endpoint, so this doubles as the pinned model catalog `getModels()`
  * returns — mirrors `pinnedFallback.models` in providers.catalog.ts.
+ *
+ * `tool_use` removed from every model's capability list, 2026-09-08: this
+ * capability gates real routing decisions elsewhere (see
+ * `core/selection/dynamic-model-selector.ts`, `core/pool/pool-builder.ts`)
+ * — a caller with a tool-calling task can get routed to a model that
+ * advertises it. As `warnIfToolsUnsupported()` and this file's class doc
+ * comment both already establish, v0's Platform API has NO OpenAI-style
+ * `tools`/`tool_choice` field at all (only `attachedSkillIds`/
+ * `mcpServerIds`, neither a caller-supplied-JSON-schema-function
+ * equivalent) — so `tool_use` was never a true capability of any v0 model,
+ * on this or any other request path, streaming or not.
  */
+// No `tool_use`: v0's documented POST /chats request schema
+// (https://v0.app/docs/api/platform/reference/chats/create) has no
+// tools/tool_choice/functions field on any model. `attachedSkillIds`/
+// `skills` are pre-registered skills.sh/memory/project skill references
+// (domain-knowledge attachments, max 3) and `mcpServerIds` references MCP
+// servers registered out-of-band that v0 may consult autonomously
+// server-side — neither lets a caller supply an arbitrary JSON-schema
+// function per request, and neither surfaces `tool_calls` back to the
+// caller to execute. 2026-09-09: removed the previously-incorrect
+// `tool_use` tag (mirrors the catalog fix in providers.catalog.ts).
 const V0_MODELS: ReadonlyArray<{ id: string; capabilities: ModelCapability[] }> = [
-  { id: 'v0-auto', capabilities: ['chat', 'streaming', 'tool_use', 'code_generation'] },
+  { id: 'v0-auto', capabilities: ['chat', 'streaming', 'code_generation'] },
   { id: 'v0-mini', capabilities: ['chat', 'streaming', 'code_generation'] },
-  { id: 'v0-pro', capabilities: ['chat', 'streaming', 'tool_use', 'code_generation'] },
-  { id: 'v0-max', capabilities: ['chat', 'streaming', 'tool_use', 'code_generation'] },
+  { id: 'v0-pro', capabilities: ['chat', 'streaming', 'code_generation'] },
+  { id: 'v0-max', capabilities: ['chat', 'streaming', 'code_generation'] },
   { id: 'v0-max-fast', capabilities: ['chat', 'streaming', 'code_generation'] },
 ] as const;
 
@@ -210,6 +231,7 @@ export class V0Adapter extends ProviderAdapter {
    * (not built this pass).
    */
   async chatCompletion(request: ChatRequest): Promise<ChatResponse> {
+    this.warnIfToolsUnsupported(request);
     const { message, system } = this.buildV0Message(request);
     const modelId = this.resolveModelId(request.model);
 
@@ -245,11 +267,21 @@ export class V0Adapter extends ProviderAdapter {
     }, 'chat completion');
   }
 
+  /**
+   * v0 lists `experimental_stream` as a `responseMode`, but the documented
+   * API surface (see the class doc comment) gives no event/chunk shape for
+   * it — wiring real incremental text streaming is a follow-up once that
+   * shape is captured live. Honest placeholder pattern (same as
+   * WatsonxAdapter's original): call the non-streaming path once and yield
+   * the single result.
+   *
+   * Streaming TOOL-CALL deltas specifically (audit, 2026-09-08): moot, not
+   * just unimplemented — v0's Platform API has no `tools`/`tool_choice`
+   * field on ANY request shape, streaming or not (see
+   * `warnIfToolsUnsupported()` and the class doc comment). There is no tool
+   * call for this method to ever stream incrementally.
+   */
   async *chatCompletionStream(request: ChatRequest): AsyncGenerator<ChatResponse, void, unknown> {
-    // v0 lists 'experimental_stream' as a responseMode, but wiring real
-    // SSE is a follow-up — honest placeholder pattern (same as
-    // WatsonxAdapter): call the non-streaming path once and yield the
-    // single result.
     const once = await this.chatCompletion(request);
     yield once;
   }
@@ -330,6 +362,31 @@ export class V0Adapter extends ProviderAdapter {
     };
     if (includeJsonContentType) headers['Content-Type'] = 'application/json';
     return headers;
+  }
+
+  /**
+   * `tools` / `tool_choice` (2026-09-08): v0's documented `POST /chats` body
+   * (see class doc comment) has NO field shaped like OpenAI's `tools`/
+   * `tool_choice` — its only tool-adjacent inputs are `attachedSkillIds`
+   * (platform-predefined Skills, not caller-supplied JSON-schema functions)
+   * and `mcpServerIds` (remote MCP server references), neither of which a
+   * generic `Tool[]` + `tool_choice` pair maps onto. `buildV0Message`
+   * already silently drops `function`/`tool`-role messages for the same
+   * reason. Previously `request.tools`/`request.tool_choice` were also
+   * silently ignored with no signal at all — a caller asking for
+   * `tool_choice: 'none'` or a forced function call would see it vanish
+   * without a trace. This logs once per call so the gap is visible instead
+   * of silent; it does not attempt to fabricate a mapping onto `skills`/
+   * `mcpServerIds` since those are not equivalent to arbitrary
+   * caller-defined functions.
+   */
+  private warnIfToolsUnsupported(request: ChatRequest): void {
+    if (request.tools?.length || request.tool_choice) {
+      this.vlog.warn(
+        { toolCount: request.tools?.length ?? 0, toolChoice: request.tool_choice },
+        "v0: request declared tools/tool_choice but v0's Platform API has no OpenAI-style tools field (only attachedSkillIds/mcpServerIds) — ignoring both, no wire equivalent exists"
+      );
+    }
   }
 
   private resolveModelId(modelName?: string): string {

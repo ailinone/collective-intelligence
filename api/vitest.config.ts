@@ -28,6 +28,30 @@ export default defineConfig({
     unstubEnvs: true,
     unstubGlobals: true,
     testTimeout: 300_000,  // 5 min for long integration (e.g. all-140-operations)
+    // CI-COVERAGE AUDIT (2026-09-05) parity: vitest.ci.config.ts already excludes
+    // this directory with the note below; this bare/default config (what
+    // `pnpm test` runs with zero args) never got the matching exclude, so a
+    // plain `pnpm test` silently regresses to the REAL response-aggregator +
+    // ensemble-shadow modules for every consensus-strategy test that calls
+    // ConsensusStrategy.execute(). Those tests only pass under the mocks
+    // registered by consensus-validation.setup.ts (see consensus-module-mocks.ts's
+    // header) or by a file-local vi.mock — this config provides neither, so the
+    // strategy hits the unmocked aggregator, which has no provider registry in
+    // the test environment ("Provider registry not initialized") and falls back
+    // unpredictably, producing selection/validationStatus results the tests
+    // never asserted on. That is a test-invocation mismatch, not a product bug:
+    // ConsensusStrategy's fallback/validationStatus logic and the two
+    // consensus-strategy.fallback/validation-status test files are both correct
+    // (verified 100% green under the configs that actually own them). This
+    // directory is exhaustively covered elsewhere — vitest.consensus-validation.config.ts
+    // (the consensus-strategy.* subset, DB-free, aggregator mocked) and
+    // vitest.orchestration.config.ts (everything else here, DB-free) — and run
+    // by the "Consensus strategy validation" / "Orchestration suites" CI steps.
+    exclude: [
+      '**/node_modules/**',
+      '**/dist/**',
+      'src/core/orchestration/strategies/__tests__/**',
+    ],
     // CRITICAL: Ensure complete isolation between test files
     // This prevents race conditions and data interference when tests share a database
     sequence: {

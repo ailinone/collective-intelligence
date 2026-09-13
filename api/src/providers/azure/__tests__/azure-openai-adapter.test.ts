@@ -14,12 +14,21 @@
  * emit a literal-template URL that 404s (best case).
  */
 
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   AzureOpenAIAdapter,
   AZURE_OPENAI_DEFAULT_API_VERSION,
   buildAzureOpenAIBaseUrl,
 } from '../azure-openai-adapter';
+import type { ChatRequest } from '@/types';
+
+// `chatCompletion()` normalizes the requested model against the catalog
+// before sending — mock the DB-backed lookup so the new prompt_cache_key
+// tests below don't need a live database (matches the pattern
+// openai-compatible-hub-adapter's own cache-observability tests use).
+vi.mock('@/services/model-catalog-service', () => ({
+  getModelsByProvider: vi.fn().mockResolvedValue([]),
+}));
 
 const ENV_KEYS = [
   'AZURE_OPENAI_RESOURCE_NAME',
@@ -292,5 +301,70 @@ describe('AzureOpenAIAdapter — identity + introspection', () => {
       apiKey: 'k',
     });
     expect(missing.getDeployment()).toBe('unconfigured');
+  });
+});
+
+/**
+ * ADR-025 follow-up (2026-09-09): Azure OpenAI documents the same
+ * `prompt_cache_key` request field and contract as OpenAI itself, but
+ * `AzureOpenAIAdapter` extends the generic hub (not `openai-adapter.ts`), so
+ * it does not inherit that adapter's own wiring — see the adapter's
+ * `getExtraChatPayloadFields()` override for the citation.
+ */
+describe('AzureOpenAIAdapter — prompt_cache_key (ADR-025 follow-up)', () => {
+  function jsonResponse(): Response {
+    return new Response(
+      JSON.stringify({
+        id: 'resp-1',
+        object: 'chat.completion',
+        created: Math.floor(Date.now() / 1000),
+        model: 'gpt-4o',
+        choices: [{ index: 0, message: { role: 'assistant', content: 'hi' }, finish_reason: 'stop' }],
+        usage: { prompt_tokens: 10, completion_tokens: 2, total_tokens: 12 },
+      }),
+      { status: 200, headers: { 'Content-Type': 'application/json' } }
+    );
+  }
+
+  function makeAdapter(): AzureOpenAIAdapter {
+    return new AzureOpenAIAdapter({
+      name: 'azure-openai',
+      enabled: true,
+      providerName: 'azure-openai',
+      apiKey: 'az_key',
+      resourceName: 'rsc',
+      deployment: 'gpt-4o',
+    });
+  }
+
+  function baseRequest(): ChatRequest {
+    return { model: 'gpt-4o', messages: [{ role: 'user', content: 'hello' }] };
+  }
+
+  it('sends a stable prompt_cache_key on every chat completion request', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(jsonResponse());
+    await makeAdapter().chatCompletion(baseRequest());
+
+    const [, init] = fetchSpy.mock.calls[0] as [string, RequestInit];
+    const body = JSON.parse(String(init.body)) as { prompt_cache_key?: string };
+    expect(typeof body.prompt_cache_key).toBe('string');
+    expect(body.prompt_cache_key).toMatch(/^(conv|prefix):/);
+  });
+
+  it('sends the SAME prompt_cache_key across two requests with the same prefix', async () => {
+    const fetchSpy = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(jsonResponse())
+      .mockResolvedValueOnce(jsonResponse());
+    const adapter = makeAdapter();
+
+    await adapter.chatCompletion(baseRequest());
+    await adapter.chatCompletion(baseRequest());
+
+    const bodies = fetchSpy.mock.calls.map(
+      ([, init]) => (JSON.parse(String((init as RequestInit).body)) as { prompt_cache_key?: string })
+        .prompt_cache_key
+    );
+    expect(bodies[0]).toBe(bodies[1]);
   });
 });

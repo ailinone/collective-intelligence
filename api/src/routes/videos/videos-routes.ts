@@ -36,6 +36,9 @@ const VideoGenerationRequestSchema = z.object({
   duration: z.number().int().min(1).max(120).optional(),
   aspect_ratio: z.string().optional(),
   size: z.string().optional(),
+  resolution: z.string().optional(),
+  generate_audio: z.boolean().optional(),
+  soundtrack_audio_base64: z.string().optional(),
   n: z.number().int().min(1).max(8).optional().default(1),
   response_format: z.enum(['url', 'b64_json']).optional().default('url'),
   strategy: z
@@ -70,6 +73,9 @@ interface VideoGenerationRequest {
   duration?: number;
   aspect_ratio?: string;
   size?: string;
+  resolution?: string;
+  generate_audio?: boolean;
+  soundtrack_audio_base64?: string;
   n?: number;
   response_format?: 'url' | 'b64_json';
   strategy?: string;
@@ -105,6 +111,21 @@ export async function registerVideosRoutes(server: FastifyInstance): Promise<voi
           duration: { type: 'integer', minimum: 1, maximum: 120 },
           aspect_ratio: { type: 'string' },
           size: { type: 'string' },
+          resolution: {
+            type: 'string',
+            description:
+              "Structural resolution request (e.g. '4K', '1080p'), distinct from the free-form size string. Reaches providers with a real resolution parameter (e.g. BytePlus, Google Veo); ignored as a no-op elsewhere.",
+          },
+          generate_audio: {
+            type: 'boolean',
+            description:
+              'Request a native, vendor-generated video soundtrack (e.g. BytePlus Seedance). Distinct from `audio`, which is an input conditioning clip. Ignored as a no-op on adapters without this feature.',
+          },
+          soundtrack_audio_base64: {
+            type: 'string',
+            description:
+              'Base64-encoded audio bytes to attach to the generated video when the selected model has no native soundtrack feature (generate_audio would be a no-op there). Muxed in via ffmpeg as a best-effort step — on failure the original (silent) video is still returned. Base64 only, not a URL, to avoid a server-side fetch of caller-supplied URLs.',
+          },
           n: { type: 'integer', minimum: 1, maximum: 8, default: 1 },
           response_format: { type: 'string', enum: ['url', 'b64_json'], default: 'url' },
           strategy: {
@@ -151,6 +172,8 @@ export async function registerVideosRoutes(server: FastifyInstance): Promise<voi
                 model_used: { type: 'string' },
                 provider: { type: 'string' },
                 duration_ms: { type: 'number' },
+                audio_composed: { type: 'boolean' },
+                audio_requirement_unmet: { type: 'boolean' },
               },
             },
           },
@@ -192,6 +215,9 @@ export async function registerVideosRoutes(server: FastifyInstance): Promise<voi
               duration: validated.duration,
               aspectRatio: validated.aspect_ratio,
               size: validated.size,
+              resolution: validated.resolution,
+              generateAudio: validated.generate_audio,
+              soundtrackAudioBase64: validated.soundtrack_audio_base64,
               n: validated.n,
               responseFormat: validated.response_format,
               strategy: validated.strategy,
@@ -217,6 +243,21 @@ export async function registerVideosRoutes(server: FastifyInstance): Promise<voi
             model_used: result.modelUsed,
             provider: result.provider,
             duration_ms: result.durationMs,
+            ...(result.audioComposed !== undefined
+              ? { audio_composed: result.audioComposed }
+              : {}),
+            ...(result.audioRequirementUnmet !== undefined
+              ? { audio_requirement_unmet: result.audioRequirementUnmet }
+              : {}),
+            // 2026-09-09: surfaced honestly, never fabricated — see
+            // VideoResult.durationExtended/durationRequirementUnmet's doc.
+            // Only present when a `duration` was requested at all.
+            ...(result.durationExtended !== undefined
+              ? { duration_extended: result.durationExtended }
+              : {}),
+            ...(result.durationRequirementUnmet !== undefined
+              ? { duration_requirement_unmet: result.durationRequirementUnmet }
+              : {}),
           },
         });
       } catch (error: unknown) {

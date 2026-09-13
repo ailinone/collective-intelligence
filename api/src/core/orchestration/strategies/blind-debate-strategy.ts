@@ -18,7 +18,7 @@
  * All models respond in PARALLEL (blind), then adjudicator synthesizes.
  */
 
-import { BaseStrategy, type StrategyMetadata } from '../base-strategy';
+import { BaseStrategy, mergeArtifacts, type StrategyMetadata } from '../base-strategy';
 import { PROMPTS } from '../prompts/sota-system-prompts';
 import { resolvePreferredExecutor, withPreferredFirst } from './preferred-model-helper';
 import type {
@@ -242,6 +242,7 @@ export class BlindDebateStrategy extends BaseStrategy {
       modelsUsed: executions,
       totalDuration: Date.now() - startTime,
       totalCost: executions.reduce((s, e) => s + (e.cost ?? 0), 0),
+      toolArtifacts: mergeArtifacts(executions),
       metadata: {
         strategy: 'blind-debate',
         respondents: respondents.length,
@@ -456,6 +457,7 @@ export class BlindDebateStrategy extends BaseStrategy {
       modelsUsed: executions,
       totalDuration: Date.now() - startTime,
       totalCost: 0,
+      toolArtifacts: mergeArtifacts(executions),
       metadata: { strategy: 'blind-debate', error: 'all-failed' },
     };
   }

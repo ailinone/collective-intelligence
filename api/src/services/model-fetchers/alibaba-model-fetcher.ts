@@ -315,9 +315,20 @@ export class AlibabaModelFetcher extends BaseProviderModelFetcher {
       capabilities.push('vision', 'multimodal');
     }
 
-    // Coder models are specialized for coding
+    // Coder models are specialized for coding. NOTE: `code_generation` (this
+    // model writes/understands code well), NOT `code_interpreter` (a REAL,
+    // provider-declared server-side sandbox/execution tool — no Alibaba
+    // model declares one; see capability-ontology.ts's canonical definition
+    // and model-capability-inference.ts's declared-parameter rule, which is
+    // the only legitimate source of `code_interpreter`). Tagging a coder-
+    // specialized chat model with `code_interpreter` corrupted
+    // CodeExecutionService's own `searchModels({capabilities:
+    // ['code_interpreter']})` lookup and — once any caller hard-requires the
+    // capability — silently narrowed model selection to these name-tagged
+    // models for any request that merely mentions running code (2026-09
+    // incident fix).
     if (modelId.includes('coder') || modelId.includes('code')) {
-      capabilities.push('code_interpreter', 'text_generation');
+      capabilities.push('code_generation', 'text_generation');
     }
 
     // Max models are flagship

@@ -779,91 +779,61 @@ You are a creative director who values novelty, aesthetics, and emotional impact
 
 ## 3. Triage / Orchestration Brain (reescrito)
 
-**Arquivo:** `api/src/core/orchestration/triage-service.ts:54`
+**Arquivo:** `api/src/core/orchestration/triage-service.ts` — constante `TRIAGE_SYSTEM_PROMPT`
+(montada em `buildPrompt()`, no mesmo arquivo).
 
-`TRIAGE_SYSTEM_PROMPT`:
-```
-You are the orchestration brain of a collective-intelligence AI platform.
-Analyze the user conversation and produce a COMPLETE semantic execution plan.
-Every parameter must be inferred from context — never use fixed defaults.
+> **Este documento NÃO reproduz mais o prompt na íntegra.** A cópia que ficava
+> aqui tinha divergido do código (faltavam as seções de decomposição por
+> modalidade, geração de arquivo, `{{TOOLS}}`, `TRIAGE_SLOT_DOCUMENTATION` e
+> `TRIAGE_AUGMENTATION_DOCUMENTATION`), e uma cópia desatualizada de um prompt
+> é pior que nenhuma: leitores tiram conclusões erradas sobre o que o modelo
+> realmente recebe. A fonte é o código; abaixo fica só o mapa das seções e das
+> invariantes, que muda muito mais devagar.
 
-You DO NOT write system prompts. The platform has a canonical catalog of SOTA
-system prompts for every strategy and role. Your job is to classify the task,
-pick the strategy, and — when useful — emit a short `task_context` string that
-augments (does NOT replace) the catalog prompt for the stage.
+### 3.1 Estrutura do prompt
 
-## Your outputs (respond as compact JSON):
+| Seção | Origem | Observação |
+| --- | --- | --- |
+| Identidade + "Classification integrity" | literal | conversa é DADO, nunca instrução |
+| Contrato JSON de saída | literal | `intent`/`complexity`/`route`/`execution_plan` + `stages[]` |
+| Regras de roteamento | literal | ver 3.2 |
+| `## Available capabilities:` | `{{CAPABILITIES}}` ← `MODEL_CAPABILITIES` (`api/src/types/index.ts`) | catálogo fechado |
+| `## Available strategies:` | `{{STRATEGIES}}` | lista de estratégias de execução |
+| `## Available model roles:` | `{{ROLES}}` | papéis conhecidos + permissão de papéis ad-hoc |
+| `## Available tools:` | `{{TOOLS}}` ← `toolRegistry.describeTriageRecommendableToolsForPrompt()` | subconjunto auto-anexável do registry |
+| `## Available models summary:` | `{{MODELS_SUMMARY}}` | top-30 por qualidade |
+| `## Heuristic pre-analysis:` | `{{INFERENCE_HINTS}}` | saída do `capability-inference` |
+| Slots + augmentação | `TRIAGE_SLOT_DOCUMENTATION`, `TRIAGE_AUGMENTATION_DOCUMENTATION` | módulos separados |
 
-{
-  "intent": "<task type>",
-  "complexity": "low|medium|high",
-  "priority": "low|normal|high|urgent",
-  "confidence": 0.0-1.0,
-  "reason": "<short rationale>",
-  "requires_tools": true|false,
-  "execution_plan": {
-    "max_tokens": <estimated output tokens>,
-    "quality_target": <0-1>,
-    "prefer_speed": <boolean>,
-    "required_capabilities": [<from the capability catalog below>],
-    "estimated_input_tokens": <context tokens the models must process>,
-    "strategy": "<top-level strategy name from the catalog below>",
-    "model_count": <1-9, sum of role counts across all stages>,
-    "max_deliberation_rounds": <0-5>,
-    "requires_continuation": <true if output may exceed model output window>,
-    "stages": [
-      {
-        "name": "<semantic stage name>",
-        "strategy": "<sub-strategy for this stage>",
-        "model_roles": [
-          {
-            "role": "<role name — known or ad-hoc>",
-            "count": <models filling this role>,
-            "preferred_capabilities": [<capabilities ideal for this role>],
-            "quality_target": <min quality for models in this role>
-          }
-        ],
-        "required_capabilities": [<capabilities needed for this stage>],
-        "max_tokens": <output budget for this stage>,
-        "task_context": "<OPTIONAL: <=400 chars of task-specific context that augments the canonical strategy prompt. Examples: 'Focus on latency-risk tradeoffs in the current event orchestration path.' or 'The user is debugging a failing Postgres migration; surface lock contention as a hypothesis.' DO NOT restate identity, role, capabilities, or collective-intelligence framing — the catalog prompt already covers those. OMIT this field entirely if you have nothing task-specific to add.>"
-      }
-    ]
-  }
-}
+### 3.2 Invariantes das regras (o que os testes travam)
 
-## Rules:
-- For simple tasks: 1 stage, 1-3 models, strategy "single" or "parallel"
-- For complex tasks: 2-5 stages with different sub-strategies per stage
-- NEVER fabricate full system prompts. Only emit `task_context`, short and task-specific.
-- NEVER put "You are..." or role identity text in `task_context`.
-- `task_context` is OPTIONAL — omit it unless you have concrete task-specific guidance that the canonical prompt cannot infer.
-- Capabilities must come from the catalog provided
-- model_count = sum of all role counts across all stages
-- If the task involves images/audio/video, require the matching multimodal capabilities
-- Safety-critical tasks (medical, legal, financial): quality_target >= 0.95 and include a validation stage
-- For code tasks, include testing/review stages with appropriate roles
-- Strategies can be combined across stages
-- Roles can be ad-hoc: "security_auditor", "ux_reviewer", "data_scientist" — whatever fits the task
-
-## Available capabilities:
-{{CAPABILITIES}}
-
-## Available strategies:
-{{STRATEGIES}}
-
-## Available model roles (or create contextual ones):
-{{ROLES}}
-
-## Available models summary:
-{{MODELS_SUMMARY}}
-
-## Heuristic pre-analysis (may override if your semantic analysis disagrees):
-{{INFERENCE_HINTS}}
-
-Respond with JSON only. No markdown, no explanation.
-```
-
-**Mudança crítica vs. versão anterior**: o triage não fabrica mais `system_prompt` por role/stage. Em vez disso, emite apenas `task_context` (<=400 chars) que complementa o prompt canônico do catálogo SOTA. O execution prompt (§4) consome esse `task_context` como última seção.
+- **Não fabrica system prompt.** Só `task_context` (<=400 chars) que COMPLEMENTA
+  o prompt canônico do catálogo SOTA. O execution prompt (§4) consome esse
+  `task_context` como última seção.
+- **Capabilities vêm do catálogo injetado**, verbatim. Travado por
+  `api/src/core/capabilities/__tests__/triage-prompt-capability-consistency.test.ts`,
+  que renderiza o prompt final e falha se alguma capability citada nas regras
+  não estiver em `{{CAPABILITIES}}`.
+- **Um estágio dedicado por modalidade de SAÍDA** (`image_generation`,
+  `video_generation`, `audio_generation`/`text_to_speech`) e por formato de
+  ARQUIVO (`csv|json|markdown|docx|xlsx|pdf|pptx|zip|code_file|file`
+  `_generation`), sempre com `generation_prompt` autocontido e sem misturar
+  com capabilities de chat.
+- **Modalidade de ENTRADA é um eixo separado** (LOTE AO): pedidos de
+  transcrição/entendimento de áudio usam `speech_to_text` / `transcription` /
+  `audio_input` / `diarization` / `video_transcription`, NUNCA
+  `audio_generation`. Estágio de entrada é um estágio comum (tem
+  `model_roles`, produz texto).
+- **`function_calling`/`tool_use` NÃO é filtro duro.** O seletor
+  (`dynamic-model-selector.ts`) exclui a capability do filtro fail-closed e
+  resolve com o probe empírico de runtime (`function-calling-probe.ts`); o
+  sinal que a plataforma consome é `requires_tools` + `recommended_tools`.
+- **`recommended_tools` só aceita nomes do registry.** O catálogo mostrado e o
+  filtro de defesa em profundidade em
+  `orchestration-engine.ts#applyRecommendedTools` leem a MESMA regra
+  estrutural (`isAutoRecommendable`, em `core/tools/tool-registry.ts`):
+  `safeForStrategies` + categoria de efeito externo/sandboxed, ou opt-in
+  explícito. Nunca ferramentas do filesystem/codebase do servidor.
 
 ---
 

@@ -197,7 +197,264 @@ describe('PerplexityAgentAdapter — tool calling', () => {
         id: 'toolu_bdrk_01KLxcJ4XGm6G6w5aZsyBmkD',
         type: 'function',
         function: { name: 'get_weather', arguments: '{"city": "Paris"}' },
+        index: 0,
       },
     ]);
+  });
+});
+
+describe('PerplexityAgentAdapter — streaming tool-call deltas (2026-09-08 fix)', () => {
+  const TOOLS_REQUEST: ChatRequest = {
+    ...CHAT_REQUEST,
+    tools: [
+      {
+        type: 'function',
+        function: {
+          name: 'get_weather',
+          description: 'Get current weather for a city',
+          parameters: { type: 'object', properties: { city: { type: 'string' } } },
+        },
+      },
+    ],
+  };
+
+  /**
+   * Synthetic (not live-captured — see the class doc comment's "Streaming
+   * tool-call deltas" section for why: Perplexity's docs establish these
+   * event types and fields exist, but this repo has no live capture of a
+   * tool-calling turn's streaming shape yet) SSE sequence: a function_call
+   * output item starts empty, then completes with full arguments, then the
+   * terminal response.completed event.
+   */
+  const TOOL_CALL_SSE_FIXTURE = `event: response.created
+data: {"response":{"created_at":1784183995,"id":"resp_tool_stream","model":"anthropic/claude-haiku-4-5","object":"response","output":[],"status":"in_progress","usage":null},"sequence_number":0,"type":"response.created"}
+
+event: response.output_item.added
+data: {"item":{"id":"fc_1","call_id":"toolu_stream_1","name":"get_weather","type":"function_call","arguments":""},"output_index":0,"sequence_number":1,"type":"response.output_item.added"}
+
+event: response.output_item.done
+data: {"item":{"id":"fc_1","call_id":"toolu_stream_1","name":"get_weather","type":"function_call","arguments":"{\\"city\\":\\"Lisbon\\"}","status":"completed"},"output_index":0,"sequence_number":2,"type":"response.output_item.done"}
+
+event: response.completed
+data: {"response":{"created_at":1784183995,"id":"resp_tool_stream","model":"anthropic/claude-haiku-4-5","object":"response","output":[{"id":"fc_1","call_id":"toolu_stream_1","name":"get_weather","arguments":"{\\"city\\":\\"Lisbon\\"}","type":"function_call"}],"status":"completed","usage":{"input_tokens":40,"input_tokens_details":{"cached_tokens":0},"output_tokens":10,"output_tokens_details":{"reasoning_tokens":0},"total_tokens":50}},"sequence_number":3,"type":"response.completed"}
+`;
+
+  it('announces the tool call (id+name, empty arguments) on response.output_item.added', async () => {
+    const adapter = makeAdapter();
+    vi.spyOn(adapter, 'normalizeModelName').mockResolvedValue('anthropic/claude-haiku-4-5');
+    vi.spyOn(
+      adapter as unknown as { sendJsonRequestWithRetry: (o: unknown) => Promise<Response> },
+      'sendJsonRequestWithRetry'
+    ).mockResolvedValue(sseResponse(TOOL_CALL_SSE_FIXTURE));
+
+    const chunks = await collect(adapter.chatCompletionStream(TOOLS_REQUEST));
+    const announce = chunks[0]!;
+    expect(announce.choices[0]!.delta?.tool_calls).toEqual([
+      { id: 'toolu_stream_1', type: 'function', function: { name: 'get_weather', arguments: '' }, index: 0 },
+    ]);
+  });
+
+  it('delivers the complete arguments on response.output_item.done, before response.completed', async () => {
+    const adapter = makeAdapter();
+    vi.spyOn(adapter, 'normalizeModelName').mockResolvedValue('anthropic/claude-haiku-4-5');
+    vi.spyOn(
+      adapter as unknown as { sendJsonRequestWithRetry: (o: unknown) => Promise<Response> },
+      'sendJsonRequestWithRetry'
+    ).mockResolvedValue(sseResponse(TOOL_CALL_SSE_FIXTURE));
+
+    const chunks = await collect(adapter.chatCompletionStream(TOOLS_REQUEST));
+    const argsChunk = chunks[1]!;
+    expect(argsChunk.choices[0]!.delta?.tool_calls).toEqual([
+      {
+        id: 'toolu_stream_1',
+        type: 'function',
+        function: { name: 'get_weather', arguments: '{"city":"Lisbon"}' },
+        index: 0,
+      },
+    ]);
+    // Reassembling via the standard `arguments += delta` pattern still
+    // produces valid, correct JSON even though this arrives as one fragment.
+    const allToolCalls = chunks.flatMap((c) => c.choices[0]?.delta?.tool_calls ?? []);
+    const reassembled = allToolCalls.map((tc) => tc.function.arguments).join('');
+    expect(JSON.parse(reassembled)).toEqual({ city: 'Lisbon' });
+  });
+
+  it('does NOT repeat tool_calls in the terminal response.completed chunk (no double-delivery)', async () => {
+    const adapter = makeAdapter();
+    vi.spyOn(adapter, 'normalizeModelName').mockResolvedValue('anthropic/claude-haiku-4-5');
+    vi.spyOn(
+      adapter as unknown as { sendJsonRequestWithRetry: (o: unknown) => Promise<Response> },
+      'sendJsonRequestWithRetry'
+    ).mockResolvedValue(sseResponse(TOOL_CALL_SSE_FIXTURE));
+
+    const chunks = await collect(adapter.chatCompletionStream(TOOLS_REQUEST));
+    const terminal = chunks[chunks.length - 1]!;
+    expect(terminal.choices[0]!.finish_reason).toBe('tool_calls');
+    expect(terminal.choices[0]!.delta?.tool_calls).toBeUndefined();
+
+    // Exactly 2 tool_calls deltas total across the whole stream (announce +
+    // complete-arguments) — not 3, which would mean the terminal chunk
+    // re-sent them.
+    const allToolCalls = chunks.flatMap((c) => c.choices[0]?.delta?.tool_calls ?? []);
+    expect(allToolCalls).toHaveLength(2);
+  });
+});
+
+describe('PerplexityAgentAdapter — tool_choice mapping (no native field on this surface)', () => {
+  const TOOLS: ChatRequest['tools'] = [
+    {
+      type: 'function',
+      function: {
+        name: 'get_weather',
+        description: 'Get current weather for a city',
+        parameters: { type: 'object', properties: { city: { type: 'string' } } },
+      },
+    },
+    {
+      type: 'function',
+      function: {
+        name: 'get_time',
+        description: 'Get current time for a city',
+        parameters: { type: 'object', properties: { city: { type: 'string' } } },
+      },
+    },
+  ];
+
+  function nonStreamFixture(): Response {
+    return new Response(
+      JSON.stringify({
+        id: 'resp_tool_choice_fixture',
+        created_at: 1784184200,
+        model: 'anthropic/claude-haiku-4-5',
+        status: 'completed',
+        output: [{ content: [{ type: 'output_text', text: 'ok' }], type: 'message' }],
+        usage: { input_tokens: 10, output_tokens: 5, total_tokens: 15 },
+      }),
+      { status: 200 }
+    );
+  }
+
+  function spyOnSend(adapter: PerplexityAgentAdapter, response: Response) {
+    vi.spyOn(adapter, 'normalizeModelName').mockResolvedValue('anthropic/claude-haiku-4-5');
+    return vi
+      .spyOn(
+        adapter as unknown as { sendJsonRequestWithRetry: (o: unknown) => Promise<Response> },
+        'sendJsonRequestWithRetry'
+      )
+      .mockResolvedValue(response);
+  }
+
+  it("non-streaming: tool_choice:'none' omits tools[] entirely", async () => {
+    const adapter = makeAdapter();
+    const send = spyOnSend(adapter, nonStreamFixture());
+
+    await adapter.chatCompletion({ ...CHAT_REQUEST, tools: TOOLS, tool_choice: 'none' });
+
+    const payload = (send.mock.calls[0]![0] as { payload: Record<string, unknown> }).payload;
+    expect(payload.tools).toBeUndefined();
+  });
+
+  it("non-streaming: tool_choice:'auto' forwards every declared tool", async () => {
+    const adapter = makeAdapter();
+    const send = spyOnSend(adapter, nonStreamFixture());
+
+    await adapter.chatCompletion({ ...CHAT_REQUEST, tools: TOOLS, tool_choice: 'auto' });
+
+    const payload = (send.mock.calls[0]![0] as { payload: Record<string, unknown> }).payload;
+    expect(payload.tools).toEqual([
+      {
+        type: 'function',
+        name: 'get_weather',
+        description: 'Get current weather for a city',
+        parameters: { type: 'object', properties: { city: { type: 'string' } } },
+      },
+      {
+        type: 'function',
+        name: 'get_time',
+        description: 'Get current time for a city',
+        parameters: { type: 'object', properties: { city: { type: 'string' } } },
+      },
+    ]);
+  });
+
+  it('non-streaming: a forced {type:function} tool_choice narrows tools[] to just that function', async () => {
+    const adapter = makeAdapter();
+    const send = spyOnSend(adapter, nonStreamFixture());
+
+    await adapter.chatCompletion({
+      ...CHAT_REQUEST,
+      tools: TOOLS,
+      tool_choice: { type: 'function', function: { name: 'get_time' } },
+    });
+
+    const payload = (send.mock.calls[0]![0] as { payload: Record<string, unknown> }).payload;
+    expect(payload.tools).toEqual([
+      {
+        type: 'function',
+        name: 'get_time',
+        description: 'Get current time for a city',
+        parameters: { type: 'object', properties: { city: { type: 'string' } } },
+      },
+    ]);
+  });
+
+  it('non-streaming: a forced tool_choice naming an unknown function forwards the full list rather than sending an empty tools[]', async () => {
+    const adapter = makeAdapter();
+    const send = spyOnSend(adapter, nonStreamFixture());
+
+    await adapter.chatCompletion({
+      ...CHAT_REQUEST,
+      tools: TOOLS,
+      tool_choice: { type: 'function', function: { name: 'does_not_exist' } },
+    });
+
+    const payload = (send.mock.calls[0]![0] as { payload: Record<string, unknown> }).payload;
+    expect(payload.tools).toHaveLength(2);
+  });
+
+  it("streaming: tool_choice:'none' omits tools[] entirely", async () => {
+    const adapter = makeAdapter();
+    const send = spyOnSend(adapter, sseResponse(LIVE_SSE_FIXTURE));
+
+    await collect(
+      adapter.chatCompletionStream({ ...CHAT_REQUEST, tools: TOOLS, tool_choice: 'none' })
+    );
+
+    const payload = (send.mock.calls[0]![0] as { payload: Record<string, unknown> }).payload;
+    expect(payload.stream).toBe(true);
+    expect(payload.tools).toBeUndefined();
+  });
+
+  it('streaming: a forced {type:function} tool_choice narrows tools[] to just that function', async () => {
+    const adapter = makeAdapter();
+    const send = spyOnSend(adapter, sseResponse(LIVE_SSE_FIXTURE));
+
+    await collect(
+      adapter.chatCompletionStream({
+        ...CHAT_REQUEST,
+        tools: TOOLS,
+        tool_choice: { type: 'function', function: { name: 'get_weather' } },
+      })
+    );
+
+    const payload = (send.mock.calls[0]![0] as { payload: Record<string, unknown> }).payload;
+    expect(payload.tools).toEqual([
+      {
+        type: 'function',
+        name: 'get_weather',
+        description: 'Get current weather for a city',
+        parameters: { type: 'object', properties: { city: { type: 'string' } } },
+      },
+    ]);
+  });
+
+  it('does not send a tools field at all when the request declares no tools, regardless of tool_choice', async () => {
+    const adapter = makeAdapter();
+    const send = spyOnSend(adapter, nonStreamFixture());
+
+    await adapter.chatCompletion({ ...CHAT_REQUEST, tool_choice: 'auto' });
+
+    const payload = (send.mock.calls[0]![0] as { payload: Record<string, unknown> }).payload;
+    expect(payload.tools).toBeUndefined();
   });
 });

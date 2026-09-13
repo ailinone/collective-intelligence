@@ -29,8 +29,32 @@ import { ProviderAdapter } from '@/providers/base/provider-adapter';
 import { OpenAICompatibleHubAdapter } from '@/providers/openai-compatible-hub/openai-compatible-hub-adapter';
 import { PROVIDER_CATALOG } from '@/providers/catalog/providers.catalog';
 import type { ProviderCatalogEntry } from '@/providers/catalog/provider-catalog.types';
+import {
+  canSatisfyVideoAttributes,
+  type VideoAttributeRequest,
+} from '@/providers/catalog/video-capability-matcher';
+import {
+  extendVideoToDuration,
+  probeMedia,
+  muxAudioIntoVideo,
+  MediaToolkitUnavailableError,
+} from '@/services/media/ffmpeg-media-toolkit';
 
 const log = logger.child({ service: 'video-orchestration' });
+
+/**
+ * Duration-reconciliation tolerance (2026-09-09): only treat a generated
+ * clip as short of the request when the shortfall is BOTH more than 1
+ * absolute second AND more than 10% of the target. Encoder frame-rounding
+ * routinely lands a "10s" request at 9.6-10.0s — reprocessing every such
+ * near-exact result through ffmpeg would add latency/cost for a gap that
+ * was never real. This only gates the extend step; candidate SELECTION
+ * (`canSatisfyVideoAttributes`) is unaffected.
+ */
+function isMeaningfullyShort(actualSec: number, targetSec: number): boolean {
+  const shortfallSec = targetSec - actualSec;
+  return shortfallSec > 1 && shortfallSec > targetSec * 0.1;
+}
 
 export interface VideoGenerationOptions {
   prompt: string;
@@ -43,6 +67,51 @@ export interface VideoGenerationOptions {
   duration?: number;
   aspectRatio?: string;
   size?: string;
+  /**
+   * LOTE AS (2026-09-06): structural resolution request (e.g. '4K', '1080p'),
+   * distinct from the free-form `size` string. Reaches BytePlus's real
+   * RESOLUTIONS enum (byteplus-adapter.ts's `opts.resolution`) and Google's
+   * Veo `parameters.resolution` (google-adapter.ts's `options.resolution`,
+   * already wired independent of this change). Adapters with no resolution
+   * concept simply ignore it — no-op, never fabricated.
+   */
+  resolution?: string;
+  /**
+   * LOTE AS (2026-09-06): request a native, vendor-generated video
+   * soundtrack — BytePlus Seedance's real, vendor-documented `generate_audio`
+   * field (see providers.catalog.ts's byteplus note: "a video soundtrack,
+   * not TTS"), and Google Veo's own `parameters.generateAudio`. This is NOT
+   * the same as `audio` above, which is an INPUT conditioning clip URL.
+   * Ignored/no-op by adapters without a native soundtrack feature.
+   */
+  generateAudio?: boolean;
+  /**
+   * Package A (2026-09-09): a real soundtrack asset (base64-encoded audio
+   * bytes, NOT a URL — see the doc below) the caller wants attached to the
+   * generated video when the winning model can't do it natively.
+   *
+   * `generateAudio` above only reaches a NATIVE vendor soundtrack switch
+   * (BytePlus Seedance, Google Veo) — real, but a no-op on every other
+   * provider, including the two the catalog explicitly documents as having
+   * NO native audio feature (runwayml, siliconflow). This field is the
+   * "second specialized tool" completion of that story, mirroring the
+   * established `image_upscale`/`image_denoise` pattern (a first model
+   * generates the base asset, a second specialized step — there, Topaz;
+   * here, ffmpeg — completes a requirement the first model couldn't): after
+   * a candidate with no confirmed native audio support generates a (likely
+   * silent) video, this asset is muxed in via
+   * `ffmpeg-media-toolkit.ts#muxAudioIntoVideo`. Base64-only, deliberately —
+   * accepting an arbitrary caller-supplied URL here would make this process
+   * fetch attacker-controlled URLs server-side (the same SSRF concern
+   * `capabilities-routes.ts#resolveVisionImage` documents for images).
+   *
+   * Best-effort: composition failure (ffmpeg unavailable, bad audio bytes,
+   * mux error) never fails the whole request — it falls back to the
+   * unmodified video and reports `audioComposed: false` /
+   * `audioRequirementUnmet: true` on the result. See `generateVideo`'s
+   * post-processing step.
+   */
+  soundtrackAudioBase64?: string;
   n?: number;
   responseFormat?: 'url' | 'b64_json';
   strategy?: string;
@@ -66,6 +135,42 @@ export interface VideoResult {
   // not exposed by the /v1/videos route; the chat-request consumer reads only
   // `.model`, which CandidateAttempt has).
   attempts?: CandidateAttempt[];
+  /**
+   * Package A (2026-09-09): `true` when a supplied `soundtrackAudioBase64`
+   * was successfully muxed into the returned video (the video in `videos[]`
+   * IS the composed one). Absent when composition was never attempted
+   * (audio wasn't requested, or the winning model already has confirmed
+   * native audio support).
+   */
+  audioComposed?: boolean;
+  /**
+   * `true` when audio/a soundtrack was requested (`generateAudio: true`) but
+   * the returned video does NOT have it — either no `soundtrackAudioBase64`
+   * was supplied to compose one, or composition was attempted and failed
+   * (see the warning-level log line for the reason). Never fabricated:
+   * this is the honest signal that the requirement was not met, rather than
+   * silently shipping a mute video and claiming success.
+   */
+  audioRequirementUnmet?: boolean;
+  /**
+   * `true` when the returned video was SHORTER than the requested `duration`
+   * by more than the reconciliation tolerance and was successfully extended
+   * (looped + trimmed) via `ffmpeg-media-toolkit.ts#extendVideoToDuration`
+   * to reach it. The video in `videos[]` IS the extended one. Absent when no
+   * `duration` was requested, or the delivered clip already met it.
+   */
+  durationExtended?: boolean;
+  /**
+   * `true` when a `duration` was requested, the returned clip was
+   * confirmed (by probing it) to fall meaningfully short of it, and
+   * extension was not possible (ffmpeg unavailable, probe/extend error, or
+   * the shortfall exceeded the safety-capped loop count) — the ORIGINAL,
+   * still-short clip ships. Never set when the shortfall could not be
+   * verified at all (e.g. an async job handle with no retrievable bytes
+   * yet): unknown is not the same as unmet. Honest signal, never fabricated
+   * success.
+   */
+  durationRequirementUnmet?: boolean;
 }
 
 export class VideoOrchestrationService {
@@ -254,7 +359,8 @@ export class VideoOrchestrationService {
       | 'parallel'
       | 'debate'
       | 'quality_multipass'
-      | 'dynamic'
+      | 'dynamic',
+    requestAttrs: VideoAttributeRequest
   ): Promise<Model[]> {
     if (explicitModel) {
       // Direct id/name lookup — the previous searchModels({}).find(...) only
@@ -312,8 +418,19 @@ export class VideoOrchestrationService {
       if (!unique.has(key)) unique.set(key, model);
     }
 
-    const candidatesByCapability = Array.from(unique.values()).filter((model) =>
-      this.hasVideoCapability(model, requiredCapability)
+    // LOTE AS (2026-09-06): additive attribute-aware pre-filter, ahead of
+    // cost/quality/latency ranking. A candidate whose DECLARED
+    // videoCapabilityAttributes conflict with the request's duration/
+    // resolution/aspectRatio/audio need is excluded here; a candidate with
+    // no declared attributes for that field is NOT excluded — see
+    // canSatisfyVideoAttributes's fail-open/fail-closed contract.
+    const candidatesByCapability = Array.from(unique.values()).filter(
+      (model) =>
+        this.hasVideoCapability(model, requiredCapability) &&
+        canSatisfyVideoAttributes(
+          this.getCatalogEntry(model.provider)?.videoCapabilityAttributes,
+          requestAttrs
+        )
     );
     const runnable = this.getRunnableVideoModels(candidatesByCapability);
     if (runnable.length === 0) return [];
@@ -392,11 +509,39 @@ export class VideoOrchestrationService {
       'Video orchestration started'
     );
 
+    // LOTE AS (2026-09-06): the request-side view of VideoAttributeRequest,
+    // derived from the public options — `audioRequested` maps ONLY from the
+    // new `generateAudio` (soundtrack) field, never from `audio` (an input
+    // conditioning clip, a different concept entirely).
+    const audioRequested = options.generateAudio === true;
+    const requestAttrs: VideoAttributeRequest = {
+      durationSeconds: options.duration,
+      resolution: options.resolution,
+      aspectRatio: options.aspectRatio,
+      audioRequested,
+    };
+
+    // Package A (2026-09-09): the pre-filter above excludes a candidate with
+    // CONFIRMED `nativeAudioSupport: false` (runwayml, siliconflow) whenever
+    // audio is requested — correct when nothing else could satisfy the
+    // requirement. But when the caller ALSO supplies `soundtrackAudioBase64`,
+    // composition (see the post-processing step below) can satisfy the
+    // requirement on ANY candidate regardless of native support — excluding
+    // those two providers in that case would be needlessly conservative now
+    // that a real fallback exists. The filter gets its OWN narrower view;
+    // `requestAttrs` above (used for the post-processing decision) keeps the
+    // full "was audio requested at all" signal.
+    const filterAttrs: VideoAttributeRequest = {
+      ...requestAttrs,
+      audioRequested: audioRequested && !options.soundtrackAudioBase64,
+    };
+
     const candidates = await this.selectVideoCandidateModels(
       options.model,
       requiredCapability,
       options.userContext,
-      strategyUsed
+      strategyUsed,
+      filterAttrs
     );
     if (candidates.length === 0) {
       throw new Error(
@@ -432,20 +577,58 @@ export class VideoOrchestrationService {
         supportsCapability: (adapter) =>
           typeof (adapter as { videoGenerate?: unknown }).videoGenerate === 'function',
         parallelDegree: maxParallel,
-        execute: async (selectedModel, adapter) => {
+        execute: async (selectedModel, adapter, { deadlineAt }) => {
           const response = await adapter.videoGenerate(selectedModel, {
             prompt: options.prompt,
             image: options.image,
             startImage: options.startImage,
             endImage: options.endImage,
             audio: options.audio,
+            video: options.video,
             duration: options.duration,
             aspectRatio: options.aspectRatio,
             size: options.size,
+            // LOTE AS (2026-09-06): FIX THE DEAD OPTIONS BAG. This nested bag
+            // used to carry only {n, response_format, video} — duration/
+            // aspectRatio/size/audio/resolution/generateAudio never reached
+            // it, even though several adapters read THIS bag (not the
+            // top-level fields above) for their own dead reads:
+            //   - RunwayML (runwayml-adapter.ts ~196-197): options.duration,
+            //     options.ratio (aspect ratio under Runway's own field name).
+            //   - BytePlus (byteplus-adapter.ts ~1786, ~1806): opts.resolution,
+            //     opts.generate_audio (its real, vendor-documented Seedance
+            //     soundtrack switch).
+            //   - Google Veo (google-adapter.ts ~1686-1691): options.resolution,
+            //     options.generateAudio (already wired, just never populated).
+            // Duplicating duration/aspectRatio/size/audio here (redundant
+            // with the top-level fields, which some adapters — openai,
+            // openai-compatible-hub — read instead/also) is deliberate: it
+            // costs nothing and closes the dead-read gap for every adapter
+            // convention observed in this codebase without special-casing
+            // per adapter.
             options: {
               n: options.n ?? 1,
               response_format: responseFormat,
               video: options.video,
+              duration: options.duration,
+              aspectRatio: options.aspectRatio,
+              ratio: options.aspectRatio,
+              size: options.size,
+              audio: options.audio,
+              resolution: options.resolution,
+              generateAudio: options.generateAudio,
+              generate_audio: options.generateAudio,
+              // Bug 2 fix (2026-09-08): the absolute deadline for the WHOLE
+              // fallback search (executeWithFallback's `deadlineMs`), not
+              // just this one candidate. Adapters whose video generation
+              // polls an async job (openai-compatible-hub's pollVideoTask,
+              // byteplus's submitAndPollGenerationTask) bound their own poll
+              // budget by this so a single slow-failing candidate cannot
+              // consume the entire search budget and starve every other
+              // candidate — live-proven 2026-09-08 on empiriolabs/wan-3-0,
+              // where a 300000ms poll ran to completion under a 30000ms
+              // search deadline. Adapters with no internal wait ignore it.
+              orchestrationDeadlineAt: deadlineAt,
             },
           });
           // Empty-generation guard (2026-07-04, c3-v4 defect A): a candidate that
@@ -485,7 +668,81 @@ export class VideoOrchestrationService {
       }
     );
 
-    const videos = this.normalizeVideoOutput(result.response.video, responseFormat);
+    let videos = this.normalizeVideoOutput(result.response.video, responseFormat);
+
+    // Package A (2026-09-09): soundtrack composition — the "second
+    // specialized tool" completion of an audio requirement the winning
+    // model can't satisfy natively. See VideoGenerationOptions
+    // .soundtrackAudioBase64's doc for the full rationale.
+    let audioComposed: boolean | undefined;
+    let audioRequirementUnmet: boolean | undefined;
+    if (requestAttrs.audioRequested === true) {
+      const selectedAttrs = this.getCatalogEntry(result.selectedModel.provider)
+        ?.videoCapabilityAttributes;
+      const alreadyHasNativeAudio = selectedAttrs?.nativeAudioSupport === true;
+      if (!alreadyHasNativeAudio) {
+        if (options.soundtrackAudioBase64) {
+          const composed = await this.tryComposeSoundtrack(
+            videos,
+            options.soundtrackAudioBase64,
+            responseFormat,
+            options.requestId
+          );
+          if (composed) {
+            videos = composed;
+            audioComposed = true;
+          } else {
+            audioComposed = false;
+            audioRequirementUnmet = true;
+          }
+        } else {
+          // Audio was requested, the model has no confirmed native support,
+          // and the caller supplied no asset to compose — honest signal
+          // rather than silently shipping a mute video as a "success".
+          audioRequirementUnmet = true;
+        }
+      }
+    }
+
+    // 2026-09-09: duration-chaining completion. `canSatisfyVideoAttributes`
+    // already keeps a candidate with a DECLARED duration ceiling below the
+    // request out of the pool, but only 5 providers have that attribute
+    // populated — every other candidate is admitted fail-open, with no
+    // guarantee its actual output reaches the requested length. This is the
+    // second, complementary specialized-tool step for the cases the pre-
+    // filter cannot catch: probe what was actually delivered and, when it
+    // falls meaningfully short, extend it for real via ffmpeg rather than
+    // silently shipping (and reporting as a plain "success") a clip shorter
+    // than what was asked for.
+    let durationExtended: boolean | undefined;
+    let durationRequirementUnmet: boolean | undefined;
+    if (typeof options.duration === 'number' && options.duration > 0) {
+      // Cost guard: verifying duration means fetching the FULL video back
+      // from the URL the provider just returned (see
+      // resolveVideoBytesForDurationCheck) — real egress cost on every call.
+      // `canSatisfyVideoAttributes` already excluded any candidate whose
+      // DECLARED duration ceiling conflicts with the request, so a winning
+      // candidate that HAS declared, vendor-verified duration attributes
+      // already carries real confidence, not a guess — skip the fetch there.
+      // The majority of providers have no declared attributes at all, which
+      // is exactly the risk case this fix targets, so they still get the
+      // real, fetched check.
+      const attrs = this.getCatalogEntry(result.selectedModel.provider)?.videoCapabilityAttributes;
+      const durationDeclared =
+        attrs?.maxDurationSeconds !== undefined ||
+        (attrs?.allowedDurationsSeconds !== undefined && attrs.allowedDurationsSeconds.length > 0);
+      if (!durationDeclared) {
+        const reconciled = await this.reconcileVideoDuration(
+          videos,
+          options.duration,
+          responseFormat,
+          options.requestId
+        );
+        videos = reconciled.videos;
+        durationExtended = reconciled.durationExtended;
+        durationRequirementUnmet = reconciled.durationRequirementUnmet;
+      }
+    }
 
     return {
       videos,
@@ -495,6 +752,220 @@ export class VideoOrchestrationService {
       strategyUsed,
       fallbackUsed: result.fallbackUsed,
       attempts: result.attempts,
+      ...(audioComposed !== undefined ? { audioComposed } : {}),
+      ...(audioRequirementUnmet !== undefined ? { audioRequirementUnmet } : {}),
+      ...(durationExtended !== undefined ? { durationExtended } : {}),
+      ...(durationRequirementUnmet !== undefined ? { durationRequirementUnmet } : {}),
     };
+  }
+
+  /**
+   * Reconcile a delivered video's ACTUAL duration against what was
+   * requested. Returns the (possibly extended) video list plus honest
+   * status flags — never throws, and never silently claims success on an
+   * unmet requirement. Three possible outcomes:
+   *  - the shortfall can't be verified (no retrievable bytes yet, e.g. an
+   *    async job handle, or the probe itself fails) -> both flags absent.
+   *    Unknown is deliberately NOT the same as unmet.
+   *  - the clip already meets/exceeds the target (or the shortfall is
+   *    within `isMeaningfullyShort`'s tolerance) -> both flags absent.
+   *  - a real, meaningful shortfall is confirmed: extension is attempted;
+   *    success sets `durationExtended`, failure (toolkit unavailable, safety
+   *    cap exceeded, ffmpeg error) sets `durationRequirementUnmet` and ships
+   *    the original, unmodified clip.
+   */
+  private async reconcileVideoDuration(
+    videos: VideoResult['videos'],
+    targetDurationSec: number,
+    responseFormat: 'url' | 'b64_json',
+    requestId: string
+  ): Promise<{
+    videos: VideoResult['videos'];
+    durationExtended?: boolean;
+    durationRequirementUnmet?: boolean;
+  }> {
+    const first = videos[0];
+    if (!first) return { videos };
+
+    const videoBytes = await this.resolveVideoBytesForDurationCheck(first);
+    if (!videoBytes) return { videos };
+
+    let actualDurationSec: number | undefined;
+    try {
+      actualDurationSec = (await probeMedia(videoBytes, 'generated.mp4')).durationSec;
+    } catch (error) {
+      log.warn(
+        {
+          requestId,
+          reason: error instanceof Error ? error.message : String(error),
+        },
+        'Could not probe generated video duration; skipping the extend check'
+      );
+      return { videos };
+    }
+    if (actualDurationSec === undefined || !isMeaningfullyShort(actualDurationSec, targetDurationSec)) {
+      return { videos };
+    }
+
+    try {
+      const extended = await extendVideoToDuration(videoBytes, 'generated.mp4', {
+        targetDurationSec,
+      });
+      const composedEntry =
+        responseFormat === 'url'
+          ? { id: first.id, url: `data:video/mp4;base64,${extended.buffer.toString('base64')}` }
+          : { id: first.id, b64_json: extended.buffer.toString('base64') };
+      log.info(
+        { requestId, requestedSec: targetDurationSec, actualSec: actualDurationSec, loopsApplied: extended.loopsApplied },
+        'Extended generated video to meet the requested duration'
+      );
+      return { videos: [composedEntry, ...videos.slice(1)], durationExtended: true };
+    } catch (error) {
+      const reason =
+        error instanceof MediaToolkitUnavailableError
+          ? 'ffmpeg toolkit unavailable'
+          : error instanceof Error
+            ? error.message
+            : String(error);
+      log.warn(
+        { requestId, reason, requestedSec: targetDurationSec, actualSec: actualDurationSec },
+        'Duration extension failed; shipping the original, shorter video'
+      );
+      return { videos, durationRequirementUnmet: true };
+    }
+  }
+
+  /**
+   * Best-effort soundtrack composition. Returns the composed video list on
+   * success, `null` on ANY failure (toolkit unavailable, bad input, mux
+   * error) — callers treat `null` as "compose was attempted and failed,
+   * ship the original video" rather than propagating the error and failing
+   * the whole (otherwise-successful) generation request over an additive
+   * enhancement.
+   */
+  private async tryComposeSoundtrack(
+    videos: VideoResult['videos'],
+    soundtrackAudioBase64: string,
+    responseFormat: 'url' | 'b64_json',
+    requestId: string
+  ): Promise<VideoResult['videos'] | null> {
+    const first = videos[0];
+    if (!first) return null;
+
+    try {
+      const videoBytes = await this.resolveVideoBytesForCompose(first);
+      if (!videoBytes) return null;
+
+      const audioBuffer = Buffer.from(soundtrackAudioBase64, 'base64');
+      if (audioBuffer.length === 0) {
+        log.warn({ requestId }, 'Soundtrack composition skipped: empty audio payload');
+        return null;
+      }
+
+      const composed = await muxAudioIntoVideo(
+        videoBytes,
+        'generated.mp4',
+        audioBuffer,
+        'soundtrack.audio'
+      );
+
+      const composedEntry =
+        responseFormat === 'url'
+          ? { id: first.id, url: `data:video/mp4;base64,${composed.buffer.toString('base64')}` }
+          : { id: first.id, b64_json: composed.buffer.toString('base64') };
+
+      return [composedEntry, ...videos.slice(1)];
+    } catch (error) {
+      // Fail-soft by design — see the method doc. Still logged at `warn` so
+      // operators can see how often composition is attempted vs. succeeds.
+      const reason =
+        error instanceof MediaToolkitUnavailableError
+          ? 'ffmpeg toolkit unavailable'
+          : error instanceof Error
+            ? error.message
+            : String(error);
+      log.warn({ requestId, reason }, 'Soundtrack composition failed; shipping original video');
+      return null;
+    }
+  }
+
+  /**
+   * Resolve a normalized video entry to raw bytes so it can be probed/
+   * extended. Handles `b64_json` directly, a `data:` URL directly, and an
+   * `http(s)://` URL via a bounded fetch — that URL was returned by the
+   * PROVIDER we just called (not supplied by the end user), so fetching it
+   * is not a new SSRF surface distinct from the request already made to
+   * reach that provider. Returns `null` (never throws) when nothing usable
+   * is present (e.g. an id-only async job handle with no bytes yet).
+   *
+   * KNOWN COST TRADEOFF: for a `url`-format response (the common case for
+   * video, which is why providers return a URL instead of embedding a large
+   * base64 payload), this downloads the ENTIRE clip a second time purely to
+   * probe its duration — real egress + latency on every call this reaches.
+   * The caller already narrows to candidates with no declared duration
+   * attributes (see `generateVideo`'s `durationDeclared` guard) to avoid
+   * paying this for the 5 vendor-verified providers, but the majority with
+   * no declared attributes still pay it — that is the same tradeoff
+   * `#529`'s equivalent `resolveVideoBytesForCompose` accepts for its
+   * audio-composition check. A future optimization (bounding by a
+   * `Content-Length` HEAD check, or reading only enough of a faststart MP4
+   * to reach its `moov` atom) is a reasonable follow-up, not done here.
+   */
+  private async resolveVideoBytesForDurationCheck(video: {
+    id?: string;
+    url?: string;
+    b64_json?: string;
+  }): Promise<Buffer | null> {
+    try {
+      if (video.b64_json) {
+        return Buffer.from(video.b64_json, 'base64');
+      }
+      if (video.url?.startsWith('data:')) {
+        const commaIdx = video.url.indexOf(',');
+        if (commaIdx === -1) return null;
+        return Buffer.from(video.url.slice(commaIdx + 1), 'base64');
+      }
+      if (video.url?.startsWith('http://') || video.url?.startsWith('https://')) {
+        const response = await fetch(video.url, { signal: AbortSignal.timeout(30_000) });
+        if (!response.ok) return null;
+        return Buffer.from(await response.arrayBuffer());
+      }
+    } catch {
+      return null;
+    }
+    return null;
+  }
+
+  /**
+   * Resolve a normalized video entry to raw bytes for muxing. Handles
+   * `b64_json` directly, a `data:` URL directly, and an `http(s)://` URL via
+   * a bounded fetch — that URL was returned by the PROVIDER we just called
+   * (not supplied by the end user), so fetching it is not a new SSRF surface
+   * distinct from the request we already made to reach that provider.
+   * Returns `null` (never throws) when nothing usable is present, matching
+   * `tryComposeSoundtrack`'s fail-soft contract.
+   */
+  private async resolveVideoBytesForCompose(video: {
+    id?: string;
+    url?: string;
+    b64_json?: string;
+  }): Promise<Buffer | null> {
+    if (video.b64_json) {
+      return Buffer.from(video.b64_json, 'base64');
+    }
+    if (video.url?.startsWith('data:')) {
+      const commaIdx = video.url.indexOf(',');
+      if (commaIdx === -1) return null;
+      return Buffer.from(video.url.slice(commaIdx + 1), 'base64');
+    }
+    if (video.url?.startsWith('http://') || video.url?.startsWith('https://')) {
+      const response = await fetch(video.url, { signal: AbortSignal.timeout(30_000) });
+      if (!response.ok) return null;
+      const arrayBuffer = await response.arrayBuffer();
+      return Buffer.from(arrayBuffer);
+    }
+    // An id-only entry (async job handle with no retrievable bytes yet) —
+    // nothing to compose against.
+    return null;
   }
 }

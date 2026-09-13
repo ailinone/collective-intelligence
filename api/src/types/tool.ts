@@ -18,4 +18,18 @@ export interface ToolResult {
   error?: string;
   metadata?: Record<string, unknown>;
   tool_call_id?: string;
+  /**
+   * Media/document artifact produced by this tool call (e.g. an image or
+   * video generation tool). Same shape as
+   * `advanced-tool-execution-service.ToolResult.artifact` / `ArtifactRef`
+   * (`@/types`), so a value set here is structurally assignable there
+   * without a cast once the tool-registry executor reads it back off the
+   * object a handler returns.
+   */
+  artifact?: {
+    type: 'image' | 'video' | 'audio' | 'document' | 'file';
+    url: string;
+    mimeType?: string;
+    meta?: Record<string, unknown>;
+  };
 }

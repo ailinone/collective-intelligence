@@ -112,6 +112,17 @@ const RUNTIME_WIRING_EXEMPTIONS: ReadonlySet<string> = new Set<string>([
   // (the LLM-key boot-mode gate) is architecturally not applicable to a
   // pure image-generation provider.
   'recraft',
+  // cartesia (2026-09-12): speech-only, execution-only — no chat surface
+  // at all, same shape as recraft above. CARTESIA_API_KEY is deliberately
+  // excluded from LLM_PROVIDER_ENV_VARS in load-secrets-into-env.ts (a
+  // TTS-only key doesn't satisfy the "at least one LLM key" boot gate).
+  // This exemption only started applying once cartesia got a catalog row
+  // (`entry` used to be undefined here, so the whole loop body was
+  // skipped via the `if (!entry) continue` guard below) — gates 1+2
+  // already passed unexempted (CARTESIA_API_KEY had a PROVIDER_SECRETS
+  // tuple and an ENV_VAR_TO_PROVIDER entry from when cartesia ran through
+  // the legacy switch case); only Gate 3 needs this exemption.
+  'cartesia',
 ]);
 
 /**

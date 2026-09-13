@@ -263,12 +263,16 @@ describe('D1 — bootstrap-for-scripts helper', () => {
 // ────────────────────────────────────────────────────────────────────────────
 
 describe('Non-regression — Lote 5 does not touch prompt architecture', () => {
-  it('PROMPT_METRIC_NAMES still exports all 7 canonical counters', () => {
+  it('PROMPT_METRIC_NAMES still exports all canonical counters (7 pre-LOTE-AS + 3 added by LOTE AS, 2026-09-06)', () => {
     const names = Object.values(PROMPT_METRIC_NAMES);
-    expect(names.length).toBe(7);
+    expect(names.length).toBe(10);
     expect(names).toContain('ailin_fallback_prompt_activations_total');
     expect(names).toContain('ailin_triage_drift_detected_total');
     expect(names).toContain('ailin_judge_normalizations_total');
+    // LOTE AS (triage reliability + structured media attributes) additions.
+    expect(names).toContain('ailin_triage_heuristic_fallback_total');
+    expect(names).toContain('ailin_triage_heuristic_media_safety_net_total');
+    expect(names).toContain('ailin_triage_generation_prompt_missing_total');
   });
 
   it('SELECTION_METRIC_NAMES is disjoint from PROMPT_METRIC_NAMES', () => {

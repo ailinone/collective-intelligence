@@ -63,8 +63,77 @@ export interface ToolRegistration {
     | 'general';
   /** Whether this tool is safe for use within orchestration strategies */
   safeForStrategies: boolean;
+  /**
+   * Auto-execution policy for a strategy's tool-calling loop
+   * (`executeModelWithTools` in base-strategy.ts) — INDEPENDENT of
+   * `safeForStrategies`, which governs whether the tool is offered to a
+   * strategy participant at all, triage-auto-attach eligibility, and the
+   * shared `executeForStrategy()` gate used elsewhere.
+   *
+   *  - omitted: no extra restriction beyond `safeForStrategies` — a
+   *    `safeForStrategies:true` tool keeps auto-executing unconditionally,
+   *    exactly as before this field existed.
+   *  - `'quorumOnly'`: `executeModelWithTools` may auto-execute this call
+   *    ONLY when a strict majority of the collective's voters independently
+   *    proposed the exact same call (name + args), per
+   *    `computeQuorumToolCall()` (`core/aggregation/response-aggregator.ts`
+   *    — the SAME mechanism the response aggregator itself uses, not a
+   *    parallel one). Used for billable/slow generation tools
+   *    (`generate_video`, `generate_media`) so a single hallucinating voter
+   *    can never trigger a real generation. Such a tool is typically ALSO
+   *    `safeForStrategies:false` — quorum is the ONLY path to
+   *    auto-execution, not an additional one alongside an unconditional one.
+   *  - `'never'`: reserved for a tool that must never auto-execute inside a
+   *    strategy's tool-calling loop, regardless of `safeForStrategies` or
+   *    quorum. Not currently assigned to any tool.
+   */
+  strategyExecutionMode?: 'never' | 'quorumOnly';
+  /**
+   * Whether the TRIAGE LLM may AUTO-ATTACH this tool to a request that never
+   * asked for tools.
+   *
+   * Omit to accept the structural default: auto-recommendable iff
+   * `safeForStrategies` AND the category's effects are external or sandboxed
+   * (`AUTO_RECOMMENDABLE_CATEGORIES`). Set it explicitly to opt a tool in
+   * (e.g. `code_execute`, whose category is `code` but whose effects are
+   * sandboxed) or to force one out.
+   *
+   * This replaced a hardcoded three-name allowlist (LOTE AO, 2026-09-05):
+   * the registry is dynamic — plugins, strategies and MCP servers register
+   * into it — so a literal name list could never describe it, and any tool
+   * added after the list was written was silently un-recommendable.
+   */
+  autoRecommendable?: boolean;
   /** The handler function */
   handler: ToolHandler;
+}
+
+/**
+ * Categories whose effects are EXTERNAL (the public web) or SANDBOXED, and
+ * therefore safe for the triage LLM to auto-attach.
+ *
+ * Everything else — `file`, `search`, `code`, `git`, `refactoring`,
+ * `testing`, `analysis`, `task`, `workflow`, `general` — touches the
+ * server's own filesystem or codebase. Security review finding: letting
+ * triage auto-attach those would let any "read file X and show me" prompt
+ * legitimately induce server filesystem reads on a request whose client
+ * never asked for tools.
+ */
+const AUTO_RECOMMENDABLE_CATEGORIES: ReadonlySet<ToolRegistration['category']> = new Set([
+  'web',
+  'image',
+  'video',
+  'audio',
+]);
+
+/**
+ * The structural rule. `safeForStrategies` is a hard precondition — a tool
+ * the strategies may not run is never a tool triage may attach.
+ */
+export function isAutoRecommendable(reg: ToolRegistration): boolean {
+  if (!reg.safeForStrategies) return false;
+  if (typeof reg.autoRecommendable === 'boolean') return reg.autoRecommendable;
+  return AUTO_RECOMMENDABLE_CATEGORIES.has(reg.category);
 }
 
 /**
@@ -220,18 +289,28 @@ class ToolRegistryImpl {
   }
 
   /**
-   * Catalog shown to the TRIAGE LLM for automatic tool recommendation —
-   * strictly the TRIAGE_RECOMMENDABLE_TOOLS allowlist, NOT the full
-   * strategy-safe set. Security review finding: safeForStrategies includes
-   * server-filesystem tools (read_file, write_file, grep_search, ...);
-   * letting triage auto-attach those to requests that never asked for tools
-   * would let any "read file X and show me" style prompt legitimately induce
-   * server filesystem reads. Auto-recommendation is limited to tools whose
-   * effects are external or sandboxed; the rest remain available when the
-   * CLIENT explicitly supplies them.
+   * Tools the TRIAGE LLM may auto-attach — derived from the registry itself
+   * via `isAutoRecommendable`, NOT from a name list. The security invariant
+   * is unchanged (never the server's own filesystem/codebase); what changed
+   * is that it is now expressed as a property of each registration, so a
+   * newly registered web/image/sandboxed tool participates automatically and
+   * a newly registered filesystem tool still cannot.
+   */
+  listTriageRecommendableTools(): ToolRegistration[] {
+    return this.listStrategyTools().filter(isAutoRecommendable);
+  }
+
+  /**
+   * Catalog shown to the TRIAGE LLM for automatic tool recommendation — the
+   * auto-recommendable subset, NOT the full strategy-safe set.
+   * `safeForStrategies` includes server-filesystem tools (read_file,
+   * write_file, grep_search, ...); letting triage auto-attach those to
+   * requests that never asked for tools would let any "read file X and show
+   * me" style prompt legitimately induce server filesystem reads. The rest
+   * remain available when the CLIENT explicitly supplies them.
    */
   describeTriageRecommendableToolsForPrompt(): string {
-    const tools = this.listStrategyTools().filter((t) => TRIAGE_RECOMMENDABLE_TOOLS.has(t.name));
+    const tools = this.listTriageRecommendableTools();
     if (tools.length === 0) return 'None available';
     return tools.map((t) => `${t.name} (${t.category}): ${t.description}`).join('\n');
   }
@@ -239,6 +318,31 @@ class ToolRegistryImpl {
   /** Get count of unique tools. */
   size(): number {
     return this.listNames().length;
+  }
+
+  /**
+   * Distinct tool categories currently registered, system-wide — sorted,
+   * deduplicated, derived live from the registry (NOT a hardcoded list).
+   *
+   * Used by execution-system-prompt.ts's system-capability-manifest section
+   * to tell an executing model what KINDS of tools exist elsewhere in the
+   * system, without hardcoding tool names that would drift as tools are
+   * added, renamed, or removed (the same "documentation says X, code does Y"
+   * drift class this session has hit repeatedly elsewhere). Naturally
+   * excludes any category from the `ToolRegistration['category']` union that
+   * has zero tools registered against it right now (e.g. 'audio' — TTS/STT
+   * is real but exposed via `CapabilityInvoker`, not a callable chat tool),
+   * which is itself accurate signal, not a gap.
+   *
+   * Empty only if `registerToolsInRegistry()` has not run yet (e.g. a unit
+   * test importing this module directly without bootstrapping the app).
+   */
+  listCategories(): ToolRegistration['category'][] {
+    const categories = new Set<ToolRegistration['category']>();
+    for (const [, reg] of this.tools) {
+      categories.add(reg.category);
+    }
+    return [...categories].sort();
   }
 
   /** Mark as initialized (called after all tools registered). */
@@ -254,19 +358,6 @@ class ToolRegistryImpl {
     return this.initialized;
   }
 }
-
-/**
- * Tools the TRIAGE LLM may auto-attach to a request that did not ask for
- * tools. Inclusion criteria: effects are external (web) or sandboxed
- * (code-sandbox) — never the server's own filesystem/codebase. Tools outside
- * this set stay usable only when the client explicitly sends them in
- * `request.tools`.
- */
-export const TRIAGE_RECOMMENDABLE_TOOLS: ReadonlySet<string> = new Set([
-  'web_search',
-  'code_execute',
-  'analyze_image',
-]);
 
 /** Singleton tool registry instance. */
 export const toolRegistry = new ToolRegistryImpl();

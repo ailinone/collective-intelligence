@@ -41,6 +41,7 @@ import {
   JUDGE_OUTPUT_CONTRACT_INSTRUCTIONS,
   normalizeJudgeOutput,
 } from '@/core/quality/judge-schema';
+import { LANGUAGE_MIRROR_DIRECTIVE } from '@/core/orchestration/prompts/language-directive';
 
 /**
  * Solution to be evaluated
@@ -542,6 +543,13 @@ export class ArbitrationSystem {
       const refinedResponse = await adapter.chatCompletion({
         model: model.id,
         messages: [
+          {
+            // Language mirror (audit F-06): the refined answer must stay in the
+            // user's language instead of drifting to English. Same directive the
+            // SOTA synthesizer prompts embed.
+            role: 'system',
+            content: LANGUAGE_MIRROR_DIRECTIVE,
+          },
           {
             role: 'assistant',
             content: originalContentStr,

@@ -23,6 +23,7 @@ import {
   type ProviderConfig,
   type HealthCheckResult,
   type BalanceCheckResult,
+  type DiarizationSupport,
 } from '@/providers/base/provider-adapter';
 import type { Provider, Model, ChatResponse, EmbeddingResponse } from '@/types';
 import type {
@@ -53,17 +54,52 @@ export class DeepgramAdapter extends ProviderAdapter {
     };
   }
 
+  /**
+   * Deepgram performs speaker diarization natively on the pre-recorded
+   * `/v1/listen` endpoint. Verified against the vendor's own documentation
+   * (2026-09-05):
+   *   - `diarize_model` selects the diarizer and, for batch, ALSO enables it —
+   *     `latest` (currently v2), `v1`, `v2`.
+   *   - The legacy boolean `diarize=true` still works but is deprecated, and
+   *     Deepgram REJECTS a request that sets both. This adapter therefore
+   *     sends `diarize_model` only.
+   *   - Pre-recorded responses carry `speaker` and `speaker_confidence` on
+   *     each word; with `utterances=true` each utterance also carries
+   *     `speaker`, which is the shape this adapter normalises.
+   * Deepgram does NOT accept a fixed speaker count, so no hint is advertised.
+   */
+  override getDiarizationSupport(): DiarizationSupport {
+    return {
+      native: true,
+      evidenceUrl: 'https://developers.deepgram.com/docs/diarization',
+      requestParameters: ['diarize_model', 'utterances'],
+      acceptsSpeakerCountHint: false,
+    };
+  }
+
   // ── Audio: STT (Speech-to-Text) ──────────────────
 
   async speechToText(model: Model, request: AudioSTTRequest): Promise<AudioSTTResponse> {
     const start = Date.now();
     const modelName = model.name || model.id || 'nova-3';
+    const diarize = request.options?.diarize === true;
 
     try {
       const params = new URLSearchParams({ model: modelName });
       if (request.language) params.set('language', request.language);
       params.set('smart_format', 'true');
       params.set('punctuate', 'true');
+
+      if (diarize) {
+        // `diarize_model` both selects the diarizer version and enables
+        // diarization for batch requests — see getDiarizationSupport(). The
+        // default tracks Deepgram's newest diarizer; pin a version through
+        // DEEPGRAM_DIARIZE_MODEL when a deployment needs label stability.
+        params.set('diarize_model', process.env.DEEPGRAM_DIARIZE_MODEL || 'latest');
+        // Utterance grouping turns per-word speaker ints into contiguous
+        // speaker turns, which is what a diarization consumer actually wants.
+        params.set('utterances', 'true');
+      }
 
       const mimeType: string = (request.options?.mimeType as string) || 'audio/wav';
 
@@ -93,18 +129,54 @@ export class DeepgramAdapter extends ProviderAdapter {
             alternatives?: Array<{
               transcript?: string;
               confidence?: number;
-              words?: Array<{ word: string; start: number; end: number; confidence: number }>;
+              words?: Array<{
+                word: string;
+                start: number;
+                end: number;
+                confidence: number;
+                speaker?: number;
+                speaker_confidence?: number;
+              }>;
             }>;
           }>;
+          utterances?: Array<{
+            start?: number;
+            end?: number;
+            transcript?: string;
+            speaker?: number;
+            confidence?: number;
+          }>;
         };
-        metadata?: { duration?: number; request_id?: string };
+        metadata?: { duration?: number; request_id?: string; diarize_info?: unknown };
       };
 
       const alt = data.results?.channels?.[0]?.alternatives?.[0];
       const latency = Date.now() - start;
 
+      // Speaker turns are reported ONLY when they came back from the upstream.
+      // An empty/absent `utterances` array under diarize means Deepgram did
+      // not label this audio; we surface nothing rather than synthesising a
+      // single "speaker 0" turn that would look like a successful diarization.
+      const speakers = diarize
+        ? (data.results?.utterances ?? [])
+            .filter((utterance) => typeof utterance.speaker === 'number')
+            .map((utterance) => ({
+              speaker: `speaker_${utterance.speaker}`,
+              start: utterance.start ?? 0,
+              end: utterance.end ?? 0,
+              text: utterance.transcript ?? '',
+              confidence: utterance.confidence,
+            }))
+        : undefined;
+
       log.info(
-        { model: modelName, latency, textLen: alt?.transcript?.length || 0 },
+        {
+          model: modelName,
+          latency,
+          textLen: alt?.transcript?.length || 0,
+          diarize,
+          speakerTurns: speakers?.length ?? 0,
+        },
         'STT completed'
       );
 
@@ -116,6 +188,7 @@ export class DeepgramAdapter extends ProviderAdapter {
           words: alt?.words,
           confidence: alt?.confidence,
           duration: data.metadata?.duration,
+          ...(speakers ? { speakers, diarized: speakers.length > 0 } : {}),
         },
       };
     } catch (error) {

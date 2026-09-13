@@ -26,7 +26,7 @@ import { CostCascadeStrategy } from './strategies/cost-cascade-strategy';
 import { QualityMultiPassStrategy } from './strategies/quality-multipass-strategy';
 import { AdaptiveStrategy } from './strategies/adaptive-strategy';
 import { ContextualStrategy } from './strategies/contextual-strategy';
-import { HierarchicalStrategy } from './strategies/hierarchical-strategy';
+
 import { ConsensusStrategy } from './strategies/consensus-strategy';
 import { ReinforcementStrategy } from './strategies/reinforcement-strategy';
 import { DebateStrategy } from './strategies/debate-strategy';
@@ -54,10 +54,12 @@ import {
   buildObserverChunk,
   buildInlineNarrationChunk,
 } from './observer/observer-service';
+import { buildImmediateOpeningNarration } from './observer/observer-templates';
 import type { ObserverFeed } from './observer/observer-types';
 import { ProviderRegistry } from '@/providers/provider-registry';
 import { getErrorMessage } from '@/utils/type-guards';
-import { toolRegistry, TRIAGE_RECOMMENDABLE_TOOLS } from '@/core/tools/tool-registry';
+import { ContextWindowExceededError } from '@/utils/custom-errors';
+import { toolRegistry } from '@/core/tools/tool-registry';
 import type {
   ChatRequest,
   ChatResponse,
@@ -82,6 +84,7 @@ import type {
   ObserverNarration,
   Tool,
   AilinArtifact,
+  ModelExecution,
 } from '@/types';
 import { isModelCapability } from '@/types';
 import { logger } from '@/utils/logger';
@@ -94,6 +97,11 @@ import { getQualityScorer } from '@/core/quality/quality-scorer';
 import { getReasoningTransparency } from '@/core/transparency/reasoning-transparency';
 import { getSemanticCache } from '@/core/cache/semantic-cache';
 import { isTrivialSingleTurn } from '@/core/orchestration/trivial-request-triage';
+import {
+  extractImageGenerationSpec,
+  extractVideoGenerationSpec,
+  mergeVideoGenerationSpec,
+} from '@/core/orchestration/media-generation-spec';
 import { isCacheEnabled } from '@/cache/cache-runtime-state';
 import {
   recordStrategyExecution,
@@ -116,6 +124,16 @@ import { configurationArchive } from '@/core/learning/configuration-archive';
 import { triageCalibrator } from '@/core/learning/triage-calibrator';
 import { knowledgeGraphService } from '@/core/learning/knowledge-graph-service';
 import { inferCapabilities, type CapabilityInferenceResult } from './capability-inference.js';
+import { estimateContextSize as estimateContextSizeShared } from './context-size-estimator.js';
+import {
+  getSessionAffinityService,
+  deriveSessionKey,
+  resolveAffinityIdentifier,
+} from '@/services/session-affinity-service.js';
+import {
+  getContextCompactionService,
+  pickDelegationModel,
+} from './context-compaction-service.js';
 import { modelPerformanceTracker } from '@/core/selection/model-performance-tracker';
 import {
   getAdaptiveQualityTarget,
@@ -131,7 +149,11 @@ import {
   loadFrontiersFromOutcomes,
 } from '@/core/learning/pareto-champion-challenger';
 import { buildExecutionSystemPrompt } from './execution-system-prompt';
-import { explicitlyLacksFunctionCalling, hasDeclaredFunctionCalling } from './function-calling-guard';
+import {
+  explicitlyLacksFunctionCalling,
+  hasDeclaredFunctionCalling,
+  requestRequiresFunctionCalling,
+} from './function-calling-guard';
 import { getFunctionCallingVerdict } from './function-calling-probe';
 import { injectPeerReviewPrompt, shouldInjectPeerReviewPrompt } from './prompts/peer-review-prompt';
 import { recordOutcome } from '@/core/evaluation/outcome-measurement';
@@ -167,10 +189,12 @@ export interface StreamingExecutionPlan {
 }
 
 /**
- * Precise JSON Schema for the 8 highest-value tools triage can recommend
- * automatically. The other ~23 strategy-safe tools in the registry fall
- * back to `GENERIC_TOOL_PARAM_SCHEMA` below (stopgap — see
- * `applyRecommendedTools`, adding schemas for the rest is a follow-up).
+ * Precise JSON Schema for the highest-value tools triage can recommend
+ * automatically. Tools without an entry fall back to
+ * `GENERIC_TOOL_PARAM_SCHEMA` below (stopgap — see `applyRecommendedTools`).
+ * Every tool `isAutoRecommendable()` currently admits (web_search,
+ * code_execute, analyze_image, compare_images, extract_code_from_screenshot)
+ * has a precise schema here — keep it that way when opting a new tool in.
  */
 const TRIAGE_RECOMMENDABLE_TOOL_SCHEMAS: Record<string, Record<string, unknown>> = {
   web_search: {
@@ -216,6 +240,32 @@ const TRIAGE_RECOMMENDABLE_TOOL_SCHEMAS: Record<string, Record<string, unknown>>
     type: 'object',
     properties: {
       image_url: { type: 'string', description: 'URL or path of the image to analyze' },
+    },
+    required: ['image_url'],
+  },
+  // LOTE AO: the other two `image`-category tools became auto-attachable
+  // when the hardcoded three-name allowlist was replaced by the structural
+  // rule. Both executors ALSO accept `image*_path` (a server filesystem
+  // read), so they get precise URL-only schemas rather than falling through
+  // to GENERIC_TOOL_PARAM_SCHEMA, which advertises `additionalProperties`
+  // and would let a model ask for a local path.
+  compare_images: {
+    type: 'object',
+    properties: {
+      image1_url: { type: 'string', description: 'URL of the first image' },
+      image2_url: { type: 'string', description: 'URL of the second image' },
+      comparison_type: {
+        type: 'string',
+        description: 'What to compare: visual, structural, semantic',
+      },
+    },
+    required: ['image1_url', 'image2_url'],
+  },
+  extract_code_from_screenshot: {
+    type: 'object',
+    properties: {
+      image_url: { type: 'string', description: 'URL of the screenshot to read code from' },
+      language_hint: { type: 'string', description: 'Likely programming language, if known' },
     },
     required: ['image_url'],
   },
@@ -285,9 +335,107 @@ export function detectMediaGenerationModality(
   return null;
 }
 
+/**
+ * Plural counterpart of {@link detectMediaGenerationModality} (LOTE AT PR4,
+ * 2026-09-07 — composite multi-artifact detection). Detects EVERY distinct
+ * media-generation modality present in `requiredCapabilities`, instead of
+ * returning only the first (array-order: image > video > audio > file)
+ * match. Purely ADDITIVE — `detectMediaGenerationModality` itself is
+ * unchanged, so every existing single-value caller (the multi-stage-plan
+ * gate below, `executeMediaGenerationStage`'s dispatcher, and PR #484's
+ * `detectStreamingMediaGateModality` streaming redirect gate in
+ * chat-routes.ts) keeps its exact current behavior.
+ *
+ * GRANULARITY DECISION (documented per the PR4 task): this treats "modality"
+ * as a DISTINCT DELIVERABLE ARTIFACT TYPE — image / video / audio / file —
+ * using the SAME per-modality capability-tag membership tests
+ * `detectMediaGenerationModality` already uses (no new detection heuristic
+ * is invented here, so this inherits the exact precision/recall profile
+ * `capability-inference.ts`'s regexes have already been hardened to across
+ * many audit rounds). Two consequences follow directly from that choice:
+ *
+ * 1. "video ... with audio and soundtrack" (the task's own example) resolves
+ *    to a SINGLE 'video' modality, not two. `AUDIO_GEN_CAPS` only matches
+ *    when the raw text independently satisfies `AUDIO_GEN_KEYWORDS`/
+ *    `AUDIO_GEN_DIRECT` (its OWN generation-verb-near-audio-noun pattern) —
+ *    a video request whose "audio"/"soundtrack" mention is just describing
+ *    an ATTRIBUTE of the video (not a separately-generated file) does not
+ *    independently trip those regexes, and is instead carried on the single
+ *    `video_generation` tag via the pre-existing `stage.audioRequested` /
+ *    `VideoGenInvokeOptions.audioRequested` plumbing (LOTE AS, 2026-09-06) —
+ *    a native, vendor-generated soundtrack baked into the ONE video artifact,
+ *    not a redundant, unsynchronized standalone audio file. Only a prompt
+ *    that ALSO independently asks for a separate audio artifact (e.g.
+ *    "generate a video and a separate narration track") would legitimately
+ *    tag both `video_generation` and `audio_generation`, and this function
+ *    correctly reports that as 2 modalities.
+ * 2. A "prose + media" composite (e.g. "write a short poem and generate an
+ *    image to go with it") is NOT detected by this function — there is no
+ *    `text_generation` entry in `IMAGE_GEN_CAPS`/`VIDEO_GEN_CAPS`/
+ *    `AUDIO_GEN_CAPS`/`FILE_GEN_FORMAT_CAPS` (plain chat is the implicit
+ *    default modality, never a `requiredCapabilities` tag), and reliably
+ *    inferring "the user also wants prose, not just a captioned artifact"
+ *    from free text is a fundamentally different, much higher-false-positive
+ *    detection problem than the tag-membership check this function performs.
+ *    Composite detection here is scoped to 2+ of {image, video, audio, file}
+ *    — a real, already-latent gap (confirmed: today's single-stage media path
+ *    in `executeMediaGenerationStage` never runs a chat completion alongside
+ *    a media stage, so "poem + image" silently returns ONLY the image) is
+ *    left as an explicit, separately-tracked follow-up rather than folded in
+ *    here under time/scope pressure.
+ */
+export function detectMediaGenerationModalities(
+  requiredCapabilities: string[]
+): Set<'image' | 'video' | 'audio' | 'file'> {
+  const modalities = new Set<'image' | 'video' | 'audio' | 'file'>();
+  if (requiredCapabilities.some((c) => IMAGE_GEN_CAPS.has(c))) modalities.add('image');
+  if (requiredCapabilities.some((c) => VIDEO_GEN_CAPS.has(c))) modalities.add('video');
+  if (requiredCapabilities.some((c) => AUDIO_GEN_CAPS.has(c))) modalities.add('audio');
+  if (requiredCapabilities.some((c) => c in FILE_GEN_FORMAT_CAPS)) modalities.add('file');
+  return modalities;
+}
+
 /** Resolves the specific file format a file-generation stage should render,
  *  from the same requiredCapabilities strings `detectMediaGenerationModality`
  *  already inspected. */
+/**
+ * Strategy reachability policy (SAC-01 fix, audit 2026-08-20):
+ *
+ * Strategies below are EXPLICIT-ONLY — expensive/experimental portfolios that
+ * must never be picked by an AUTOMATIC path (triage recommendation,
+ * configuration archive, Pareto frontier, Thompson Sampling bandit or
+ * heuristic scoring). Before this guard, the bandit cold-start trap could let
+ * exploration select one of these (costly multi-phase runs without an explicit
+ * user request). They remain fully reachable via an explicit `request.strategy`.
+ *
+ * `critique-repair` is NOT here: it has a legitimate auto path (strategy hint
+ * in TaskProfile). `hierarchical` is not here either — it is no longer
+ * registered at all (see constructor, SAC-02).
+ */
+const EXPLICIT_ONLY_STRATEGIES: ReadonlySet<string> = new Set([
+  'massive-parallel',
+  'war-room',
+  'blind-debate',
+  'devil-advocate-consensus',
+  'safety-quorum',
+  'diversity-ensemble',
+  'stigmergic-refinement',
+  'swarm-explore',
+  'clarification-first',
+  'research-synthesize',
+  'double-diamond',
+  'multi-hop-qa',
+  'persona-exploration',
+  'agentic',
+  'sensitivity-consensus',
+  'tri-role-collective',
+]);
+
+/** True if the strategy may be selected by an automatic path (bandit/heuristic/etc). */
+export function isAutoSelectableStrategy(name: string): boolean {
+  return !EXPLICIT_ONLY_STRATEGIES.has(name);
+}
+
 export function detectFileGenerationFormat(
   requiredCapabilities: string[]
 ): 'csv' | 'json' | 'markdown' | 'docx' | 'xlsx' | 'pdf' | 'pptx' | 'zip' | 'code' {
@@ -296,6 +444,309 @@ export function detectFileGenerationFormat(
     if (format) return format;
   }
   return 'markdown';
+}
+
+/**
+ * Placeholder-text production incident fix (2026-09-08): a successful
+ * media/file-generation stage's chat-visible response used to be the
+ * literal internal pointer string
+ * `[${modality} generated — see ailin_metadata.artifacts[${artifactIndex}]]`
+ * — verified in production for both zip and PDF generation. That string was
+ * never a fallback; it was the ONLY text ever produced for this response
+ * type, because no natural-language synthesis existed for it. This section
+ * generates one instead.
+ *
+ * Scope-limited PT/EN heuristic — NOT a general language identifier — so the
+ * sentence at least matches the two languages ailin.chat's primary audience
+ * uses. Falls back to English for anything else, the same "detect a strong
+ * signal, don't fully classify" tradeoff MULTILINGUAL_RE in
+ * capability-inference.ts documents for the same class of problem.
+ */
+const PORTUGUESE_MARKER_RE =
+  /[ãõâêîôûáéíóúàçÃÕÂÊÎÔÛÁÉÍÓÚÀÇ]|\b(gere|crie|criar|cria|faça|fazer|arquivo|documento|imagem|vídeo|áudio|para baixar|baixável|por favor)\b/i;
+
+function isLikelyPortuguese(text: string): boolean {
+  return PORTUGUESE_MARKER_RE.test(text);
+}
+
+/** Natural-language label for each file-generation format, per language —
+ *  used to build a real sentence instead of the internal format tag. */
+const FILE_FORMAT_SUCCESS_MESSAGES: Record<
+  ReturnType<typeof detectFileGenerationFormat>,
+  { en: string; pt: string }
+> = {
+  csv: {
+    en: 'Here is the CSV file you requested.',
+    pt: 'Aqui está o arquivo CSV que você pediu.',
+  },
+  json: {
+    en: 'Here is the JSON file you requested.',
+    pt: 'Aqui está o arquivo JSON que você pediu.',
+  },
+  markdown: {
+    en: 'Here is the Markdown file you requested.',
+    pt: 'Aqui está o arquivo em Markdown que você pediu.',
+  },
+  docx: {
+    en: 'Here is the Word document you requested.',
+    pt: 'Aqui está o documento Word que você pediu.',
+  },
+  xlsx: {
+    en: 'Here is the Excel spreadsheet you requested.',
+    pt: 'Aqui está a planilha Excel que você pediu.',
+  },
+  pdf: {
+    en: 'Here is the PDF document you requested.',
+    pt: 'Aqui está o documento em PDF que você pediu.',
+  },
+  pptx: {
+    en: 'Here is the PowerPoint presentation you requested.',
+    pt: 'Aqui está a apresentação em PowerPoint que você pediu.',
+  },
+  zip: {
+    en: 'Here is the ZIP file you requested.',
+    pt: 'Aqui está o arquivo ZIP que você pediu.',
+  },
+  code: {
+    en: 'Here is the code file you requested, ready to download.',
+    pt: 'Aqui está o arquivo de código que você pediu, pronto para baixar.',
+  },
+};
+
+/** Natural-language sentence for a successful image/video/audio stage, per
+ *  language — 'file' is handled separately by FILE_FORMAT_SUCCESS_MESSAGES
+ *  since its message names the concrete format (PDF/ZIP/DOCX/...). */
+const MEDIA_MODALITY_SUCCESS_MESSAGES: Record<'image' | 'video' | 'audio', { en: string; pt: string }> = {
+  image: { en: 'Here is the image you requested.', pt: 'Aqui está a imagem que você pediu.' },
+  video: { en: 'Here is the video you requested.', pt: 'Aqui está o vídeo que você pediu.' },
+  audio: { en: 'Here is the audio you requested.', pt: 'Aqui está o áudio que você pediu.' },
+};
+
+/**
+ * Builds the real, natural-language sentence shown to the user for a
+ * successful media/file-generation stage — replaces the
+ * `[modality generated — see ailin_metadata.artifacts[N]]` placeholder that
+ * used to be the only text ever produced here. The technical
+ * `ailin_metadata.artifacts[N]` pointer is preserved separately in
+ * `summaryText` (fed into `accumulatedContext` for downstream stages, never
+ * shown to the end user directly), so no information is lost — only the
+ * user-visible channel changes.
+ */
+function buildMediaSuccessMessage(
+  modality: 'image' | 'video' | 'audio' | 'file',
+  stage: TriageStage,
+  prompt: string
+): string {
+  const pt = isLikelyPortuguese(prompt);
+  if (modality === 'file') {
+    const format = detectFileGenerationFormat(stage.requiredCapabilities);
+    const messages = FILE_FORMAT_SUCCESS_MESSAGES[format];
+    return pt ? messages.pt : messages.en;
+  }
+  const messages = MEDIA_MODALITY_SUCCESS_MESSAGES[modality];
+  return pt ? messages.pt : messages.en;
+}
+
+/**
+ * Session affinity write hook (LOTE AW, 2026-09) — pure selection logic,
+ * extracted to module scope so it's unit-testable without instantiating the
+ * full `OrchestrationEngine`.
+ *
+ * Picks whichever `ModelExecution` actually served the request: the first
+ * SUCCESSFUL one, falling back to the first one with a modelId at all (so a
+ * total failure still yields something rather than nothing) if none
+ * succeeded. `executeModelWithRetry()`'s fallback loop already puts the
+ * model that actually won here — never the original candidate that may have
+ * died mid-turn — so recording THIS (never blindly `modelsUsed[0]`) is what
+ * makes a dead session-affinity pin self-heal on the very next write, with
+ * no separate invalidation path needed.
+ */
+export function pickSessionAffinityExecution(
+  modelsUsed: ModelExecution[] | undefined
+): ModelExecution | undefined {
+  if (!modelsUsed || modelsUsed.length === 0) return undefined;
+  return (
+    modelsUsed.find((m) => m.success && !!m.modelId) ?? modelsUsed.find((m) => !!m.modelId)
+  );
+}
+
+/**
+ * Shared "does this model's context window accommodate this many tokens?"
+ * predicate (2026-09 long-context-delegation follow-up). Fails CLOSED on an
+ * unknown/zero `contextWindow` — missing catalog data is never treated as
+ * evidence of fit. Used both for the session-affinity pin's initial
+ * admission check and its post-compaction/delegation final-fit re-check in
+ * `buildContext()`, so "fits" means the exact same thing at both call sites.
+ */
+export function modelFitsContext(
+  model: Pick<Model, 'contextWindow'> | undefined,
+  contextSize: number
+): boolean {
+  return !!model && model.contextWindow > 0 && contextSize < model.contextWindow;
+}
+
+/** Admission verdict for a proposed session-affinity pin, plus each
+ *  individual gate's result (surfaced for debug logging when admission
+ *  fails). See {@link evaluateSessionAffinityPinAdmission}. */
+export interface SessionAffinityPinAdmission {
+  admit: boolean;
+  passesContextWindow: boolean;
+  passesCredit: boolean;
+  passesCapabilities: boolean;
+  pinnedContextWindowKnown: boolean;
+}
+
+/**
+ * Session-affinity pin admission gate (2026-09 follow-up) — pure decision,
+ * extracted to module scope so it's unit-testable without instantiating the
+ * full `OrchestrationEngine` or its DB/Redis-backed collaborators (same
+ * rationale as `pickSessionAffinityExecution` above).
+ *
+ * `admit` decides whether `buildContext()` should even ATTEMPT to reuse the
+ * pin (resolve it + run long-context handling) — it is deliberately NOT the
+ * same thing as `passesContextWindow`. A request that no longer fits the
+ * pinned model's context window is exactly the case long-context handling
+ * (compaction, then delegation) exists to try to recover; gating admission
+ * on `passesContextWindow` made that recovery path mutually exclusive with
+ * its own trigger condition and was confirmed dead code (2026-09 audit —
+ * see `applyLongContextHandling`'s doc comment). Admission only requires a
+ * KNOWN context window to measure against (`pinnedContextWindowKnown`) —
+ * long-context handling still runs, and may still reject the request, when
+ * the raw size already exceeds it.
+ *
+ * Capability re-validation: the pin only ever proved itself against a PRIOR
+ * message. `requiredCapabilities` is the pre-triage, request-derived signal
+ * a fresh `DynamicModelSelector` pass would hard-filter on at this exact
+ * point in the pipeline (triage hasn't run yet when this is called) —
+ * checking it here keeps the pin's admission bar no looser than a fresh
+ * selection's. An empty/unknown `capabilities` list on the model fails OPEN
+ * (mirrors `explicitlyLacksFunctionCalling`'s "never reject on unknown
+ * metadata" contract) — this only rejects an EXPLICIT mismatch.
+ */
+export function evaluateSessionAffinityPinAdmission(params: {
+  pinnedModel: Model | undefined;
+  contextSize: number;
+  requiredCapabilities: ModelCapability[] | undefined;
+  requestTools: unknown;
+}): SessionAffinityPinAdmission {
+  const { pinnedModel, contextSize, requiredCapabilities, requestTools } = params;
+  const pinnedContextWindowKnown = !!pinnedModel && pinnedModel.contextWindow > 0;
+  const passesContextWindow = modelFitsContext(pinnedModel, contextSize);
+  const passesCredit = !!pinnedModel && pinnedModel.balanceStatus !== 'no-credits';
+  const passesCapabilities =
+    !!pinnedModel &&
+    (pinnedModel.capabilities.length === 0 ||
+      (requiredCapabilities ?? []).every((cap) => pinnedModel.capabilities.includes(cap))) &&
+    (!requestRequiresFunctionCalling(requestTools) ||
+      !explicitlyLacksFunctionCalling(pinnedModel));
+
+  return {
+    admit: !!pinnedModel && passesCredit && passesCapabilities && pinnedContextWindowKnown,
+    passesContextWindow,
+    passesCredit,
+    passesCapabilities,
+    pinnedContextWindowKnown,
+  };
+}
+
+/**
+ * Fallback when the triage LLM omitted `generationPrompt` (malformed plan, or
+ * a heuristic-only fallback plan with no structured stage data). Tries, in
+ * order: the stage's own task_context, then accumulated prior-stage output,
+ * then the ORIGINAL user request text.
+ *
+ * LOTE AS finding #2/#3 fix (2026-09-06): `task_context` is documented as
+ * OPTIONAL in TRIAGE_SYSTEM_PROMPT ("OMIT this field entirely if you have
+ * nothing task-specific to add") and `accumulatedContext` is empty for the
+ * (common) first/only stage — so the old two-tier fallback silently produced
+ * the fully generic placeholder below, discarding the user's actual request,
+ * whenever the LLM (validly) omitted task_context. The user's own request
+ * text is now always tried before the generic placeholder. Exported as a
+ * pure top-level function (was a private method) so it can be unit-tested
+ * directly without constructing an OrchestrationEngine.
+ */
+export function deriveGenerationPromptFallback(
+  stage: TriageStage,
+  accumulatedContext: string,
+  lastUserMessageFallback: string
+): string {
+  if (stage.taskContext) return stage.taskContext;
+  if (accumulatedContext) return accumulatedContext;
+  if (lastUserMessageFallback && lastUserMessageFallback !== 'Unknown task') {
+    return lastUserMessageFallback;
+  }
+  return `Generate content for stage "${stage.name}"`;
+}
+
+/** Match returned by {@link detectFencedDeliverableArtifact}. */
+export interface DeliverableArtifactMatch {
+  kind: 'svg' | 'mermaid';
+  mimeType: string;
+  filename: string;
+  content: string;
+}
+
+/**
+ * Maximum prose (leading/trailing text outside the fenced block, after
+ * trimming) tolerated before a fenced block stops counting as "the whole
+ * answer". Keeps a one-sentence caption ("Here's your diagram:") from
+ * disqualifying an otherwise-clear deliverable, while still rejecting a
+ * fenced snippet embedded in a genuinely longer explanation.
+ */
+const DELIVERABLE_PROSE_ALLOWANCE = 120;
+
+/**
+ * Detects when a chat stage's response IS a single fenced ```svg``` or
+ * ```mermaid``` code block meant as the deliverable itself (a chart or
+ * diagram), as opposed to an illustrative snippet inside a longer prose
+ * answer.
+ *
+ * Scoping (LOTE AS artifact-modality check, 2026-09-06): confirmed that no
+ * code path anywhere scans a plain chat completion's text for a
+ * chart/diagram deliverable and promotes it to a first-class `AilinArtifact`
+ * — every existing `AilinArtifact` construction site lives inside
+ * `executeMediaGenerationStage` and requires a DEDICATED triage stage
+ * (image_generation/video_generation/audio_generation/file_generation).
+ * There is no `chart_generation`/`diagram_generation` capability, and
+ * `FileGenerationService`'s existing `code`/`markdown` renderers are only
+ * reachable via that same dedicated-stage path. This function is the
+ * "small, not a subsystem" fix the check called for: reuse the `AilinArtifact`
+ * shape post-hoc for the one case (a fenced svg/mermaid deliverable) that is
+ * cheap and safe to detect from plain text, without adding a new capability
+ * ontology entry or touching the primary (and far more heavily trafficked)
+ * single-stage chat completion path.
+ *
+ * Deliberately conservative — requires the fenced block, after trimming
+ * whitespace, to account for the ENTIRE trimmed response (modulo
+ * `DELIVERABLE_PROSE_ALLOWANCE` chars of surrounding prose) so a snippet
+ * embedded in a longer technical explanation is never misdetected as a
+ * deliverable. Pure — no side effects — so it is unit-testable in isolation.
+ */
+export function detectFencedDeliverableArtifact(
+  content: string
+): DeliverableArtifactMatch | undefined {
+  const trimmed = content.trim();
+  if (!trimmed) return undefined;
+
+  const fenceRe = /```(svg|mermaid)\s*\n([\s\S]*?)```/i;
+  const match = fenceRe.exec(trimmed);
+  if (!match) return undefined;
+
+  const [fullMatch, langRaw, body] = match;
+  const bodyTrimmed = body.trim();
+  if (!bodyTrimmed) return undefined;
+
+  const outsideFence = trimmed.length - fullMatch.length;
+  if (outsideFence > DELIVERABLE_PROSE_ALLOWANCE) return undefined;
+
+  const kind = langRaw.toLowerCase() as 'svg' | 'mermaid';
+  if (kind === 'svg') {
+    // Require the body to actually look like an SVG document, not just any
+    // text someone fenced as ```svg```.
+    if (!/^<svg[\s>]/i.test(bodyTrimmed)) return undefined;
+    return { kind, mimeType: 'image/svg+xml', filename: 'diagram.svg', content: bodyTrimmed };
+  }
+  return { kind, mimeType: 'text/vnd.mermaid', filename: 'diagram.mmd', content: bodyTrimmed };
 }
 
 /**
@@ -355,7 +806,11 @@ export class OrchestrationEngine {
     this.registerStrategy(new QualityMultiPassStrategy());
     this.registerStrategy(new AdaptiveStrategy());
     this.registerStrategy(new ContextualStrategy());
-    this.registerStrategy(new HierarchicalStrategy());
+    // hierarchical (STUB) intentionally NOT registered (SAC-02, audit 2026-08-20):
+    // it is an honest single-model passthrough — an explicit caller naming it would
+    // silently receive single-model output while believing they got manager→worker
+    // delegation. Unregistered, an explicit request fails loudly (invalid_strategy)
+    // instead of misleading. Restore registration alongside real delegation.
     this.registerStrategy(new ConsensusStrategy());
     this.registerStrategy(new ReinforcementStrategy());
     this.registerStrategy(new DebateStrategy()); // Multi-Turn Debate strategy
@@ -384,14 +839,17 @@ export class OrchestrationEngine {
     // (3) AdaptiveStrategy delegating to a sub-strategy; (4) the Thompson
     // Sampling bandit (seeded below). An adversarial audit found ~11 strategies
     // (e.g. war-room, massive-parallel, agentic, sensitivity-consensus,
-    // tri-role-collective, hierarchical) have NO path via (2)/(3) and are
+    // tri-role-collective) have NO path via (2)/(3) and are
     // therefore EXPLICIT-ONLY — reachable only by a caller naming them in
-    // `request.strategy`. The bandit (4) has a cold-start trap: it requires
-    // ≥5 observations to consider an arm, which a never-auto-selected strategy
-    // can never accumulate on its own. These strategies are intentionally
-    // retained (they are valid explicit options), NOT dead code — see the
-    // 2026-06-11 orphan-code audit. Do not delete on the basis of "no auto
-    // path"; if reducing the portfolio, do a per-strategy value pass first.
+    // `request.strategy`. Since the 2026-08-20 audit (SAC-01), this is ENFORCED
+    // by EXPLICIT_ONLY_STRATEGIES (see selectStrategyCore): the automatic paths
+    // (triage/archive/Pareto/bandit/heuristic) can no longer select them, so the
+    // bandit cold-start trap (needs ≥5 observations an explicit-only strategy
+    // can never accumulate on its own) cannot leak costly/experimental runs into
+    // auto traffic. These strategies are intentionally retained (they are valid
+    // explicit options), NOT dead code — see the 2026-06-11 orphan-code audit.
+    // Do not delete on the basis of "no auto path"; if reducing the portfolio,
+    // do a per-strategy value pass first.
 
     if (this.config.enableTriaging !== false) {
       // 100% dynamic - select triage model based on capabilities and performance, not hardcoded names
@@ -689,6 +1147,67 @@ export class OrchestrationEngine {
     ];
 
     return complexityIndicators.filter(Boolean).length >= 2;
+  }
+
+  /**
+   * Wire an Observer feed onto `context` for the NON-STREAMING execute() path,
+   * and emit its zero-latency opening narration synchronously (Gap 2 — see
+   * `buildImmediateOpeningNarration`'s doc). Shared by BOTH of execute()'s
+   * post-selection branches — call this ONCE, unconditionally, before the
+   * `if (confidenceGateEnabled) {...} else {...}` split below, rather than
+   * duplicating the instantiation inside each branch.
+   *
+   * Bug this replaces (2026-09): the confidence-gate branch — the DEFAULT
+   * production path, since ORCHESTRATION_ENABLE_FEEDBACK_LOOP defaults true
+   * (index.ts) — never wired an observer at all; only the else branch did.
+   * Every `emitObserverEvent()` call inside a strategy executed via the
+   * default branch silently hit BaseStrategy's built-in no-op feed
+   * (`getObserverFeed()`'s fallback), so stream:false collective requests
+   * NEVER got real narration in production. Hoisting the wiring above the
+   * branch — instead of copying it into both — makes that class of bug
+   * structurally impossible to reintroduce: there is nowhere left for a
+   * future branch to "forget" it.
+   *
+   * The streaming path (executeStream()) wires its own observer separately
+   * (it has its own supportsStreaming()/interleaveNarration machinery) — see
+   * the analogous "Observer wiring (streaming path)" block below.
+   */
+  private wireObserverFeed(
+    request: ChatRequest,
+    context: OrchestrationContext,
+    strategy: BaseStrategy
+  ): ObserverFeed {
+    // Narration is default-ON: undefined/true both enable it; only an
+    // explicit enable_observer:false opts out. OBSERVER_DEFAULT_ENABLED=false
+    // is the global kill-switch (flip on the running stack, no redeploy).
+    const observerEnabled =
+      process.env.OBSERVER_DEFAULT_ENABLED !== 'false' &&
+      request.ailin_constraints?.enable_observer !== false;
+    let observerFeed: ObserverFeed = createNoOpObserverFeed();
+    if (observerEnabled) {
+      const metadata = strategy.getMetadata();
+      const userSample = ObserverService.extractUserSample(request.messages);
+      const observer = new ObserverService({ enabled: true, language: userSample }, metadata.name);
+      if (observer.isActive()) {
+        observerFeed = observer;
+        // Gap 2: deterministic, zero-LLM opening line lands BEFORE any async
+        // narration work starts — see observer-templates.ts.
+        observerFeed.emitImmediate(
+          {
+            type: 'phase_start',
+            timestamp: Date.now(),
+            strategy: metadata.name,
+            models: [],
+          },
+          buildImmediateOpeningNarration(metadata, userSample)
+        );
+      }
+    }
+    // `observerFeed` is a runtime-attached field; single structural cast
+    // (NOT `as unknown as`) is the proper way to express "I know this object
+    // accepts this extra field at runtime".
+    (context as { observerFeed?: ObserverFeed }).observerFeed = observerFeed;
+    return observerFeed;
   }
 
   /**
@@ -1134,13 +1653,40 @@ export class OrchestrationEngine {
               (plan.stages.length === 1 &&
                 detectMediaGenerationModality(plan.stages[0].requiredCapabilities) !== null));
 
+          // LOTE AT PR4 (2026-09-07): a COMPOSITE multi-artifact plan (2+
+          // distinct media modalities from ONE request — see
+          // `TriageExecutionPlan.compositeMediaModalities`'s doc comment)
+          // must be checked BEFORE the general `hasMultiStagePlan` branch —
+          // it trivially also satisfies `stages.length > 1` — and routed
+          // through the dedicated parallel/deadline-bounded pipeline instead
+          // of the sequential per-stage loop, which has no concept of
+          // "these N stages are independent, run them together" and would
+          // otherwise execute the same N media stages one after another.
+          const isCompositeMediaPlan = plan ? this.isCompositeMediaPlan(plan) : false;
+
           let result: OrchestrationResult;
           // C4 fix: selectionSource is request-scoped (local variable), NOT an instance field.
           // This prevents race conditions where concurrent requests overwrite each other's
           // selection source, corrupting audit data and learning system attribution.
           let selectionSource = 'unknown';
 
-          if (hasMultiStagePlan) {
+          if (isCompositeMediaPlan && plan) {
+            this.log.info(
+              {
+                requestId,
+                stageCount: plan.stages.length,
+                modalities: plan.compositeMediaModalities,
+              },
+              'Executing composite multi-artifact media plan (parallel fan-out)'
+            );
+            selectionSource = 'composite-media';
+            result = await this.executeCompositeMediaPlan(
+              this.applyRecommendedTools(request, context),
+              context,
+              plan,
+              requestId
+            );
+          } else if (hasMultiStagePlan) {
             this.log.info(
               {
                 requestId,
@@ -1389,6 +1935,13 @@ export class OrchestrationEngine {
             const confidenceGateEnabled = this.config.enableFeedbackLoop !== false;
             const confidenceGateThreshold = qualityTarget * 0.85; // 85% of target
 
+            // ── Observer wiring (Gap 1 fix, 2026-09) ────────────────────────
+            // Wired ONCE here, BEFORE the confidenceGateEnabled/else split
+            // below, so BOTH branches share the same real observer feed
+            // instead of only the else-branch getting one. See
+            // wireObserverFeed()'s doc for the bug this replaces.
+            const observerFeed = this.wireObserverFeed(request, context, strategy);
+
             // A-fix (2026-06-11): if strategy execution THROWS — e.g. a collective
             // throwing "All parallel executions failed" when every fanned-out provider
             // returns 401/402/empty — synthesize an EMPTY OrchestrationResult instead of
@@ -1439,6 +1992,22 @@ export class OrchestrationEngine {
                   }
                 );
               } catch (execErr) {
+                // Context-window preflight audit (2026-09): a pinned model
+                // "must always win outright" — the whole point of
+                // ContextWindowExceededError (thrown by
+                // SingleModelStrategy.selectBestModel()'s preflight check,
+                // or base-strategy.ts's classified candidate-failure path)
+                // is a clean, honest failure INSTEAD OF silent truncation
+                // or silent model substitution. Letting it fall into
+                // buildExecThrewResult() here would defeat that: the
+                // synthesized empty result feeds straight into
+                // recoverEmptyFinalResponse() below, which dynamic-selects
+                // and tries a DIFFERENT model with no awareness of the
+                // caller's pin — exactly the silent substitution this error
+                // exists to prevent. Re-throw immediately instead.
+                if (execErr instanceof ContextWindowExceededError) {
+                  throw execErr;
+                }
                 this.log.error(
                   {
                     requestId,
@@ -1505,31 +2074,9 @@ export class OrchestrationEngine {
                 }
               }
             } else {
-              // ── Observer wiring ──
-              // If enable_observer=true, instantiate ObserverService with a local reasoning model.
-              // The observer narrates the collective process in real-time via SSE chunks.
-              // Narration is default-ON: undefined/true both enable it; only an
-              // explicit enable_observer:false opts out. OBSERVER_DEFAULT_ENABLED=false
-              // is the global kill-switch (flip on the running stack, no redeploy).
-              const observerEnabled =
-                process.env.OBSERVER_DEFAULT_ENABLED !== 'false' &&
-                request.ailin_constraints?.enable_observer !== false;
-              let observerFeed = createNoOpObserverFeed();
-              if (observerEnabled) {
-                const language = ObserverService.extractUserSample(request.messages);
-                const observer = new ObserverService(
-                  { enabled: true, language },
-                  strategy.getMetadata().name
-                );
-                if (observer.isActive()) {
-                  observerFeed = observer;
-                }
-              }
-              // Inject observer feed into strategy context for event emission.
-              // `observerFeed` is a runtime-attached field; single structural cast
-              // (NOT `as unknown as`) is the proper way to express "I know this
-              // object accepts this extra field at runtime".
-              (context as { observerFeed?: typeof observerFeed }).observerFeed = observerFeed;
+              // Observer wiring: handled once, before this if/else, by
+              // `this.wireObserverFeed()` above — `observerFeed` (and
+              // `context.observerFeed`) are already populated here.
 
               // NOTE: cross-modal capability access is provided via `context.invoker`
               // (built once per request in buildContext(), see createCapabilityInvoker
@@ -1563,6 +2110,14 @@ export class OrchestrationEngine {
               try {
                 result = await strategy.execute(memoryEnrichedRequest, context);
               } catch (execErr) {
+                // See the matching comment in the confidenceGateEnabled
+                // branch above: a pinned model's ContextWindowExceededError
+                // must reach the caller as a clean failure, never get
+                // "recovered" into a silently-different model via
+                // recoverEmptyFinalResponse() below.
+                if (execErr instanceof ContextWindowExceededError) {
+                  throw execErr;
+                }
                 this.log.error(
                   {
                     requestId,
@@ -1576,6 +2131,13 @@ export class OrchestrationEngine {
 
               // Memory recording: store high-quality results for future retrieval
               strategy.recordExecution(context, result).catch(() => {}); // fire-and-forget
+              // Session affinity write (LOTE AW): record whichever model
+              // ACTUALLY served this turn — see recordSessionAffinityOutcome's
+              // doc comment for why this is deliberately a SIBLING call, not
+              // folded into recordExecution (which early-returns on a short
+              // or low-quality answer, which would silently skip caching a
+              // perfectly good short reply).
+              this.recordSessionAffinityOutcome(context, result);
 
               // Record degradation metadata if strategy was degraded pre-dispatch
               if (context.degradation?.isDegraded) {
@@ -1588,20 +2150,26 @@ export class OrchestrationEngine {
                   degradation_depth: context.degradation.degradationDepth,
                 };
               }
+            }
 
-              // Attach observer narrations to result metadata
-              const narrations = observerFeed.getNarrations();
-              if (narrations.length > 0) {
-                result.metadata = {
-                  ...result.metadata,
-                  observer_narrations: narrations.map((n) => ({
-                    event: n.event.type,
-                    narration: n.narration,
-                    reasoning: n.reasoning,
-                    duration_ms: n.durationMs,
-                  })),
-                };
-              }
+            // Attach observer narrations to result metadata. Shared across
+            // BOTH confidenceGateEnabled branches above (Gap 1 fix, 2026-09)
+            // — `observerFeed` was wired once before the if/else split, so
+            // this now runs regardless of which branch actually executed
+            // the strategy (previously this lived ONLY inside the else
+            // branch, so the confidence-gate — default production — branch
+            // never surfaced narrations even when a strategy DID emit them).
+            const observerNarrations = observerFeed.getNarrations();
+            if (observerNarrations.length > 0) {
+              result.metadata = {
+                ...result.metadata,
+                observer_narrations: observerNarrations.map((n) => ({
+                  event: n.event.type,
+                  narration: n.narration,
+                  reasoning: n.reasoning,
+                  duration_ms: n.durationMs,
+                })),
+              };
             }
           }
 
@@ -1990,6 +2558,9 @@ export class OrchestrationEngine {
                   (typeof result.metadata?.decision_source === 'string'
                     ? result.metadata.decision_source
                     : selectionSource) || 'unknown',
+                // Stamped by DynamicModelSelector.selectModels() on this same
+                // context object; undefined when no dynamic selection ran.
+                durationMs: context.selectionDurationMs,
               });
             }
 
@@ -2399,6 +2970,15 @@ export class OrchestrationEngine {
                     triage_intent: triageDecision?.intent,
                     triage_complexity: triageDecision?.complexity,
                     triage_strategy: triageDecision?.recommendedStrategy,
+                    // LOTE AS finding #4 (2026-09-06): surface whether this
+                    // decision came from a real triage LLM call or the
+                    // heuristic fallback, plus the human-readable reason —
+                    // `metadata.triage` already carried the full decision
+                    // internally, this mirrors the two fields into the
+                    // public response so a caller can detect a silent
+                    // degrade-to-heuristic without string-matching anything.
+                    triage_source: triageDecision?.source,
+                    triage_reason: triageDecision?.reason,
                     // F5-META: propagate structured dynamic prompting metadata
                     // to the API response so clients can audit which variant/slot
                     // config produced the response. Only set when non-empty.
@@ -2679,6 +3259,11 @@ export class OrchestrationEngine {
     // class is ALWAYS 'single' regardless of what triage recommends (the SSE
     // single-model plan never branches into a collective) — so resolving the
     // model pool never needs to wait on triage's result at all.
+    //
+    // The selector stamps selectionDurationMs on THIS context object; the
+    // triage branch below may replace `context` by spread before that stamp
+    // lands, so keep a handle on the original for the metric.
+    const planningContext = context;
     const speculativePromise = this.resolveSpeculativeSingleSelection(
       strategy,
       planningRequest,
@@ -2746,6 +3331,15 @@ export class OrchestrationEngine {
     if (!selection) {
       throw new Error('No suitable streaming-capable model available');
     }
+
+    // Streaming is the dominant path in production and never reached the
+    // model-selection metrics before (only execute()'s finalize records them).
+    recordModelSelection({
+      model: selection.model.id,
+      taskType: context.taskType || 'general',
+      selectionReason: 'streaming-plan',
+      durationMs: planningContext.selectionDurationMs ?? context.selectionDurationMs,
+    });
 
     // Ensure downstream consumers know which model to execute
     planningRequest.model = selection.model.id;
@@ -3098,12 +3692,29 @@ export class OrchestrationEngine {
         request.ailin_constraints?.inline_narration === true;
       let streamObserverFeed = createNoOpObserverFeed();
       if (streamObserverEnabled && (strategy.getMetadata().minModels ?? 1) > 1) {
+        const streamUserSample = ObserverService.extractUserSample(request.messages);
         const observer = new ObserverService(
-          { enabled: true, language: ObserverService.extractUserSample(request.messages) },
+          { enabled: true, language: streamUserSample },
           strategy.getMetadata().name
         );
         if (observer.isActive()) {
           streamObserverFeed = observer;
+          // Gap 2 (near-instant first content, 2026-09): a deterministic,
+          // template-built line — ZERO LLM/network latency, emitted
+          // synchronously — so a viewer sees narration at t≈0 instead of
+          // waiting through the ~4-9s floor the LLM-backed "setup" narration
+          // right below still pays. That richer narration keeps running and
+          // layers in afterward; this is only ever the FIRST thing shown.
+          // See observer-templates.ts's doc comment for the full rationale.
+          streamObserverFeed.emitImmediate(
+            {
+              type: 'phase_start',
+              timestamp: Date.now(),
+              strategy: strategy.getMetadata().name,
+              models: [],
+            },
+            buildImmediateOpeningNarration(strategy.getMetadata(), streamUserSample)
+          );
           // Universal "setup" narration — fired the moment the collective is assembled,
           // BEFORE the strategy starts its phases, so the FIRST narration reports the
           // earlier pipeline (request analyzed → routed to this collective → models
@@ -3263,6 +3874,7 @@ export class OrchestrationEngine {
             outcome: isDegraded ? 'degraded' : 'recovered',
           });
           strategy.recordExecution(enrichedContext, recovered).catch(() => {});
+          this.recordSessionAffinityOutcome(enrichedContext, recovered);
           yield this.withStreamRecoveryMetadata(recovered, streamErr);
         }
       } else {
@@ -3331,6 +3943,7 @@ export class OrchestrationEngine {
         let result = await execPromise;
         result = this.applyDegradedFallback(result, requestId);
         strategy.recordExecution(enrichedContext, result).catch(() => {});
+        this.recordSessionAffinityOutcome(enrichedContext, result);
         yield result.finalResponse;
       }
     } finally {
@@ -3369,8 +3982,13 @@ export class OrchestrationEngine {
     // ~30-52s silence before the synthesis. Only the first — the rest stay off-channel
     // so the answer isn't flooded with process prose. Claimed once here.
     let firstInlineEmitted = false;
+    // Token-level streaming (2026-09): a `partial: true` narration is only a
+    // FRAGMENT of a milestone's text, not the complete opening line — inlining
+    // it would show a truncated word/phrase as the visible "opening tokens"
+    // instead of a real sentence. Never claim the one-shot inline promotion on
+    // a partial; wait for the first COMPLETE (non-partial) narration instead.
     const emitNarration = (n: ObserverNarration): ChatResponse => {
-      if (inlineFirstNarration && !firstInlineEmitted) {
+      if (inlineFirstNarration && !firstInlineEmitted && !n.partial) {
         firstInlineEmitted = true;
         return buildInlineNarrationChunk(n);
       }
@@ -3384,8 +4002,12 @@ export class OrchestrationEngine {
     // narration text), sharing the same one-shot claim as emitNarration.
     const maybeInlineChunk = (chunk: ChatResponse): ChatResponse => {
       if (!inlineFirstNarration || firstInlineEmitted) return chunk;
-      const meta = chunk.ailin_metadata as { type?: string; narration?: string } | undefined;
-      if (meta?.type === 'observer' && meta.narration) {
+      const meta = chunk.ailin_metadata as
+        | { type?: string; narration?: string; partial?: boolean }
+        | undefined;
+      // Skip a partial fragment here too (see emitNarration's comment) — keep
+      // waiting for the first complete narration to promote.
+      if (meta?.type === 'observer' && meta.narration && !meta.partial) {
         firstInlineEmitted = true;
         const c0 = chunk.choices?.[0];
         return {
@@ -3488,18 +4110,187 @@ export class OrchestrationEngine {
    * Estimate context size
    */
   private estimateContextSize(messagesOrRequest: ChatMessage[] | ChatRequest): number {
-    // Handle both messages array and ChatRequest
-    const messages = Array.isArray(messagesOrRequest)
-      ? messagesOrRequest
-      : messagesOrRequest.messages || [];
+    // Delegates to the shared estimator (context-size-estimator.ts), which
+    // additionally counts `request.tools` when a full ChatRequest is passed —
+    // see that module's doc comment for the full audit of the five
+    // previously-drifted copies this consolidates.
+    return estimateContextSizeShared(messagesOrRequest);
+  }
 
-    // Rough estimate: 4 chars per token
-    const totalChars = messages.reduce((sum: number, msg: ChatMessage) => {
-      const content = typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content);
-      return sum + content.length;
-    }, 0);
+  /**
+   * Build the production summarizer for long-context compaction
+   * (context-compaction-service.ts): resolves a fast/cheap model via the
+   * SAME triage-model-selection machinery `TriagingService` already uses
+   * for its own classification call (`resolveCheapModel`), then runs one
+   * real completion to summarize the older-turns text.
+   *
+   * Deliberately closes over nothing but `this` (never a per-request
+   * `request`/`context`) — `getContextCompactionService()` is a singleton
+   * that only honors the summarizer passed on its FIRST construction, so
+   * this must be safe to build once and reuse across every request.
+   * Returns undefined when no triage service is configured (e.g. some test
+   * harnesses), in which case the compaction service falls back to its own
+   * bounded-truncation heuristic rather than throwing.
+   */
+  private buildCompactionSummarizer():
+    | ((text: string, context: OrchestrationContext) => Promise<string>)
+    | undefined {
+    if (!this.triageService) return undefined;
+    const triageService = this.triageService;
+    return async (text: string, context: OrchestrationContext): Promise<string> => {
+      const probeRequest: ChatRequest = {
+        messages: [{ role: 'user', content: text }],
+        stream: false,
+      };
+      const cheap = await triageService.resolveCheapModel(probeRequest, context, 'speed');
+      if (!cheap) {
+        throw new Error('No cheap model resolved for context-compaction summarization');
+      }
+      const summaryRequest: ChatRequest = {
+        model: cheap.model.id,
+        messages: [
+          {
+            role: 'system',
+            content:
+              'Summarize the following conversation history concisely, preserving key facts, ' +
+              'decisions, and open questions a later reply may need. Output only the summary text.',
+          },
+          { role: 'user', content: text },
+        ],
+        stream: false,
+        max_tokens: 500,
+      };
+      const response = await cheap.adapter.chatCompletion(summaryRequest);
+      const content = response.choices?.[0]?.message?.content;
+      return typeof content === 'string' ? content : '';
+    };
+  }
 
-    return Math.floor(totalChars / 4); // Approximate token count
+  /**
+   * Long-context compaction + delegation, run once a session-affinity pin
+   * has been re-validated against a REAL model's `contextWindow`
+   * (buildContext()'s only call site, immediately after it sets
+   * `context.precomputedModelSelection = resolved`).
+   *
+   * Primary mechanism: client-side compaction (`ContextCompactionService`)
+   * summarizes everything older than the kept-verbatim tail via one
+   * cheap-model call. Secondary/fallback mechanism, per
+   * `pickDelegationModel`'s own doc comment: when the request STILL
+   * doesn't fit the pinned model even after that best-effort attempt — the
+   * kept-verbatim tail alone can exceed a small model's window, or the
+   * summarizer can fail open, or there may be nothing old enough to fold —
+   * delegate to a larger-context sibling (same-provider preferred, so the
+   * session-affinity pin's provider lineage and any Anthropic prompt-cache
+   * warmth survive) rather than silently sending an over-budget request
+   * downstream to fail at the provider with an unclassified error.
+   *
+   * Mutates `request.messages`, `context.contextSize`,
+   * `context.precomputedModelSelection` and `context.preferredModelIds` in
+   * place (matching this method's inline predecessor's mutation style) and
+   * returns the resulting contextSize for the caller to keep its own local
+   * variable in sync.
+   *
+   * Extracted as its own method (rather than left inline in buildContext())
+   * so this real wiring — the actual `ContextCompactionService` and the
+   * actual `pickDelegationModel`, acting on one concrete request — is
+   * unit/integration-testable without booting buildContext()'s full
+   * model-catalog/DB/memory-search pipeline (see
+   * `recordSessionAffinityOutcome`'s extraction just below for the same
+   * rationale applied to the write-hook side of session affinity).
+   */
+  private async applyLongContextHandling(params: {
+    request: ChatRequest;
+    context: OrchestrationContext;
+    resolved: { model: Model; adapter: ProviderAdapter };
+    contextSize: number;
+    pool: Model[];
+    requestId: string;
+    organizationId: string;
+  }): Promise<number> {
+    const { request, context, resolved, pool, requestId, organizationId } = params;
+    let contextSize = params.contextSize;
+
+    const compactionService = getContextCompactionService(this.buildCompactionSummarizer());
+    if (!compactionService.shouldCompact(contextSize, resolved.model.contextWindow)) {
+      return contextSize;
+    }
+
+    const compactionOutcome = await compactionService.compact(request.messages, context);
+    if (compactionOutcome.compacted) {
+      request.messages = compactionOutcome.messages;
+      contextSize = this.estimateContextSize(request);
+      context.contextSize = contextSize;
+      this.log.info(
+        {
+          requestId,
+          organizationId,
+          collapsedMessageCount: compactionOutcome.collapsedMessageCount,
+          newContextSize: contextSize,
+        },
+        'Long-context compaction applied'
+      );
+    }
+
+    if (contextSize > resolved.model.contextWindow) {
+      // Mirrors `passesCredit` in buildContext()'s pin-revalidation step: a
+      // delegation target must be actually usable, not just large enough
+      // on paper.
+      const delegationPool = pool.filter((m) => m.balanceStatus !== 'no-credits');
+      const delegate = pickDelegationModel(delegationPool, resolved.model, contextSize);
+      if (delegate) {
+        const delegatedResolved = await this.providerRegistry.findModel(
+          delegate.id,
+          delegate.provider
+        );
+        if (delegatedResolved) {
+          context.precomputedModelSelection = delegatedResolved;
+          context.preferredModelIds = [delegatedResolved.model.id];
+          this.log.info(
+            {
+              requestId,
+              organizationId,
+              fromModelId: resolved.model.id,
+              toModelId: delegatedResolved.model.id,
+              contextSize,
+            },
+            'Long-context delegation: compaction alone did not fit the pinned model — delegating to a larger-context sibling'
+          );
+        }
+      }
+    }
+
+    return contextSize;
+  }
+
+  /**
+   * Session affinity write hook (LOTE AW): record whichever model ACTUALLY
+   * served this turn — via `result.modelsUsed`, which
+   * `executeModelWithRetry()` already fills with the fallback-resolved
+   * winner, never the original candidate that may have died — so a pin that
+   * failed re-validation on read self-heals here without any separate
+   * invalidation path. Fire-and-forget; a missing `sessionAffinityKey`
+   * (buildContext() never ran, or an internal/synthetic context) or a
+   * result with no successful execution are both silent no-ops.
+   */
+  private recordSessionAffinityOutcome(
+    context: OrchestrationContext,
+    result: OrchestrationResult
+  ): void {
+    const key = context.sessionAffinityKey;
+    if (!key) return;
+    const execution = pickSessionAffinityExecution(result.modelsUsed);
+    if (!execution?.modelId) return;
+
+    getSessionAffinityService()
+      .recordOutcome({
+        organizationId: context.organizationId,
+        identifier: key.identifier,
+        sessionKey: key.sessionKey,
+        modelId: execution.modelId,
+        provider: execution.provider || 'unknown',
+        triage: context.triage,
+      })
+      .catch(() => {});
   }
 
   /**
@@ -3580,11 +4371,9 @@ export class OrchestrationEngine {
    * strategy-safe tool catalog the triage prompt was shown
    * (`toolRegistry.listStrategyTools()` / `describeStrategyToolsForPrompt()`).
    *
-   * Parameter JSON Schema is precise for the 8 curated highest-value tools
+   * Parameter JSON Schema is precise for the curated highest-value tools
    * (`TRIAGE_RECOMMENDABLE_TOOL_SCHEMAS`) and a generic permissive stopgap
-   * for anything else — though after the security-review allowlist
-   * (TRIAGE_RECOMMENDABLE_TOOLS: web_search/code_execute/analyze_image, all
-   * with precise schemas) the generic schema is a defensive dead branch.
+   * for anything else.
    */
   private applyRecommendedTools(request: ChatRequest, context: OrchestrationContext): ChatRequest {
     if (Array.isArray(request.tools) && request.tools.length > 0) return request;
@@ -3592,16 +4381,13 @@ export class OrchestrationEngine {
     if (!recommended?.length) return request;
 
     // Security review fix (defense-in-depth): even though the triage prompt
-    // only shows the TRIAGE_RECOMMENDABLE_TOOLS allowlist, enforce it here
-    // too — a hallucinated/manipulated recommendation must never auto-attach
-    // a server-filesystem tool (read_file, write_file, grep_search, ...) to
-    // a request whose client never asked for tools.
-    const safeNames = new Set(
-      toolRegistry
-        .listStrategyTools()
-        .map((t) => t.name)
-        .filter((name) => TRIAGE_RECOMMENDABLE_TOOLS.has(name))
-    );
+    // only shows the auto-recommendable subset, enforce it here too — a
+    // hallucinated/manipulated recommendation must never auto-attach a
+    // server-filesystem tool (read_file, write_file, grep_search, ...) to a
+    // request whose client never asked for tools. Both sides now read the
+    // SAME registry-derived rule (`isAutoRecommendable`) instead of a
+    // hardcoded name list that could drift from the prompt (LOTE AO).
+    const safeNames = new Set(toolRegistry.listTriageRecommendableTools().map((t) => t.name));
     const tools: Tool[] = [];
     for (const name of recommended) {
       if (!safeNames.has(name)) continue;
@@ -4091,7 +4877,10 @@ export class OrchestrationEngine {
     // ── Cascade: client-explicit (Layer 1) > inference (Layer 3) ──────
     // Layer 2 (triage LLM) is applied later after triage runs
     const taskType = request.task_type || inferredTaskType;
-    const contextSize = this.estimateContextSize(request);
+    // `let`, not `const`: long-context compaction (LOTE AW, see below) may
+    // rewrite `request.messages` and recompute this value later in this
+    // same function, before `context.contextSize` is read by anything.
+    let contextSize = this.estimateContextSize(request);
     const maxCost = typeof request.max_cost === 'number' ? request.max_cost : undefined;
     const preferSpeed = request.prefer_speed ?? inferredPreferSpeed;
     const qualityTarget = request.quality_target; // Will be enriched by triage Layer 2
@@ -4177,6 +4966,159 @@ export class OrchestrationEngine {
       answerVerifierScope: runtimeConstraints?.answer_check_scope,
       answerVerifierCompletionAnyOf: runtimeConstraints?.answer_check_completion_any_of,
     };
+
+    // ── Session/conversation affinity (LOTE AW, 2026-09) ──────────────────
+    // Read-before-triage: propose reusing whichever model actually served
+    // the PRIOR turn of this same conversation, so 'auto' routing stops
+    // silently hopping models turn-to-turn for reasons unrelated to the
+    // request content, and so Anthropic prompt-cache / OpenAI prefix-cache
+    // lineage has a stable model+prefix to attach to. See
+    // services/session-affinity-service.ts for the full design and the
+    // multi-tenant isolation guarantee.
+    //
+    // Only attempted for 'auto' routing: `preferredModelFromRequest` set
+    // means the user explicitly pinned a model, which must always win
+    // outright — SingleModelStrategy.selectBestModel() checks
+    // `context.precomputedModelSelection` BEFORE its own user-specified-
+    // model branch, so populating it here would silently override an
+    // explicit user choice.
+    context.sessionAffinityKey = {
+      identifier: resolveAffinityIdentifier({
+        apiKeyId: request.ailin_session_scope?.apiKeyId,
+        userId,
+      }),
+      // Derived from the ORIGINAL (pre-compaction) messages — compaction
+      // below only ever touches turns older than the stable prefix this
+      // hashes, so the key is guaranteed stable across compaction by
+      // construction (see context-compaction-service.ts's doc comment).
+      sessionKey: deriveSessionKey(request),
+    };
+
+    if (!preferredModelFromRequest) {
+      try {
+        const affinityRecord = await getSessionAffinityService().lookup({
+          organizationId,
+          identifier: context.sessionAffinityKey.identifier,
+          sessionKey: context.sessionAffinityKey.sessionKey,
+        });
+
+        if (affinityRecord) {
+          // Fail-over rule: the cache only PROPOSES a candidate. It must
+          // still be present in THIS request's already operability-filtered
+          // pool and clear the same hard gates DynamicModelSelector would
+          // otherwise enforce (context-window fit, credit balance,
+          // capabilities this specific message needs) before it's trusted.
+          // A pin that fails re-validation is simply dropped here — no
+          // separate invalidation call — because the write hook always
+          // records whatever model actually served the turn, so a dead pin
+          // self-heals on the very next write.
+          const pinnedModel = enrichedModels.find((m) => m.id === affinityRecord.modelId);
+          // See evaluateSessionAffinityPinAdmission()'s doc comment
+          // (module scope, above) for why admission is deliberately NOT
+          // `contextSize < pinnedModel.contextWindow`: that used to be a
+          // hard admission gate, which made it mutually exclusive with the
+          // delegation trigger inside applyLongContextHandling() (which
+          // only fires when the request does NOT fit the pinned model) — so
+          // `pickDelegationModel()` could never be reached from this real
+          // call path (2026-09 audit finding).
+          const admission = evaluateSessionAffinityPinAdmission({
+            pinnedModel,
+            contextSize,
+            requiredCapabilities: context.requiredCapabilities,
+            requestTools: request.tools,
+          });
+          const { passesContextWindow, passesCredit, passesCapabilities, pinnedContextWindowKnown } =
+            admission;
+
+          if (pinnedModel && admission.admit) {
+            const resolved = await this.providerRegistry.findModel(
+              pinnedModel.id,
+              affinityRecord.provider || pinnedModel.provider
+            );
+            if (resolved) {
+              context.precomputedModelSelection = resolved;
+              context.preferredModelIds = [resolved.model.id];
+              this.log.debug(
+                {
+                  requestId,
+                  organizationId,
+                  modelId: resolved.model.id,
+                  turnCount: affinityRecord.turnCount,
+                },
+                'Session affinity: reusing pinned model from prior turn'
+              );
+
+              // ── Long-context compaction + delegation (LOTE AW + follow-up)
+              // Extracted into applyLongContextHandling() so this real
+              // wiring (ContextCompactionService + pickDelegationModel
+              // acting on one request) is unit/integration-testable without
+              // booting this method's full model-catalog/DB/memory-search
+              // pipeline. Run unconditionally here (not gated on
+              // `passesContextWindow`) — it internally no-ops via
+              // `shouldCompact()` when the request is comfortably under the
+              // compaction threshold, fires proactive compaction when
+              // approaching the limit, and only reaches delegation when the
+              // request genuinely doesn't fit (`passesContextWindow` false).
+              // Gated on `pinnedContextWindowKnown` (checked in the `if`
+              // above) since an unknown contextWindow leaves nothing
+              // trustworthy to compact/delegate against.
+              contextSize = await this.applyLongContextHandling({
+                request,
+                context,
+                resolved,
+                contextSize,
+                pool: enrichedModels,
+                requestId,
+                organizationId,
+              });
+
+              // Final fit check: applyLongContextHandling may have
+              // re-pointed `precomputedModelSelection` at a delegated
+              // sibling, left it as the original pin (compaction alone
+              // sufficed, or nothing needed to happen), or left it as an
+              // original pin that STILL doesn't fit (compaction ran but
+              // wasn't enough, and no delegation target had room). Only the
+              // last case is untrustworthy — drop the pin so the normal
+              // fresh-selection path below runs its own fail-closed check
+              // against the (now possibly smaller, thanks to compaction)
+              // contextSize instead of silently handing an over-budget
+              // request downstream.
+              if (!modelFitsContext(context.precomputedModelSelection?.model, contextSize)) {
+                this.log.debug(
+                  {
+                    requestId,
+                    organizationId,
+                    modelId: pinnedModel.id,
+                    contextSize,
+                  },
+                  'Session affinity: pin still does not fit after compaction/delegation — falling back to fresh selection'
+                );
+                context.precomputedModelSelection = undefined;
+                context.preferredModelIds = undefined;
+              }
+            }
+          } else if (pinnedModel) {
+            this.log.debug(
+              {
+                requestId,
+                organizationId,
+                modelId: pinnedModel.id,
+                passesContextWindow,
+                passesCredit,
+                passesCapabilities,
+                pinnedContextWindowKnown,
+              },
+              'Session affinity: pinned model failed re-validation — falling back to fresh selection'
+            );
+          }
+        }
+      } catch (error) {
+        this.log.debug(
+          { requestId, error: getErrorMessage(error) },
+          'Session affinity lookup failed — falling back to fresh selection (fail-open)'
+        );
+      }
+    }
 
     // Lazy-load audio and translation services only when invoked
     try {
@@ -4318,6 +5260,355 @@ export class OrchestrationEngine {
    * Deduplicates and validates against the capability catalog.
    */
   /**
+   * True when `plan` is a COMPOSITE multi-artifact media plan that
+   * `executeCompositeMediaPlan` should run instead of the sequential
+   * `executeMultiStagePlan` loop (LOTE AT PR4, 2026-09-07).
+   *
+   * Two independent conditions must both hold, for defense in depth:
+   *  1. `plan.compositeMediaModalities` (the EXPLICIT signal — see its doc
+   *     comment on `TriageExecutionPlan`) lists 2+ modalities. This is the
+   *     primary signal; only `TriagingService.runHeuristics()` sets it today.
+   *  2. STRUCTURALLY, every stage in the plan is itself a media-generation
+   *     stage (`detectMediaGenerationModality` non-null) — i.e. this is a
+   *     plan made ENTIRELY of independent artifact requests, never a mix of
+   *     a media stage with an ordinary chat/text stage. A plan that mixes
+   *     modalities is safe to fan out in parallel BECAUSE each media stage's
+   *     `generationPrompt` is contractually self-contained (triage prompt
+   *     rule: "must not depend on conversational context") — a plan with a
+   *     non-media stage in it might have a media stage that depends on an
+   *     EARLIER stage's prose output via `accumulatedContext`, which the
+   *     parallel composite pipeline does not thread through (there is no
+   *     "earlier stage" once everything runs concurrently), so that case is
+   *     correctly left to the sequential loop instead.
+   */
+  private isCompositeMediaPlan(plan: TriageExecutionPlan): boolean {
+    return (
+      !!plan.compositeMediaModalities &&
+      plan.compositeMediaModalities.length >= 2 &&
+      plan.stages.length >= 2 &&
+      plan.stages.every((s) => detectMediaGenerationModality(s.requiredCapabilities) !== null)
+    );
+  }
+
+  /**
+   * Execute a COMPOSITE multi-artifact media plan: one independent
+   * generation sub-task per detected modality, run in PARALLEL, assembled
+   * into a single multi-part response (LOTE AT PR4, 2026-09-07 — see the PR
+   * description for the full design rationale).
+   *
+   * Closes two review findings from the original media-generation-delegation
+   * plan, scoped specifically to THIS pipeline (not every non-streaming
+   * execution path — see the class-level review note near `execute()`'s own
+   * comments for why that broader fix is explicitly out of scope here):
+   *
+   * Finding #1 (budget/deadline composition): unlike `executeStream()`
+   * (which has a real whole-request `AbortController` + deadline, see
+   * `requestDeadlineMs`/`requestController` there), the non-streaming
+   * `execute()` path has NONE at all. This method builds its OWN, mirroring
+   * `executeStream()`'s exact shape (an absolute `setTimeout`-driven
+   * `AbortController.abort()`, cleared in a `finally`) — necessary here
+   * specifically because a composite request fans out MULTIPLE, potentially
+   * slow, independent generation calls at once. Each sub-task additionally
+   * races its OWN per-artifact timer against this shared signal in
+   * `runCompositeMediaStage` (mirrors `BaseStrategy.boundModelExecution`'s
+   * shape), so the pipeline genuinely stops WAITING on a straggler once the
+   * deadline fires — the composite response returns within the deadline
+   * window instead of hanging on the slowest artifact (proven by test, not
+   * just asserted). Documented, honest limitation: this "stops waiting"
+   * behavior operates at the orchestration layer only. Real network-level
+   * abortion of the underlying provider HTTP call for image/video/audio/file
+   * generation does not exist ANYWHERE in the codebase today — confirmed by
+   * inspection: even `executeStream()`'s own real `context.signal` is never
+   * read by `VideoOrchestrationService`/`ImagesOrchestrationService`/
+   * `AudioOrchestrationService`/`FileGenerationService` or the shared
+   * `modality-fallback-driver.ts` fallback executor they all go through, so
+   * a straggler already in flight when the deadline fires may keep running
+   * in the provider's background until it naturally resolves or errors —
+   * this is a pre-existing, codebase-wide gap (not introduced here), and
+   * threading real cancellation through that shared fallback driver and
+   * every provider adapter's raw HTTP call is exactly the kind of separate,
+   * much larger cross-cutting initiative this PR was told not to scope-creep
+   * into.
+   *
+   * Finding #5 (partial-artifact failure): mirrors the EXACT
+   * succeeded/failed accounting pattern already proven at
+   * `chat-request-processor.ts`'s `executeToolCallsAutomatically` (Promise.all
+   * with each item individually caught, then
+   * `succeeded`/`failed`/`summaryLines`/a combined "N succeeded, M failed"
+   * content message). Consistency decision: like that existing pattern (and
+   * like this engine's OWN pre-existing `executeMultiStagePlan` "all stages
+   * failed" convention below), a partial or even total per-artifact failure
+   * is reported via a normal HTTP 200 with per-item status embedded in
+   * `artifacts[].error` and in `metadata` — never a non-2xx status. This
+   * result flows through the exact same response-assembly path as any other
+   * `execute()` result (`chat-request-processor.ts` never branches HTTP
+   * status on `qualityScore`/`degraded`), so a different status here would
+   * be an inconsistent, one-off special case.
+   */
+  private async executeCompositeMediaPlan(
+    originalRequest: ChatRequest,
+    context: OrchestrationContext,
+    plan: TriageExecutionPlan,
+    requestId: string
+  ): Promise<OrchestrationResult> {
+    const stages = plan.stages;
+    const compositeDeadlineMs = Number(process.env.COMPOSITE_MEDIA_DEADLINE_MS ?? 120000);
+    const compositeController = new AbortController();
+    const compositeDeadlineTimer = setTimeout(() => {
+      this.log.warn(
+        { requestId, compositeDeadlineMs, stageCount: stages.length },
+        'Composite media pipeline exceeded overall deadline'
+      );
+      compositeController.abort();
+    }, compositeDeadlineMs);
+
+    const pipelineStartedAt = Date.now();
+    // Duplicate-artifact defense-in-depth (see the equivalent, primary fix in
+    // executeMultiStagePlan for the full production-incident rationale): a
+    // composite plan fans every stage out in PARALLEL, so two stages sharing
+    // the same modality+format+generation_prompt would otherwise both
+    // generate and both land in `artifacts[]` as indistinguishable
+    // duplicates. Only stages with an explicit, non-empty `generationPrompt`
+    // participate in the key — never suppresses stages whose content
+    // legitimately differs.
+    const seenCompositeStageKeys = new Set<string>();
+    try {
+      const outcomes = await Promise.all(
+        stages.map((stage, idx) => {
+          const modality = detectMediaGenerationModality(stage.requiredCapabilities);
+          // Defensive only — isCompositeMediaPlan() already guarantees every
+          // stage here is a recognized media-generation stage.
+          if (!modality) {
+            return Promise.resolve(
+              this.mediaStageFailure(
+                'file',
+                stage,
+                idx,
+                'Composite stage has no recognized media-generation capability',
+                Date.now(),
+                stage.generationPrompt || ''
+              )
+            );
+          }
+          const explicitPrompt = stage.generationPrompt?.trim();
+          const stageKey = explicitPrompt
+            ? `${modality}:${modality === 'file' ? detectFileGenerationFormat(stage.requiredCapabilities) : ''}:${explicitPrompt}`
+            : undefined;
+          if (stageKey && explicitPrompt) {
+            if (seenCompositeStageKeys.has(stageKey)) {
+              return Promise.resolve(
+                this.mediaStageFailure(
+                  modality,
+                  stage,
+                  idx,
+                  'Duplicate of another stage in this plan (identical modality/format/generation_prompt) — skipped to avoid delivering the same artifact twice',
+                  Date.now(),
+                  explicitPrompt
+                )
+              );
+            }
+            seenCompositeStageKeys.add(stageKey);
+          }
+          return this.runCompositeMediaStage(
+            modality,
+            stage,
+            idx,
+            idx,
+            context,
+            originalRequest,
+            compositeDeadlineMs,
+            compositeController.signal
+          );
+        })
+      );
+
+      const succeeded = outcomes.filter((o) => !o.artifact.error);
+      const failed = outcomes.filter((o) => !!o.artifact.error);
+      // Placeholder-text production incident fix (see
+      // buildMediaSuccessMessage's doc comment for the full rationale): each
+      // outcome's OWN syntheticResponse already carries a real
+      // natural-language sentence for a success (built by
+      // mediaStageSuccess -> buildMediaSuccessMessage) or a clear failure
+      // note (mediaStageFailure) — reuse it instead of the debug-report-
+      // shaped "Generated N artifact(s): X succeeded, Y failed" +
+      // "modality (stage): status - see ailin_metadata..." text that used to
+      // be this composite plan's entire user-visible response.
+      const artifactMessages = outcomes.map((o) => {
+        const content = o.syntheticResponse.choices?.[0]?.message?.content;
+        if (typeof content === 'string' && content.trim().length > 0) return content;
+        return o.artifact.error
+          ? `${o.artifact.modality} generation failed: ${o.artifact.error}`
+          : `${o.artifact.modality} generated successfully.`;
+      });
+      const contentSummary = artifactMessages.join('\n\n');
+
+      const finalResponse: ChatResponse = {
+        id: `composite-media-${requestId}`,
+        object: 'chat.completion',
+        created: Math.floor(Date.now() / 1000),
+        model: 'composite-media-generator',
+        choices: [
+          {
+            index: 0,
+            message: { role: 'assistant', content: contentSummary },
+            finish_reason: 'stop',
+            logprobs: null,
+          },
+        ],
+      };
+
+      const totalCost = outcomes.reduce((sum, o) => sum + o.cost, 0);
+      const totalDuration = Date.now() - pipelineStartedAt;
+      const allFailed = succeeded.length === 0;
+
+      this.log.info(
+        {
+          requestId,
+          artifactCount: outcomes.length,
+          succeeded: succeeded.length,
+          failed: failed.length,
+          totalDuration,
+        },
+        'Composite media plan completed'
+      );
+
+      return {
+        strategyUsed: plan.strategy,
+        modelsUsed: outcomes.map((o) => o.execution),
+        finalResponse,
+        totalCost,
+        totalDuration,
+        artifacts: outcomes.map((o) => o.artifact),
+        // Same convention as executeMultiStagePlan's all-stages-failed case:
+        // HTTP 200, but flagged so clients/learning/cache policy can tell a
+        // total failure apart from a real answer.
+        ...(allFailed ? { qualityScore: 0 } : {}),
+        metadata: {
+          composite: true,
+          modalitiesRequested: outcomes.map((o) => o.artifact.modality),
+          artifactsSucceeded: succeeded.length,
+          artifactsFailed: failed.length,
+          partialSuccess: succeeded.length > 0 && failed.length > 0,
+          compositeDeadlineMs,
+          ...(allFailed
+            ? { degraded: true, degraded_reason: 'composite_all_artifacts_failed' }
+            : {}),
+        },
+      };
+    } finally {
+      clearTimeout(compositeDeadlineTimer);
+    }
+  }
+
+  /**
+   * Run ONE artifact of a composite media plan under the shared whole-pipeline
+   * deadline (see `executeCompositeMediaPlan`'s doc comment for the full
+   * design rationale). Mirrors `BaseStrategy.boundModelExecution`'s shape
+   * (pre-check the parent signal, race the real work against a timeout,
+   * clean up listeners/timers in `finally`) — never throws: every branch
+   * resolves to a `mediaStageFailure`/`mediaStageSuccess`-shaped outcome so
+   * the caller's accounting is uniform regardless of which layer produced
+   * the failure (the underlying generation call itself, or this deadline).
+   */
+  private async runCompositeMediaStage(
+    modality: 'image' | 'video' | 'audio' | 'file',
+    stage: TriageStage,
+    stageIndex: number,
+    artifactIndex: number,
+    context: OrchestrationContext,
+    originalRequest: ChatRequest,
+    timeoutMs: number,
+    parentSignal: AbortSignal
+  ): Promise<{
+    artifact: AilinArtifact;
+    execution: import('@/types').ModelExecution;
+    cost: number;
+    summaryText: string;
+    syntheticResponse: ChatResponse;
+  }> {
+    const startedAt = Date.now();
+    const prompt =
+      stage.generationPrompt?.trim() ||
+      deriveGenerationPromptFallback(stage, '', this.extractTaskSummary(originalRequest));
+
+    if (parentSignal.aborted) {
+      return this.mediaStageFailure(
+        modality,
+        stage,
+        stageIndex,
+        'Composite request deadline exceeded before this artifact started',
+        startedAt,
+        prompt
+      );
+    }
+
+    const exec = this.executeMediaGenerationStage(
+      modality,
+      stage,
+      stageIndex,
+      artifactIndex,
+      context,
+      '',
+      originalRequest
+    );
+
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let onAbort: (() => void) | undefined;
+    // Races the real work against BOTH its own per-artifact timer and the
+    // shared parent (whole-pipeline) signal — whichever fires first wins,
+    // exactly like boundModelExecution's per-call-timeout-vs-parent-signal
+    // race. `exec` itself never rejects (executeMediaGenerationStage always
+    // resolves to a success/failure outcome), so this race never needs to
+    // handle a rejected `exec`.
+    const raceLoser = new Promise<'timeout' | 'aborted'>((resolve) => {
+      timer = setTimeout(() => resolve('timeout'), timeoutMs);
+      onAbort = () => resolve('aborted');
+      parentSignal.addEventListener('abort', onAbort, { once: true });
+    });
+
+    try {
+      const winner = await Promise.race([exec, raceLoser]);
+      if (winner === 'timeout' || winner === 'aborted') {
+        const reason =
+          winner === 'timeout'
+            ? `Composite request deadline exceeded (${timeoutMs}ms)`
+            : 'Composite request cancelled (whole-pipeline deadline exceeded)';
+        this.log.warn(
+          { modality, stageName: stage.name, timeoutMs, cause: winner },
+          'Composite media artifact exceeded deadline — dropping straggler'
+        );
+        return this.mediaStageFailure(modality, stage, stageIndex, reason, startedAt, prompt);
+      }
+      // `executeMediaGenerationStage`'s OWN declared return type marks
+      // artifact/execution optional even though every real branch inside it
+      // (mediaStageSuccess/mediaStageFailure) always sets both — normalize
+      // defensively here so THIS method's contract (and its caller's
+      // accounting) can rely on them being present without weakening either
+      // type.
+      if (!winner.artifact || !winner.execution) {
+        return this.mediaStageFailure(
+          modality,
+          stage,
+          stageIndex,
+          'Media-generation stage returned an incomplete result (no artifact/execution)',
+          startedAt,
+          prompt
+        );
+      }
+      return {
+        artifact: winner.artifact,
+        execution: winner.execution,
+        cost: winner.cost,
+        summaryText: winner.summaryText,
+        syntheticResponse: winner.syntheticResponse,
+      };
+    } finally {
+      if (timer) clearTimeout(timer);
+      if (onAbort) parentSignal.removeEventListener('abort', onAbort);
+    }
+  }
+
+  /**
    * Execute a multi-stage plan from the triage LLM.
    *
    * Each stage uses its own sub-strategy, models, roles, and SOTA system prompts.
@@ -4347,6 +5638,29 @@ export class OrchestrationEngine {
     // that could even be cached.
     let anyStageSucceeded = false;
     const stageStartTime = Date.now();
+    // Duplicate-artifact fix (2026-09-08, production incident: "Crie um zip
+    // com 3 arquivos de texto..." rendered TWO identical "generated.zip"
+    // chips in the chat UI): the triage LLM's own contract says a
+    // multi-file request must collapse into ONE zip_generation stage (see
+    // TRIAGE_SYSTEM_PROMPT's generation_prompt doc: "a csv and a pdf ->
+    // zip_generation"), but nothing downstream enforced that — a triage
+    // plan that (by LLM error) emits two stages for the SAME modality+format
+    // with the SAME literal generation_prompt was executed twice, calling
+    // the file/image/video/audio generator twice and pushing two
+    // artifacts that are indistinguishable to the end user (same generic
+    // filename — generateFile() is never given a distinguishing
+    // filenameBase — and, at temperature 0 with an identical prompt, often
+    // byte-for-byte identical content). Tracks (modality[:format]:prompt) for
+    // every SUCCESSFUL media stage; a later stage with the same key is a
+    // duplicate of an already-delivered artifact, not a new one, so it is
+    // skipped instead of re-generated. Only keys derived from the stage's
+    // OWN explicit `generationPrompt` participate — a stage that omits it
+    // falls back to a context-derived prompt that legitimately differs
+    // stage-to-stage, so it is never deduped (avoids suppressing two
+    // genuinely different deliverables that merely share a modality/format).
+    // A previously FAILED attempt is deliberately not recorded here, so a
+    // legitimate retry-shaped stage still runs.
+    const succeededMediaStageKeys = new Set<string>();
 
     for (let i = 0; i < plan.stages.length; i++) {
       const stage = plan.stages[i];
@@ -4368,6 +5682,19 @@ export class OrchestrationEngine {
       // running a chat model that would just describe the media in prose.
       const mediaModality = detectMediaGenerationModality(stage.requiredCapabilities);
       if (mediaModality) {
+        const explicitPrompt = stage.generationPrompt?.trim();
+        const mediaStageKey = explicitPrompt
+          ? `${mediaModality}:${mediaModality === 'file' ? detectFileGenerationFormat(stage.requiredCapabilities) : ''}:${explicitPrompt}`
+          : undefined;
+        if (mediaStageKey && succeededMediaStageKeys.has(mediaStageKey)) {
+          this.log.warn(
+            { requestId, stage: i + 1, stageName: stage.name, modality: mediaModality },
+            `Skipping stage "${stage.name}" — duplicate of an already-delivered ${mediaModality} artifact (identical generation_prompt); triage plan likely repeated the same deliverable across stages`
+          );
+          accumulatedContext += `\n\n### Stage "${stage.name}" output (${mediaModality} generation):\nSkipped — identical to a previously generated artifact in this plan; the earlier artifact is the deliverable.`;
+          continue;
+        }
+
         // artifacts.length = the index this stage's artifact will occupy in
         // the artifacts array (which holds ONLY media artifacts — not one
         // entry per plan stage, so `i` would be the wrong pointer whenever
@@ -4378,13 +5705,17 @@ export class OrchestrationEngine {
           i,
           artifacts.length,
           context,
-          accumulatedContext
+          accumulatedContext,
+          originalRequest
         );
         if (outcome.execution) allModelExecutions.push(outcome.execution);
         totalCost += outcome.cost;
         if (outcome.artifact) {
           artifacts.push(outcome.artifact);
-          if (!outcome.artifact.error) anyStageSucceeded = true;
+          if (!outcome.artifact.error) {
+            anyStageSucceeded = true;
+            if (mediaStageKey) succeededMediaStageKeys.add(mediaStageKey);
+          }
         }
         accumulatedContext += `\n\n### Stage "${stage.name}" output (${mediaModality} generation):\n${outcome.summaryText}`;
         lastStageResponse = outcome.syntheticResponse;
@@ -4484,6 +5815,29 @@ export class OrchestrationEngine {
         const stageOutput = stageResult.finalResponse.choices?.[0]?.message?.content || '';
         if (stageOutput) {
           accumulatedContext += `\n\n### Stage "${stage.name}" output:\n${stageOutput}`;
+
+          // LOTE AS artifact-modality fix (2026-09-06): promote a fenced
+          // svg/mermaid deliverable to a first-class AilinArtifact. See
+          // detectFencedDeliverableArtifact's doc comment for the scoping
+          // rationale. The original text response is left untouched —
+          // this only ADDS an artifact alongside it.
+          const deliverable =
+            typeof stageOutput === 'string' ? detectFencedDeliverableArtifact(stageOutput) : undefined;
+          if (deliverable) {
+            artifacts.push({
+              modality: 'file',
+              stage_name: stage.name,
+              stage_index: i,
+              b64_json: Buffer.from(deliverable.content, 'utf-8').toString('base64'),
+              mime_type: deliverable.mimeType,
+              filename: deliverable.filename,
+              metadata: { detected_from: 'fenced_deliverable_block', kind: deliverable.kind },
+            });
+            this.log.info(
+              { requestId, stage: i + 1, stageName: stage.name, kind: deliverable.kind },
+              `Detected fenced ${deliverable.kind} deliverable in stage "${stage.name}" output — promoted to artifact`
+            );
+          }
         }
 
         this.log.info(
@@ -4618,7 +5972,8 @@ export class OrchestrationEngine {
     stageIndex: number,
     artifactIndex: number,
     context: OrchestrationContext,
-    accumulatedContext: string
+    accumulatedContext: string,
+    originalRequest: ChatRequest
   ): Promise<{
     artifact?: AilinArtifact;
     execution?: import('@/types').ModelExecution;
@@ -4628,7 +5983,11 @@ export class OrchestrationEngine {
   }> {
     const prompt =
       stage.generationPrompt?.trim() ||
-      this.deriveGenerationPromptFallback(stage, accumulatedContext);
+      deriveGenerationPromptFallback(
+        stage,
+        accumulatedContext,
+        this.extractTaskSummary(originalRequest)
+      );
     const startedAt = Date.now();
 
     if (!context.invoker) {
@@ -4644,7 +6003,18 @@ export class OrchestrationEngine {
 
     try {
       if (modality === 'image') {
-        const result = await context.invoker.generateImage({ prompt });
+        // Package A (2026-09-09): the triage-driven image-generation stage
+        // never extracted a size/aspect-ratio hint from the prompt at all —
+        // every image went through generateImage()'s default size
+        // ('1024x1024' per ImageGenInvokeOptions.size's fallback), even for a
+        // prompt explicitly asking for "a vertical poster" or "a widescreen
+        // banner". extractImageGenerationSpec is a best-effort, additive hint;
+        // when it finds nothing, the invoker's existing default is unchanged.
+        const imageSpec = extractImageGenerationSpec(prompt);
+        const result = await context.invoker.generateImage({
+          prompt,
+          ...(imageSpec.size ? { size: imageSpec.size } : {}),
+        });
         const first = result.images[0];
         if (!first || (!first.url && !first.b64_json)) {
           return this.mediaStageFailure(
@@ -4673,7 +6043,50 @@ export class OrchestrationEngine {
         );
       }
       if (modality === 'video') {
-        const result = await context.invoker.generateVideo({ prompt, responseFormat: 'url' });
+        // LOTE AS finding #3 fix (2026-09-06): forward the structured video
+        // attributes triage extracted (see TRIAGE_SYSTEM_PROMPT's
+        // duration/resolution/aspect_ratio/audio_requested rule) instead of
+        // only {prompt, responseFormat}.
+        //
+        // 2026-09-09 follow-up fixes (Package A):
+        //   1. `stage.resolution` now maps onto the invoker's dedicated
+        //      `resolution` field, not `size` — a same-day LATER commit (LOTE
+        //      AS Part 1, "fix dead options bag, wire soundtrack/resolution")
+        //      added that field and wired it to BytePlus's real RESOLUTIONS
+        //      enum / Google Veo's resolution param, but this call site was
+        //      never updated to use it and kept stuffing the value into the
+        //      free-form `size` string instead, where BytePlus ignores it
+        //      entirely.
+        //   2. `audio_requested` now maps onto `generateAudio`, not the
+        //      now-deprecated `audioRequested` alias — see the fix note on
+        //      capability-invoker.ts's `generateVideo` implementation for why
+        //      that field was silently dropped before reaching
+        //      `VideoOrchestrationService`.
+        //   3. When the triage LLM omitted one or more of duration/resolution/
+        //      aspect_ratio/audio_requested (it depends entirely on the LLM
+        //      correctly following the system prompt's few-shot examples —
+        //      there was no deterministic fallback), `extractVideoGenerationSpec`
+        //      re-derives them from the literal generation prompt text as a
+        //      backstop. Triage's own extraction always wins per-field when
+        //      present; extraction only fills GAPS.
+        const extractedSpec = extractVideoGenerationSpec(prompt);
+        const mergedSpec = mergeVideoGenerationSpec(
+          {
+            durationSeconds: stage.duration,
+            resolution: undefined, // stage.resolution is free text, not a normalized token — merged separately below
+            aspectRatio: stage.aspectRatio,
+            requiresAudio: stage.audioRequested,
+          },
+          extractedSpec
+        );
+        const result = await context.invoker.generateVideo({
+          prompt,
+          responseFormat: 'url',
+          duration: mergedSpec.durationSeconds,
+          aspectRatio: mergedSpec.aspectRatio,
+          resolution: stage.resolution ?? mergedSpec.resolution,
+          generateAudio: mergedSpec.requiresAudio,
+        });
         const first = result.videos[0];
         if (!first || (!first.url && !first.b64_json)) {
           return this.mediaStageFailure(
@@ -4763,17 +6176,6 @@ export class OrchestrationEngine {
     }
   }
 
-  /**
-   * Fallback when the triage LLM omitted `generationPrompt` (malformed plan,
-   * or a heuristic-only fallback plan with no structured stage data): derive
-   * something usable from the stage's own task_context, else the last user
-   * message plus whatever prior stages produced.
-   */
-  private deriveGenerationPromptFallback(stage: TriageStage, accumulatedContext: string): string {
-    if (stage.taskContext) return stage.taskContext;
-    return accumulatedContext || `Generate content for stage "${stage.name}"`;
-  }
-
   private buildMediaSyntheticResponse(
     stage: TriageStage,
     model: string | undefined,
@@ -4837,9 +6239,15 @@ export class OrchestrationEngine {
         prompt
       );
     }
-    // With a URL present, drop only the oversized inline copy — the URL
-    // remains the delivery mechanism.
-    if (data.b64Json && data.b64Json.length > maxB64Chars) {
+    // With a URL present, the inline base64 copy is pure redundant weight —
+    // drop it unconditionally, not just when oversized. This matches the
+    // established pattern elsewhere in this codebase (`ArtifactRef`, used by
+    // `AilinMetadata.tool_artifacts`, has no b64 field at all: url is the
+    // ONLY delivery mechanism once a real URL exists) and, as a side effect,
+    // is what keeps a hosted-URL image/video out of the SSE line-length
+    // guard in utils/sse.ts entirely (see its doc comment for the 2026-09-08
+    // production incident this closes) instead of merely staying under it.
+    if (data.b64Json && data.url) {
       data = { ...data, b64Json: undefined };
     }
     const durationMs = Date.now() - startedAt;
@@ -4859,11 +6267,16 @@ export class OrchestrationEngine {
     // Review fix: pointer text must use the position in the ARTIFACTS array
     // (media-only), not the plan-stage index — with a text stage before this
     // one, `artifacts[stageIndex]` would point past the end of the array.
+    // This technical pointer stays INTERNAL — folded into accumulatedContext
+    // for any later stage that needs to refer back to the artifact — and is
+    // never the text shown to the user; see buildMediaSuccessMessage's doc
+    // comment for the production incident (literal placeholder text was
+    // reaching real chat responses) this split fixes.
     const summaryText = `${modality} generated successfully — see ailin_metadata.artifacts[${artifactIndex}].`;
     const syntheticResponse = this.buildMediaSyntheticResponse(
       stage,
       data.model,
-      `[${modality} generated — see ailin_metadata.artifacts[${artifactIndex}]]`,
+      buildMediaSuccessMessage(modality, stage, prompt),
       data.url
     );
     const execution: import('@/types').ModelExecution = {
@@ -5842,7 +7255,12 @@ export class OrchestrationEngine {
 
     if (context.triage?.recommendedStrategy) {
       const recommended = this.strategies.get(context.triage.recommendedStrategy);
-      if (recommended && recommended.isSuitable(request, context)) {
+      // SAC-01: explicit-only strategies must never be reached by an automatic path
+      if (
+        recommended &&
+        isAutoSelectableStrategy(recommended.getMetadata().name) &&
+        recommended.isSuitable(request, context)
+      ) {
         this.log.debug(
           {
             requestId: context.requestId,
@@ -5867,7 +7285,11 @@ export class OrchestrationEngine {
       : configurationArchive.getRecommendation(taskType, complexity, triagePreference);
     if (archiveRec) {
       const archiveStrategy = this.strategies.get(archiveRec.strategy as ExecutionStrategyName);
-      if (archiveStrategy && archiveStrategy.isSuitable(request, context)) {
+      if (
+        archiveStrategy &&
+        isAutoSelectableStrategy(archiveStrategy.getMetadata().name) &&
+        archiveStrategy.isSuitable(request, context)
+      ) {
         this.log.debug(
           {
             requestId: context.requestId,
@@ -5900,7 +7322,11 @@ export class OrchestrationEngine {
       : getBestFromFrontier(taskType, complexity, paretoPreference);
     if (paretoCandidate) {
       const paretoStrategy = this.strategies.get(paretoCandidate.strategy as ExecutionStrategyName);
-      if (paretoStrategy && paretoStrategy.isSuitable(request, context)) {
+      if (
+        paretoStrategy &&
+        isAutoSelectableStrategy(paretoStrategy.getMetadata().name) &&
+        paretoStrategy.isSuitable(request, context)
+      ) {
         this.log.debug(
           {
             requestId: context.requestId,
@@ -5918,7 +7344,10 @@ export class OrchestrationEngine {
 
     // Automatic strategy selection via Thompson Sampling Bandit (when available)
     // The bandit explores strategies probabilistically based on historical quality data.
+    // SAC-01: explicit-only strategies are excluded from the candidate pool so
+    // neither bandit exploration nor the heuristic fallback below can pick them.
     const suitableStrategies = Array.from(this.strategies.values())
+      .filter((strategy) => isAutoSelectableStrategy(strategy.getMetadata().name))
       .map((strategy) => ({
         strategy,
         score: strategy.scoreForRequest(request, context),

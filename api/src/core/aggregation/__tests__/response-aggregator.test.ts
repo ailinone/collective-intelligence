@@ -146,6 +146,47 @@ describe('ResponseAggregator', () => {
       expect(result.response).toBeDefined();
       expect(result.metadata.synthesisResults).toBeDefined();
     });
+
+    // No provider registry is initialized here, so llmSynthesizeResponse cannot
+    // resolve a coordinator and falls back to `synthesizeResponse`, which
+    // concatenates the candidates as "### From <model>". That digest is internal
+    // scaffolding, and it reached real users: consensus hardcoded
+    // `synthesisAvailable: true`, so the final selector's `synthesis_not_available`
+    // rule was permanently unreachable and the judge scored the digest as an
+    // answer. Production returned it verbatim:
+    //   "### From meta-llama/Llama-3.3-70B-Instruct  391  #..."
+    //
+    // The fallback itself is fine — what was missing is any way for a caller to
+    // KNOW it happened. These pin that signal.
+    describe('when no coordinator can be resolved', () => {
+      it('reports synthesisUnavailable so callers can refuse to serve the digest', async () => {
+        const result = await aggregator.aggregate(mockResponses, 'synthesis', mockContext);
+        expect(result.synthesisUnavailable).toBe(true);
+      });
+
+      it('does not claim an LLM coordinator ran', async () => {
+        // Was hardcoded 'llm' on every path, so a digest was indistinguishable
+        // from a real synthesis in metrics as well as in the response.
+        const result = await aggregator.aggregate(mockResponses, 'synthesis', mockContext);
+        const synthesisResults = result.metadata.synthesisResults as { coordinatorUsed: string };
+        expect(synthesisResults.coordinatorUsed).toBe('simple');
+      });
+
+      it('is the concatenation digest, which is why it must not be served', async () => {
+        // Documents WHAT the flag is protecting against, so the next reader does
+        // not have to reconstruct it from a production transcript.
+        const result = await aggregator.aggregate(mockResponses, 'synthesis', mockContext);
+        const content = result.response.choices[0]?.message?.content;
+        expect(typeof content === 'string' && content.includes('### From')).toBe(true);
+      });
+    });
+
+    it('reports a successful synthesis as available', async () => {
+      // Guards the other direction: the flag must not be set unconditionally,
+      // or consensus would never use a real synthesis again.
+      const voting = await aggregator.aggregate(mockResponses, 'voting', mockContext);
+      expect(voting.synthesisUnavailable).toBeUndefined();
+    });
   });
 
   describe('Ranking Aggregation', () => {

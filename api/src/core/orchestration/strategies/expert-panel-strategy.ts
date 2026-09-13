@@ -7,7 +7,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Source: https://github.com/ailinone/collective-intelligence
 
-import { BaseStrategy, safeResponseContent, type StrategyMetadata } from '../base-strategy';
+import { BaseStrategy, safeResponseContent, mergeArtifacts, type StrategyMetadata } from '../base-strategy';
 import { PROMPTS, type PromptVariant } from '../prompts/sota-system-prompts';
 import { hashSlotValues, type PromptSlotValues } from '../prompts/prompt-slots';
 import { resolvePreferredExecutor } from './preferred-model-helper';
@@ -29,6 +29,7 @@ import type {
   ModelExecution,
   Model,
   ModelRole,
+  ArtifactRef,
 } from '@/types';
 
 interface InternalExecution {
@@ -48,6 +49,10 @@ interface InternalExecution {
   promptVariantId?: string;
   promptKey?: string;
   promptSlotHash?: string;
+  /** Tool-call artifacts surfaced by this consultation/synthesis, mirrored
+   *  from the underlying `ModelExecution.artifacts` so they survive into
+   *  `allExecutions` and reach `mergeArtifacts()`. */
+  artifacts?: ArtifactRef[];
 }
 
 /**
@@ -284,6 +289,7 @@ export class ExpertPanelStrategy extends BaseStrategy {
         promptVariantId: c.execution.promptVariantId,
         promptKey: c.execution.promptKey,
         promptSlotHash: c.execution.promptSlotHash,
+        artifacts: c.execution.artifacts,
       })),
       {
         modelId: coordinatorModel.id,
@@ -294,6 +300,7 @@ export class ExpertPanelStrategy extends BaseStrategy {
         cost: finalResponse.execution.cost,
         durationMs: finalResponse.execution.duration,
         success: finalResponse.execution.success,
+        artifacts: finalResponse.execution.artifacts,
       },
     ];
 
@@ -435,6 +442,7 @@ export class ExpertPanelStrategy extends BaseStrategy {
       totalCost,
       totalDuration: duration,
       qualityScore,
+      toolArtifacts: mergeArtifacts(allExecutions),
       metadata: {
         domains: domains,
         expertCount: expertConsultations.length,
@@ -832,6 +840,7 @@ export class ExpertPanelStrategy extends BaseStrategy {
           promptVariantId,
           promptKey,
           promptSlotHash,
+          artifacts: modelExec.artifacts,
         };
 
         return { domain, execution };
@@ -1075,6 +1084,7 @@ Be concise but comprehensive.`
       cost: coordExec.cost,
       durationMs: coordExec.durationMs,
       success: true,
+      artifacts: coordExec.artifacts,
     };
 
     return { execution };

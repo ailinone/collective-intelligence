@@ -33,8 +33,17 @@ import {
   inferModelCapabilities,
   inferProviderFromModelId,
 } from '@/services/model-capability-inference';
+import {
+  getDiscoveryPerformancePrior,
+  MODEL_UPSERT_PERFORMANCE_SET,
+} from '@/services/model-performance-baseline';
 import { withNormalizedMetadata } from '@/capability/metadata-normalization';
+import {
+  emitDiscoveryAssertions,
+  type DiscoveryAssertionModel,
+} from '@/capability/assertions/discovery-emitter';
 import { narrowAs } from '@/utils/type-guards';
+import { mapWithConcurrency } from '@/utils/map-with-concurrency';
 import { getProviderRegistry } from '@/providers/provider-registry';
 import type { BalanceCheckResult } from '@/providers/base/provider-adapter';
 import { providerDiscoveredModelsTotal } from '@/observability/ci-metrics';
@@ -314,6 +323,67 @@ export class CentralModelDiscoveryService {
   }
 
   /**
+   * Providers for which EVERY discovery source that covers them currently
+   * reports zero models discovered on its last completed attempt, despite
+   * having been attempted at least once. This is the circuit breaker
+   * pricing-integrity-job.ts's autoDisableDelistedModels() consults before
+   * flipping a stale row's status to 'disabled' (2026-09-08 incident fix).
+   *
+   * Why this exists: `last_synced_at` staleness on its own can't distinguish
+   * "the provider genuinely delisted this model" from "our discovery
+   * pipeline currently cannot see ANY of this provider's models" (a
+   * discovery-side outage — missing credentials, a broken endpoint, a
+   * timeout). The 2026-09-08 incident was the latter: openai-native,
+   * anthropic-native, aws-bedrock-hub, orqai-hub, edenai-hub, ai302-hub and
+   * routeway-hub all had zero working credentials in the process that runs
+   * the auto-disable sweep, so 100% (or a race-dependent partial fraction)
+   * of several providers' catalogs got auto-disabled in one tick even though
+   * every one of those fetchers is a real, non-stub implementation — see the
+   * incident writeup in pricing-integrity-job.ts.
+   *
+   * Deliberately source-name-agnostic — no hardcoded provider list. Any
+   * current or future source that goes fully dark shows up here
+   * automatically (from the SAME sourceHealthMap bookkeeping
+   * getCriticalProviderGaps()/getDiscoveryHealth() already maintain), and a
+   * provider drops back out the moment ANY of its covering sources reports a
+   * nonzero result again — no separate "undo" path to keep in sync, same
+   * self-healing shape as the auto-re-enable path in bulkUpsertModels above.
+   *
+   * A provider with no covering source that has been attempted yet (fresh
+   * boot, before the first cron tick lands) is NOT flagged — there is no
+   * signal yet, and flagging it would be a false positive, not a safety net.
+   */
+  getProvidersWithoutHealthyDiscovery(): Set<string> {
+    const providerSourceCoverage = new Map<string, DiscoverySource[]>();
+    for (const source of this.discoverySources.values()) {
+      for (const providerId of source.providers) {
+        if (providerId === '*') continue;
+        const list = providerSourceCoverage.get(providerId) ?? [];
+        list.push(source);
+        providerSourceCoverage.set(providerId, list);
+      }
+    }
+
+    const unhealthy = new Set<string>();
+    for (const [providerId, sources] of providerSourceCoverage.entries()) {
+      const attempted = sources
+        .map((s) => this.sourceHealthMap.get(s.name))
+        .filter((h): h is SourceHealthRecord => h !== undefined && h.totalAttempts > 0);
+
+      // No covering source has completed an attempt yet — not enough signal
+      // to call this provider's discovery "broken"; don't flag it.
+      if (attempted.length === 0) continue;
+
+      const anyHealthy = attempted.some((h) => h.modelsDiscoveredLast > 0);
+      if (!anyHealthy) {
+        unhealthy.add(providerId);
+      }
+    }
+
+    return unhealthy;
+  }
+
+  /**
    * Re-run discovery ONLY for sources that previously failed due to missing keys
    * or other retriable errors. Called 30s after startup to catch late-arriving secrets.
    */
@@ -431,7 +501,11 @@ export class CentralModelDiscoveryService {
       AZURE_OPENAI_API_KEY: 'azure-openai-hub',
       // Audio providers
       DEEPGRAM_API_KEY: 'deepgram-audio',
-      CARTESIA_API_KEY: 'cartesia-audio',
+      // CARTESIA_API_KEY intentionally absent: cartesia is now
+      // execution-only + pinnedFallback (2026-09-12), same as
+      // TOPAZ_API_KEY/V0_API_KEY/BFL_API_KEY — none of those need a
+      // re-discovery trigger since their inventory is a static catalog
+      // list, not something a fresh network probe would change.
       ELEVENLABS_API_KEY: 'elevenlabs-audio',
       // Router/aggregator sources
       OPENROUTER_API_KEY: 'openrouter-aggregator',
@@ -992,15 +1066,44 @@ export class CentralModelDiscoveryService {
           const { OpenAICompatibleHubModelFetcher } =
             await import('./model-fetchers/openai-compatible-hub-model-fetcher.js');
 
-          // ORQ model catalog endpoint is documented under Platform API:
-          // GET https://api.orq.ai/v2/models
-          // Runtime execution stays on AI Router endpoint (/v2/router).
+          // Root-caused 2026-09-12 (live-verified against both endpoints
+          // with a real ORQAI_API_KEY):
+          //
+          // `/v2/models` is the Platform API catalog. It keys every row by
+          // an opaque internal UUID (`id`) — the human-readable "vendor/model"
+          // identity lives in a separate `refId` field (always exactly
+          // `${provider}/${model_id}`) that the generic hub-fetcher parser
+          // never looked at, so discovery was writing raw UUIDs as model ids
+          // (confirmed real rows in prod, e.g. `metadata.originalProvider=
+          // 'deepseek'` with an id of `04cf3186-7df2-43e1-a3f6-5e2ae5b0c2bf`).
+          // It was also tried FIRST and always returns a non-empty array, so
+          // the other paths below were never reached.
+          //
+          // `/v2/router/models` — the AI Router's own listing endpoint — is
+          // a plain `{object: 'list', data: [{id, object, owned_by,
+          // created}]}` body whose `id` is already the correct
+          // "vendor/model" slug (536 models live vs. 244 on /v2/models, a
+          // superset, not a subset). It needs no special-case parsing: the
+          // fetcher's existing generic OpenAI-list extraction reads it
+          // directly, and it matches the DB's established id convention
+          // exactly (see openai-compatible-hub-model-fetcher.test.ts /
+          // hub-fetcher-model-list-shapes.test.ts's "Avian" case for the
+          // identical body shape already covered). It also keeps discovery
+          // on the same endpoint family as execution, which already targets
+          // /v2/router (see providers.catalog.ts's `orqai` entry).
+          //
+          // `/v2/models` is kept as a last-resort fallback (never tried
+          // first) rather than dropped outright, in case the router listing
+          // is ever unreachable; `resolveRawModelId` in the shared fetcher
+          // now recognizes an opaque-UUID `id` and substitutes `refId` when
+          // present, so even that fallback path can no longer write a raw
+          // UUID as a model id.
           const orqModelsBaseUrl = process.env.ORQAI_MODELS_BASE_URL || 'https://api.orq.ai';
           const fetcher = new OpenAICompatibleHubModelFetcher({
             providerName: 'orqai',
             apiKey: process.env.ORQAI_API_KEY,
             baseUrl: orqModelsBaseUrl,
-            modelListPaths: ['/v2/models', '/models', '/v1/models'],
+            modelListPaths: ['/v2/router/models', '/v2/models', '/models', '/v1/models'],
           });
           return await fetcher.getModels();
         },
@@ -1240,6 +1343,31 @@ export class CentralModelDiscoveryService {
         },
       },
       {
+        // GAP-AK-6 (structuralByDesign): Databricks has no global model list —
+        // only the serving endpoints a WORKSPACE has provisioned. The
+        // workspace-level control-plane route is the only honest inventory, and
+        // it replaces the row's hand-curated pinnedFallback, which could only
+        // ever be correct for the workspace it was copied from.
+        name: 'databricks-workspace',
+        type: 'cloud_hub',
+        priority: 2,
+        providers: ['databricks'],
+        fetcher: async () => {
+          const host = process.env.DATABRICKS_HOST;
+          const token = process.env.DATABRICKS_TOKEN;
+          if (!host || !token) {
+            this.log.info(
+              'Databricks host/token not configured, skipping workspace endpoint enumeration'
+            );
+            return [];
+          }
+          const { DatabricksModelFetcher } =
+            await import('./model-fetchers/databricks-model-fetcher.js');
+          const fetcher = new DatabricksModelFetcher({ host, token });
+          return await fetcher.getModels();
+        },
+      },
+      {
         name: 'azure-openai-hub',
         type: 'cloud_hub',
         priority: 2,
@@ -1475,41 +1603,24 @@ export class CentralModelDiscoveryService {
           return models;
         },
       },
-      {
-        name: 'cartesia-audio',
-        type: 'native_api',
-        priority: 2,
-        providers: ['cartesia'],
-        fetcher: async () => {
-          const apiKey = process.env.CARTESIA_API_KEY;
-          if (!apiKey) return [];
-
-          const baseUrl = process.env.CARTESIA_BASE_URL || 'https://api.cartesia.ai';
-          const resp = await fetch(`${baseUrl}/models`, {
-            headers: {
-              'X-API-Key': apiKey,
-              'Cartesia-Version': '2024-06-10',
-            },
-            signal: AbortSignal.timeout(10000),
-          });
-          if (!resp.ok) return [];
-
-          const data = (await resp.json()) as Array<{
-            id: string;
-            name: string;
-            description?: string;
-          }>;
-          return (Array.isArray(data) ? data : []).map((m) => ({
-            id: `cartesia/${m.id}`,
-            name: m.id,
-            displayName: `Cartesia ${m.name} (TTS)`,
-            contextWindow: 0,
-            maxOutputTokens: 0,
-            capabilities: ['text_to_speech', 'streaming'],
-            metadata: { provider: 'cartesia', modalities: ['audio'] },
-          }));
-        },
-      },
+      // 'cartesia-audio' hardcoded source REMOVED 2026-09-12. History:
+      // the 2026-09-10 discovery audit (PR #564) found the original
+      // `GET /models` call 404s live (Cartesia never exposed that path)
+      // and "fixed" it by switching to `GET /voices` — but a VOICE
+      // (persona, UUID + display name) is a different resource type from
+      // a TTS MODEL, so that fetcher was fabricating fake "model" rows
+      // out of voice personas. Re-verified 2026-09-12 against Cartesia's
+      // own docs (docs.cartesia.ai/api-reference/tts/bytes) and the
+      // current cartesia-js SDK (GitHub file-tree check): NO model-
+      // listing endpoint exists on either surface, and none of the SDK's
+      // resource files (access-token/agents/datasets/fine-tunes/
+      // pronunciation-dicts/stt/tts/voice-changer/voices) expose one
+      // either. `cartesia` is now `execution-only` with a curated
+      // `pinnedFallback` in providers.catalog.ts (topaz/v0 pattern) — its
+      // inventory is emitted by the generic `catalog-${providerId}`
+      // source in `addCatalogProviderSources()` below, no HTTP probe, so
+      // a dedicated hardcoded source here would just be a second (and
+      // redundant) place to get the resource type wrong again.
       {
         name: 'elevenlabs-audio',
         type: 'native_api',
@@ -1531,17 +1642,62 @@ export class CentralModelDiscoveryService {
             name: string;
             can_do_text_to_speech?: boolean;
           }>;
-          return (Array.isArray(data) ? data : [])
-            .filter((m) => m.can_do_text_to_speech !== false)
-            .map((m) => ({
-              id: `elevenlabs/${m.model_id}`,
-              name: m.model_id,
-              displayName: `ElevenLabs ${m.name} (TTS)`,
+          // Music models (`music_v1`/`music_v2`) are a separate capability
+          // from TTS (LOTE AX, 2026-09-06) — kept even when the vendor
+          // reports `can_do_text_to_speech: false` for them, and tagged
+          // `music_generation` instead. Matched by id prefix, not a fixed
+          // list, so a future `music_v3` etc. is picked up automatically IF
+          // the vendor ever adds it to `/v1/models`.
+          const MUSIC_MODEL_ID_PATTERN = /^music/i;
+          const discovered = (Array.isArray(data) ? data : [])
+            .filter(
+              (m) => m.can_do_text_to_speech !== false || MUSIC_MODEL_ID_PATTERN.test(m.model_id)
+            )
+            .map((m) => {
+              const isMusic = MUSIC_MODEL_ID_PATTERN.test(m.model_id);
+              return {
+                id: `elevenlabs/${m.model_id}`,
+                name: m.model_id,
+                displayName: `ElevenLabs ${m.name} (${isMusic ? 'Music' : 'TTS'})`,
+                contextWindow: 0,
+                maxOutputTokens: 0,
+                capabilities: isMusic ? ['music_generation'] : ['text_to_speech', 'streaming'],
+                metadata: {
+                  provider: 'elevenlabs',
+                  modalities: isMusic ? ['audio', 'music'] : ['audio'],
+                },
+              };
+            });
+
+          // Pinned fallback for `music_v1`/`music_v2` (LOTE AX, 2026-09-06):
+          // live-verified against `GET /v1/models` with a real
+          // `<prefix>-elevenlabs-key` that the vendor's own listing endpoint
+          // does NOT include either music model id, even though `POST
+          // /v1/music` documents and accepts both. Same
+          // `no-list-endpoint` pattern the catalog uses elsewhere for a
+          // vendor whose discovery surface doesn't cover a whole
+          // capability — see the identical fallback (and its full
+          // rationale) in `elevenlabs-adapter.ts#getModels`.
+          const discoveredIds = new Set(discovered.map((m) => m.name));
+          const PINNED_MUSIC_MODEL_IDS: readonly string[] = ['music_v1', 'music_v2'];
+          const pinnedMusic = PINNED_MUSIC_MODEL_IDS.filter((id) => !discoveredIds.has(id)).map(
+            (id) => ({
+              id: `elevenlabs/${id}`,
+              name: id,
+              displayName: `ElevenLabs ${id} (Music)`,
               contextWindow: 0,
               maxOutputTokens: 0,
-              capabilities: ['text_to_speech', 'streaming'],
-              metadata: { provider: 'elevenlabs', modalities: ['audio'] },
-            }));
+              capabilities: ['music_generation'],
+              metadata: {
+                provider: 'elevenlabs',
+                modalities: ['audio', 'music'],
+                pinnedFallback: true,
+                pinnedFallbackReason: 'no-list-endpoint',
+              },
+            })
+          );
+
+          return [...discovered, ...pinnedMusic];
         },
       },
     ];
@@ -1675,6 +1831,60 @@ export class CentralModelDiscoveryService {
       });
     }
 
+    if (process.env.TRITON_DISCOVERY_DISABLED !== 'true') {
+      // Triton speaks the KServe v2 NATIVE protocol (tensor in/out over
+      // `/v2/models/{model}/infer`), not an OpenAI-compatible REST surface —
+      // that's exactly why its catalog row is `integrationClass:
+      // 'self-hosted-native'` rather than `'self-hosted-oai-compat'` (the
+      // class vllm/lm-studio/xinference use, which the catalog-bridge's
+      // OpenAICompatibleHubModelFetcher auto-wires for discovery). Triton
+      // fell through that auto-wiring and was never given an explicit
+      // discovery source, so it never actually ran despite the catalog
+      // declaring `integrationMode: 'discovery+execution'` and a working
+      // adapter (execution-only in practice).
+      //
+      // TritonAdapter.getModels() already implements the correct, doc-
+      // confirmed listing call for this protocol — `POST /v2/repository/index`,
+      // the model-repository extension to KServe v2 (verified 2026-09-10
+      // against docs.nvidia.com/.../protocol/extension_model_repository.html
+      // and the triton-inference-server/server GitHub source: request body
+      // `{ready?: boolean}`, response `[{name, version?, state, reason}]`),
+      // and is unit-tested against a realistic index-response payload in
+      // triton-adapter.test.ts. Reused here — same shape-mismatch rationale
+      // as bytez-native/cloudflare-workers-ai-native above — rather than
+      // duplicating the KServe call in a second fetcher class.
+      //
+      // Self-hosted like ollama/vllm: no operator has a Triton server running
+      // against this SaaS today, so this will fail-fast (connection refused)
+      // against the localhost:8000 default every cycle until TRITON_BASE_URL
+      // points at a real server — TritonAdapter.getModels() already catches
+      // that and returns [] rather than throwing, matching every other
+      // self-hosted source's behavior when unconfigured.
+      this.discoverySources.set('triton-native', {
+        name: 'triton-native',
+        type: 'aggregator',
+        priority: 8,
+        providers: ['triton'],
+        fetcher: async (): Promise<DiscoveredModel[]> => {
+          const { TritonAdapter } = await import('@/providers/triton/triton-adapter');
+          const adapter = new TritonAdapter({
+            baseUrl: process.env.TRITON_BASE_URL || 'http://localhost:8000',
+            apiKey: process.env.TRITON_API_KEY || '',
+          });
+          const models = await adapter.getModels();
+          return models.map((m) => ({
+            id: m.id,
+            name: m.name,
+            displayName: m.displayName,
+            contextWindow: m.contextWindow || 0,
+            maxOutputTokens: m.maxOutputTokens || 0,
+            capabilities: m.capabilities,
+            metadata: { provider: 'triton' },
+          }));
+        },
+      });
+    }
+
     if (process.env.GITHUB_MODELS_DISCOVERY_DISABLED !== 'true') {
       // GitHub Models' catalog listing (https://models.github.ai/catalog/models)
       // lives at the top-level API host, NOT nested under the chat baseUrl's
@@ -1704,6 +1914,45 @@ export class CentralModelDiscoveryService {
             apiKey,
             baseUrl: 'https://models.github.ai/inference',
             modelListPaths: ['https://models.github.ai/catalog/models'],
+          });
+          return await fetcher.getModels();
+        },
+      });
+    }
+
+    if (process.env.RELACE_DISCOVERY_DISABLED !== 'true') {
+      // GAP-AK-6 closure (LOTE AT, 2026-09-09): Relace's official OpenAPI
+      // spec (docs.relace.ai/api-reference/openapi.json) documents a real
+      // `GET /models` catalog ("the catalog for open-weight models hosted
+      // by Relace") — but it lives at `models.relace.ai`'s HOST ROOT, while
+      // this provider's chat baseUrl is `models.relace.ai/v1` (needed so the
+      // default `/chat/completions` path composes to the documented
+      // `/v1/chat/completions`). Same shape-mismatch as github-models-native
+      // above: the generic catalog-bridge path concatenates paths.modelList
+      // onto baseUrl and would 404 at `.../v1/models`, and paths.modelList
+      // is relative-path-only (ProviderEndpointPathsSchema requires a
+      // leading "/"), so it can't express the host-root path either.
+      // Register a dedicated source instead, reusing
+      // OpenAICompatibleHubModelFetcher directly — the response shape
+      // ({data:[{id, name, context_length, pricing, input_modalities,
+      // output_modalities, supported_features, ...}]}) is standard
+      // extractRawModels/convertRawModel-compatible; only the URL needs the
+      // absolute override via buildUrl()'s absolute-URL passthrough.
+      this.discoverySources.set('relace-native', {
+        name: 'relace-native',
+        type: 'aggregator',
+        priority: 8,
+        providers: ['relace'],
+        fetcher: async (): Promise<DiscoveredModel[]> => {
+          const apiKey = process.env.RELACE_API_KEY || '';
+          if (!apiKey) return [];
+          const { OpenAICompatibleHubModelFetcher } =
+            await import('./model-fetchers/openai-compatible-hub-model-fetcher.js');
+          const fetcher = new OpenAICompatibleHubModelFetcher({
+            providerName: 'relace',
+            apiKey,
+            baseUrl: 'https://models.relace.ai/v1',
+            modelListPaths: ['https://models.relace.ai/models'],
           });
           return await fetcher.getModels();
         },
@@ -2287,9 +2536,14 @@ export class CentralModelDiscoveryService {
     const startTime = Date.now();
     const results: ModelDiscoveryResult[] = [];
 
-    // Executa descoberta de todas as fontes em paralelo
-    // Add timeout per source to prevent hanging (max 10 seconds per source)
-    const discoveryPromises = Array.from(this.discoverySources.entries()).map(
+    // Fan-out across sources, optionally capped: each source ends in an
+    // interactive bulk-upsert transaction (up to 20 s), and api + worker
+    // both run discovery at boot, so an unbounded fan-out can pin every
+    // pooled backend and starve chat queries. 0/unset keeps full fan-out.
+    const sourceConcurrency = Number(process.env.MODEL_DISCOVERY_SOURCE_CONCURRENCY || 0);
+    const discoveryResults = await mapWithConcurrency(
+      Array.from(this.discoverySources.entries()),
+      sourceConcurrency,
       async ([sourceName, source]) => {
         const sourceStartTime = Date.now();
 
@@ -2378,8 +2632,6 @@ export class CentralModelDiscoveryService {
       }
     );
 
-    // Aguarda todas as descobertas completarem
-    const discoveryResults = await Promise.all(discoveryPromises);
     results.push(...discoveryResults);
     this.lastFullDiscovery = new Date();
 
@@ -2428,6 +2680,23 @@ export class CentralModelDiscoveryService {
   }
 
   /**
+   * Deterministic bigint hash for pg_advisory_xact_lock /
+   * pg_try_advisory_xact_lock. Postgres advisory locks take a bigint; this
+   * folds an arbitrary string key into one (mod 2^63, forced positive) so
+   * unrelated lock keys don't collide by construction. Shared by
+   * bulkUpsertModels (locks per provider) and createNewModel (locks per
+   * provider+name) so both call sites hash their keys the same way.
+   */
+  private computeAdvisoryLockHash(key: string): bigint {
+    const sanitized = key.substring(0, 200);
+    let hash = 0n;
+    for (let i = 0; i < sanitized.length; i++) {
+      hash = (hash * 31n + BigInt(sanitized.charCodeAt(i))) % BigInt(2 ** 63);
+    }
+    return hash < 0n ? -hash : hash;
+  }
+
+  /**
    * Bulk upsert models using PostgreSQL native INSERT ... ON CONFLICT
    * This is much more efficient than individual upserts, reducing roundtrips and transaction overhead
    *
@@ -2452,6 +2721,13 @@ export class CentralModelDiscoveryService {
     let newCount = 0;
     let updatedCount = 0;
 
+    // One calibrated prior for the whole sync. Discovery has NO measurement for
+    // the models it discovers, so what it writes is a prior, not data — see
+    // model-performance-baseline.ts for why it is centred on the measured
+    // population instead of on a hardcoded optimism, and why that is what makes
+    // the non-destructive upsert below safe to ship.
+    const performancePrior = await getDiscoveryPerformancePrior();
+
     // Deduplicate by model id so ON CONFLICT does not see the same row twice (avoids P2010/21000)
     const byId = new Map<string, (typeof models)[0]>();
     for (const m of models) {
@@ -2463,117 +2739,326 @@ export class CentralModelDiscoveryService {
     for (let i = 0; i < deduped.length; i += BATCH_SIZE) {
       const batch = deduped.slice(i, i + BATCH_SIZE);
 
-      // Build VALUES clause for batch insert (includes uid for multi-provider PK)
-      const values: string[] = [];
-      const params: unknown[] = [];
-      let paramIndex = 1;
+      // GAP-A12: capability assertions are derived from the SAME tuple that is
+      // being persisted, and keyed by the SAME uid, so the assertion log cannot
+      // drift from `models`. `model` is the pre-enrichment payload (what the
+      // provider actually declared); `normalizedModel` is what lands in the
+      // row — the emitter needs both to attribute a source per capability.
+      const assertionCandidates: DiscoveryAssertionModel[] = [];
 
-      for (const { normalizedModel, provider: _provider } of batch) {
-        const modelName = normalizedModel.name || normalizedModel.id;
-        const capabilities = Array.isArray(normalizedModel.capabilities)
-          ? normalizedModel.capabilities
-          : [];
-        const pricing = normalizedModel.pricing || { prompt: 0, completion: 0, currency: 'USD' };
-        const inputCostPer1k = (pricing.inputCostPer1M ?? 0) / 1000;
-        const outputCostPer1k = (pricing.outputCostPer1M ?? 0) / 1000;
+      // Model ids confirmed present in `models` after this batch. Assertions FK
+      // onto `models.uid`, so emitting for a model whose upsert failed would
+      // abort the whole assertion INSERT.
+      const persistedIds = new Set<string>();
 
-        const metadataPayload: Record<string, unknown> = withNormalizedMetadata(
-          {
-            ...(normalizedModel.metadata ?? {}),
-            source: sourceName,
-            sourceType: source.type,
-            sourcePriority: source.priority,
-            discoveredAt: new Date().toISOString(),
-            pricing,
-          },
-          capabilities
-        );
-
-        const performancePayload = {
-          latencyMs: 1000,
-          throughput: 100,
-          quality: 0.8,
-          reliability: 0.95,
-        };
-
-        // uid = MD5(provider_id + ':' + model_id)[0:25] — deterministic surrogate PK
-        const uid = computeModelUid(providerId, normalizedModel.id);
-
-        values.push(
-          `($${paramIndex}, $${paramIndex + 1}, $${paramIndex + 2}, $${paramIndex + 3}, $${paramIndex + 4}, $${paramIndex + 5}, $${paramIndex + 6}, $${paramIndex + 7}, $${paramIndex + 8}, $${paramIndex + 9}, $${paramIndex + 10}, $${paramIndex + 11}, $${paramIndex + 12}, $${paramIndex + 13})`
-        );
-
-        params.push(
-          uid, // uid (PK)
-          normalizedModel.id, // id
-          providerId, // provider_id
-          modelName, // name
-          normalizedModel.displayName || modelName, // display_name
-          normalizedModel.contextWindow || 4096, // context_window
-          normalizedModel.maxOutputTokens || 1024, // max_output_tokens
-          inputCostPer1k, // input_cost_per_1k
-          outputCostPer1k, // output_cost_per_1k
-          JSON.stringify(capabilities), // capabilities (JSON)
-          JSON.stringify(metadataPayload), // metadata (JSON)
-          JSON.stringify(performancePayload), // performance (JSON)
-          'active', // status
-          new Date() // updated_at
-        );
-
-        paramIndex += 14;
-      }
-
-      // Use PostgreSQL's INSERT ... ON CONFLICT on the PRIMARY KEY (uid).
-      //
-      // Why uid and not (id, provider_id):
-      //   `uid` is the PRIMARY KEY (see models_pkey). Multiple discovery sources
-      //   in parallel can generate the SAME uid (e.g., openai-native, aihubmix-hub,
-      //   and cometapi-hub all report "openai/gpt-4o"). Each source runs its own
-      //   INSERT concurrently in a different transaction. `ON CONFLICT (id, provider_id)`
-      //   does NOT resolve conflicts on `uid` — so when two INSERTs race with the
-      //   same uid, the second crashes with "duplicate key violates models_pkey".
-      //
-      //   `ON CONFLICT (uid)` makes the INSERT atomic at the PK level, so parallel
-      //   sources converge to a single UPDATE without errors.
-      //
-      // Check which models exist before bulk upsert to track new vs updated counts
       const modelIds = batch.map(({ normalizedModel }) => normalizedModel.id);
-      const existingModels = await prisma.model.findMany({
-        where: { id: { in: modelIds }, providerId },
-        select: { id: true },
-      });
-      const existingIds = new Set(existingModels.map((m) => m.id));
+      const candidateNames = Array.from(
+        new Set(batch.map(({ normalizedModel }) => normalizedModel.name || normalizedModel.id))
+      );
 
-      const sql = `
-        INSERT INTO models (
-          uid, id, provider_id, name, display_name, context_window, max_output_tokens,
-          input_cost_per_1k, output_cost_per_1k, capabilities, metadata, performance,
-          status, updated_at
-        ) VALUES ${values.join(', ')}
-        ON CONFLICT (uid) DO UPDATE SET
-          display_name = EXCLUDED.display_name,
-          context_window = EXCLUDED.context_window,
-          max_output_tokens = EXCLUDED.max_output_tokens,
-          input_cost_per_1k = EXCLUDED.input_cost_per_1k,
-          output_cost_per_1k = EXCLUDED.output_cost_per_1k,
-          capabilities = EXCLUDED.capabilities,
-          metadata = EXCLUDED.metadata,
-          performance = EXCLUDED.performance,
-          status = EXCLUDED.status,
-          updated_at = EXCLUDED.updated_at
-      `;
+      let batchNew = 0;
+      let batchUpdated = 0;
+      const reEnabledIds: string[] = [];
 
       try {
-        // Execute bulk upsert
-        await prisma.$executeRawUnsafe(sql, ...params);
+        // Serialize concurrent bulk-upsert batches for THIS provider. Two
+        // callers can legitimately be writing provider X's models at the same
+        // moment — two discovery sources both resolving to X inside the same
+        // discoverAllModels() Promise.all, or the two ci_api replicas each
+        // running model-discovery-runner.ts's own independent hourly cycle
+        // (that scheduler has no cross-replica lock beyond the Redis one
+        // model-discovery-runner.ts now takes, which reduces how OFTEN this
+        // overlap happens but does not make it impossible). Blocking (not
+        // the pg_try_ variant createNewModel uses for its per-model lock) is
+        // deliberate here: we WANT the second batch to wait and then see the
+        // first batch's committed rows in the pre-checks below, not skip its
+        // own writes — that is what actually resolves the race instead of
+        // just detecting it after Postgres has already rejected the insert.
+        const providerLockHash = this.computeAdvisoryLockHash(`discovery_bulk_upsert_${providerId}`);
 
-        // Count new vs updated based on pre-check
-        for (const { normalizedModel } of batch) {
-          if (existingIds.has(normalizedModel.id)) {
-            updatedCount++;
-          } else {
-            newCount++;
+        await prisma.$transaction(
+          async (tx) => {
+            await tx.$executeRaw`SELECT pg_advisory_xact_lock(${providerLockHash})`;
+
+            // Check which models exist before bulk upsert to track new vs
+            // updated counts, and each row's PRIOR status — the ON CONFLICT
+            // SET below unconditionally rewrites status to 'active', so this
+            // is the only point where "was this row disabled before this
+            // upsert" is still observable, needed to log auto-re-enable
+            // events for audit (see the comment on the `status =
+            // EXCLUDED.status` clause below).
+            //
+            // The SECOND query below resolves conflicts on
+            // models_provider_id_name_key — a unique constraint `ON CONFLICT
+            // (uid)` cannot see (Postgres allows only one arbiter per
+            // statement; uid is the PRIMARY KEY, see models_pkey, chosen as
+            // the arbiter because it's what keeps two sources reporting the
+            // SAME id — e.g. openai-native and aihubmix-hub both listing
+            // "openai/gpt-4o" — from racing on models_pkey). But TWO
+            // DIFFERENT discovered ids can legitimately want the SAME
+            // (provider_id, name) — a hub/aggregator re-listing a model
+            // under a new id, or an upstream rename — and without this
+            // check the INSERT below crashed in production with
+            // "duplicate key value violates models_provider_id_name_key"
+            // (Prisma P2010 / Postgres 23505). The retry-based fallback
+            // (createNewModel, below) treated that as a transient
+            // concurrent-create-of-the-SAME-id race and backed off/retried
+            // the SAME losing insert — which is deterministic for a genuine
+            // different-id/same-name collision, not transient, so it kept
+            // failing until the competing id happened to drop out of a
+            // LATER discovery pass on its own (the "gradual reactivation"
+            // symptom this fix closes).
+            const [existingById, existingByName] = await Promise.all([
+              tx.model.findMany({
+                where: { id: { in: modelIds }, providerId },
+                select: { id: true, status: true },
+              }),
+              tx.model.findMany({
+                where: { providerId, name: { in: candidateNames } },
+                select: { id: true, uid: true, name: true, status: true },
+              }),
+            ]);
+            const existingIds = new Set(existingById.map((m) => m.id));
+            const priorStatusById = new Map(existingById.map((m) => [m.id, m.status]));
+            const nameOwners = new Map(existingByName.map((m) => [m.name, m]));
+            // Tracks which id claims a brand-new name WITHIN this batch, so a
+            // second brand-new id sharing that name (no DB owner yet either)
+            // doesn't reach the INSERT statement and collide with the first.
+            const claimedNamesThisBatch = new Map<string, string>();
+
+            const values: string[] = [];
+            const params: unknown[] = [];
+            let paramIndex = 1;
+
+            for (const { model: rawModel, normalizedModel, provider: _provider } of batch) {
+              const modelName = normalizedModel.name || normalizedModel.id;
+              const capabilities = Array.isArray(normalizedModel.capabilities)
+                ? normalizedModel.capabilities
+                : [];
+              const pricing = normalizedModel.pricing || {
+                prompt: 0,
+                completion: 0,
+                currency: 'USD',
+              };
+              const inputCostPer1k = (pricing.inputCostPer1M ?? 0) / 1000;
+              const outputCostPer1k = (pricing.outputCostPer1M ?? 0) / 1000;
+
+              const metadataPayload: Record<string, unknown> = withNormalizedMetadata(
+                {
+                  ...(normalizedModel.metadata ?? {}),
+                  source: sourceName,
+                  sourceType: source.type,
+                  sourcePriority: source.priority,
+                  discoveredAt: new Date().toISOString(),
+                  pricing,
+                },
+                capabilities
+              );
+
+              // `calibrated` is diagnostics for the sync log, not row data.
+              const { calibrated: _calibrated, ...performancePayload } = performancePrior;
+
+              const dbOwner = nameOwners.get(modelName);
+
+              // Resolve what row THIS candidate targets BEFORE checking for
+              // an intra-batch collision, so the collision check is keyed on
+              // the actual target identity — not the incoming id — which is
+              // what catches the case where TWO DIFFERENT incoming ids both
+              // redirect onto the SAME existing owner (both would otherwise
+              // emit a row with the identical uid, and Postgres rejects a
+              // single INSERT ... ON CONFLICT statement that would affect
+              // the same conflict target twice).
+              let uid: string;
+              let rowId: string;
+              let rowName: string;
+              let isUpdate: boolean;
+              let priorStatus: string | undefined;
+              const isRedirect = dbOwner !== undefined && dbOwner.id !== normalizedModel.id;
+
+              if (dbOwner !== undefined && isRedirect) {
+                uid = dbOwner.uid;
+                rowId = dbOwner.id;
+                rowName = dbOwner.name;
+                isUpdate = true;
+                priorStatus = dbOwner.status;
+              } else {
+                uid = computeModelUid(providerId, normalizedModel.id);
+                rowId = normalizedModel.id;
+                rowName = modelName;
+                isUpdate = existingIds.has(normalizedModel.id);
+                priorStatus = priorStatusById.get(normalizedModel.id);
+              }
+
+              const claimedRowId = claimedNamesThisBatch.get(modelName);
+              if (claimedRowId !== undefined) {
+                if (claimedRowId === rowId) {
+                  // Another candidate earlier in this batch already emitted
+                  // a row for this EXACT target (e.g. two incoming ids both
+                  // alias to the same existing owner) — nothing more to add.
+                  continue;
+                }
+                // A different candidate earlier in this batch already
+                // claimed the VALUES-row slot for this name — a fresh
+                // insert or a redirect onto an existing owner. Skip this one
+                // rather than emit a second row for the same (provider,
+                // name) in one statement; a later discovery pass resolves it
+                // once the upstream alias/rename settles on one id. This is
+                // the "dedupe colliding writes before sending to DB" half of
+                // the fix.
+                this.log.warn(
+                  {
+                    providerId,
+                    skippedId: normalizedModel.id,
+                    keptId: claimedRowId,
+                    name: modelName,
+                  },
+                  'Discovery candidates share a (provider, name) pair within one batch — skipping one this pass to avoid a duplicate-key insert'
+                );
+                continue;
+              }
+
+              if (isRedirect) {
+                // This name already belongs to a different id in the DB
+                // (alias/rename). Redirect onto the EXISTING row's uid so the
+                // statement below UPDATEs it — id/name/provider_id are
+                // deliberately absent from the DO UPDATE SET list, so the
+                // row's identity is untouched and only its content columns
+                // (price, capabilities, status, ...) refresh. This is the
+                // "use a real upsert instead of retrying a losing insert"
+                // half of the fix.
+                this.log.warn(
+                  {
+                    providerId,
+                    incomingId: normalizedModel.id,
+                    existingId: rowId,
+                    name: modelName,
+                  },
+                  'Discovery candidate name collides with an existing model under a different id — updating the existing row instead of inserting a duplicate name'
+                );
+              }
+
+              claimedNamesThisBatch.set(modelName, rowId);
+
+              assertionCandidates.push({
+                modelUid: uid,
+                signal: {
+                  modelId: rowId,
+                  finalCapabilities: capabilities,
+                  declaredCapabilities: rawModel.capabilities,
+                  metadata: metadataPayload,
+                },
+              });
+
+              values.push(
+                `($${paramIndex}, $${paramIndex + 1}, $${paramIndex + 2}, $${paramIndex + 3}, $${paramIndex + 4}, $${paramIndex + 5}, $${paramIndex + 6}, $${paramIndex + 7}, $${paramIndex + 8}, $${paramIndex + 9}, $${paramIndex + 10}, $${paramIndex + 11}, $${paramIndex + 12}, $${paramIndex + 13}, $${paramIndex + 14})`
+              );
+
+              params.push(
+                uid, // uid (PK)
+                rowId, // id
+                providerId, // provider_id
+                rowName, // name
+                normalizedModel.displayName || modelName, // display_name
+                normalizedModel.contextWindow || 4096, // context_window
+                normalizedModel.maxOutputTokens || 1024, // max_output_tokens
+                inputCostPer1k, // input_cost_per_1k
+                outputCostPer1k, // output_cost_per_1k
+                JSON.stringify(capabilities), // capabilities (JSON)
+                JSON.stringify(metadataPayload), // metadata (JSON)
+                JSON.stringify(performancePayload), // performance (JSON)
+                'active', // status
+                new Date(), // updated_at
+                new Date() // last_synced_at — see the ON CONFLICT SET comment below for why
+                // this must be stamped unconditionally on every successful upsert.
+              );
+
+              paramIndex += 15;
+              persistedIds.add(rowId);
+
+              if (isUpdate) {
+                batchUpdated++;
+                if (priorStatus === 'disabled') {
+                  reEnabledIds.push(rowId);
+                }
+              } else {
+                batchNew++;
+              }
+            }
+
+            if (values.length === 0) {
+              // Every candidate in this batch was either a no-op redirect
+              // with nothing left to persist or skipped as an intra-batch
+              // name collision — nothing to INSERT.
+              return;
+            }
+
+            const sql = `
+              INSERT INTO models (
+                uid, id, provider_id, name, display_name, context_window, max_output_tokens,
+                input_cost_per_1k, output_cost_per_1k, capabilities, metadata, performance,
+                status, updated_at, last_synced_at
+              ) VALUES ${values.join(', ')}
+              ON CONFLICT (uid) DO UPDATE SET
+                display_name = EXCLUDED.display_name,
+                context_window = EXCLUDED.context_window,
+                max_output_tokens = EXCLUDED.max_output_tokens,
+                input_cost_per_1k = EXCLUDED.input_cost_per_1k,
+                output_cost_per_1k = EXCLUDED.output_cost_per_1k,
+                capabilities = EXCLUDED.capabilities,
+                metadata = EXCLUDED.metadata,
+                -- A discovery prior must never overwrite a MEASUREMENT. Every other
+                -- column still refreshes from the incoming row, because discovery IS
+                -- authoritative for what it actually observes. See
+                -- model-performance-baseline.ts.
+                ${MODEL_UPSERT_PERFORMANCE_SET},
+                -- Auto re-enable (2026-09, pairs with pricing-integrity-job.ts's
+                -- auto-disable sweep): unconditionally rewriting status to whatever
+                -- discovery just observed ('active', see the INSERT values above)
+                -- means a model this codebase previously disabled (auto-disable
+                -- sweep, or removeDisabledCatalogEntries) self-heals back to active
+                -- the moment a provider lists it again — no separate "undo" write
+                -- path needed. This was already the existing behavior of this
+                -- clause; see priorStatusById above and the re-enable log this
+                -- batch emits below for the audit trail this change adds.
+                status = EXCLUDED.status,
+                updated_at = EXCLUDED.updated_at,
+                -- Pricing staleness fix (2026-09): this is the ONLY thing that marks a
+                -- row as "confirmed live today" for the pricing-integrity staleness
+                -- check (pricing-integrity-job.ts). It must be set UNCONDITIONALLY on
+                -- every successful upsert, changed-fields or not — a model whose price
+                -- legitimately never changes must still get reconfirmed, or the
+                -- staleness check would eventually flag every stable, correctly-priced
+                -- row as stale. Before this fix, last_synced_at was never written by
+                -- discovery at all (only by the one-off seed script), so a delisted
+                -- model's stale, wrong price could never be distinguished from a
+                -- freshly-confirmed one — see the Bedrock/Alibaba phantom rows this
+                -- was written to catch.
+                last_synced_at = EXCLUDED.last_synced_at
+            `;
+
+            await tx.$executeRawUnsafe(sql, ...params);
+          },
+          {
+            isolationLevel: 'ReadCommitted',
+            timeout: 20000,
+            maxWait: 10000,
           }
+        );
+
+        newCount += batchNew;
+        updatedCount += batchUpdated;
+
+        if (reEnabledIds.length > 0) {
+          // Catalog-membership change — log structurally so an operator can
+          // audit it, mirroring pricing-integrity-job.ts's auto-disable log.
+          this.log.info(
+            {
+              providerId,
+              count: reEnabledIds.length,
+              modelIds: reEnabledIds.slice(0, 50),
+            },
+            'Model auto-discovery re-enable: previously-disabled models reappeared in a live discovery batch and were flipped back to active'
+          );
         }
       } catch (error) {
         this.log.error(
@@ -2601,6 +3086,7 @@ export class CentralModelDiscoveryService {
                 updatedCount++;
               }
             }
+            persistedIds.add(normalizedModel.id);
           } catch (individualError) {
             this.log.warn(
               { modelId: normalizedModel.id, error: individualError },
@@ -2609,6 +3095,16 @@ export class CentralModelDiscoveryService {
           }
         }
       }
+
+      // GAP-A12 — emit capability assertions for what actually landed. This is
+      // the link that was missing between live discovery and the HCRA
+      // projection: without it, `models.capability_uris` only ever reflected
+      // whatever the last manual backfill script wrote. `emitDiscoveryAssertions`
+      // never throws, so a failure here cannot cost us the discovery cycle.
+      await emitDiscoveryAssertions(
+        assertionCandidates.filter((c) => persistedIds.has(c.signal.modelId)),
+        { sourceName, providerId }
+      );
     }
 
     return { new: newCount, updated: updatedCount };
@@ -2825,6 +3321,8 @@ export class CentralModelDiscoveryService {
     const pricing = model.pricing || { prompt: 0, completion: 0, currency: 'USD' };
     const providerRecord = await this.ensureProviderExists(provider, sourceName);
     const modelName = model.name || model.id;
+    const { calibrated: _priorCalibrated, ...createPerformancePrior } =
+      await getDiscoveryPerformancePrior();
 
     // Check if model with this ID + provider already exists
     const existingById = await prisma.model.findFirst({
@@ -2862,18 +3360,18 @@ export class CentralModelDiscoveryService {
     const maxRetries = 3;
     let lastError: unknown;
 
-    // Use advisory lock to prevent concurrent inserts of the same model across processes
-    // PostgreSQL advisory locks use bigint values, we'll generate a hash from the model ID
-    const lockId = `model_${model.id}`.substring(0, 63).replace(/[^a-zA-Z0-9_]/g, '_');
-    // Generate a deterministic bigint hash from the lock ID
-    let lockHash = 0n;
-    for (let i = 0; i < lockId.length; i++) {
-      lockHash = (lockHash * 31n + BigInt(lockId.charCodeAt(i))) % BigInt(2 ** 63);
-    }
-    // Ensure positive value (PostgreSQL advisory locks require positive bigint)
-    if (lockHash < 0n) {
-      lockHash = -lockHash;
-    }
+    // Lock on the (provider, name) IDENTITY being claimed, not on the
+    // incoming id (the previous key). Two different discovered ids that want
+    // the SAME name under this provider — the models_provider_id_name_key
+    // gap bulkUpsertModels' comment above explains in full — must serialize
+    // against EACH OTHER here; an id-based key let them run concurrently and
+    // both pass the existingByProviderAndName check above before either
+    // committed, so the second one crashed on Postgres's own unique-
+    // constraint check instead of converging to an update. Locking by name
+    // means the SECOND caller's pg_try_advisory_xact_lock below correctly
+    // misses, backs off, and retries — by which point the first caller has
+    // committed and the existingByProviderAndName check finds its row.
+    const lockHash = this.computeAdvisoryLockHash(`discovery_name_${providerRecord.id}_${modelName}`);
 
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       try {
@@ -2925,6 +3423,10 @@ export class CentralModelDiscoveryService {
                     capabilities
                   ),
                   status: 'active',
+                  // Unconditional reconfirmation stamp — see the ON CONFLICT SET
+                  // comment in bulkUpsertModels for why this must not be gated
+                  // behind a "did anything else change" check.
+                  lastSyncedAt: new Date(),
                 },
               });
               return;
@@ -2961,6 +3463,7 @@ export class CentralModelDiscoveryService {
                     capabilities
                   ),
                   status: 'active',
+                  lastSyncedAt: new Date(),
                 },
               });
               return;
@@ -2997,6 +3500,7 @@ export class CentralModelDiscoveryService {
                 ),
                 status: 'active',
                 updatedAt: new Date(),
+                lastSyncedAt: new Date(),
               },
               create: {
                 uid,
@@ -3021,12 +3525,11 @@ export class CentralModelDiscoveryService {
                   capabilities
                 ),
                 status: 'active',
-                performance: {
-                  latencyMs: 1000,
-                  throughput: 100,
-                  quality: 0.8,
-                  reliability: 0.95,
-                },
+                lastSyncedAt: new Date(),
+                // First discovery only — this branch is `create`, so it never
+                // touches an existing row's measurement. The `update` branch
+                // above deliberately omits `performance` for the same reason.
+                performance: createPerformancePrior,
               },
             });
           },
@@ -3115,6 +3618,26 @@ export class CentralModelDiscoveryService {
     const updates: Prisma.ModelUpdateInput = {};
     let changed = false;
 
+    // Auto-re-enable fix (2026-09, pairs with pricing-integrity-job.ts's
+    // auto-disable sweep): bulkUpsertModels' raw-SQL ON CONFLICT SET already
+    // stamps `status = EXCLUDED.status` ('active') UNCONDITIONALLY on every
+    // successful upsert — that is the primary write path for the ~95
+    // provider fetchers. This function is the fallback path (used when that
+    // batch SQL fails, and from createNewModel's own race-condition guard),
+    // and it used to touch price/capabilities/metadata/lastSyncedAt but never
+    // `status`, so a model disabled here (whether by the auto-disable sweep
+    // or removeDisabledCatalogEntries's provider-level disable) could stay
+    // disabled forever even after a live discovery source reconfirmed it —
+    // the exact "flagged but never actually self-heals" gap this closes.
+    // Matching the primary path's unconditional policy (not just "un-disable
+    // rows I disabled") keeps the two write paths' status semantics from
+    // diverging.
+    const wasDisabled = existing.status !== 'active';
+    if (wasDisabled) {
+      updates.status = 'active';
+      changed = true;
+    }
+
     if (existing.providerId !== provider) {
       updates.provider = { connect: { id: provider } };
       changed = true;
@@ -3167,6 +3690,17 @@ export class CentralModelDiscoveryService {
         sourceType: source.type,
         lastUpdated: new Date().toISOString(),
         pricing: model.pricing,
+        // Clear the auto-disable tag on re-enable so metadata doesn't keep
+        // claiming a currently-active model was delisted; the prior reason
+        // and timestamp are preserved under `prior*` for audit history.
+        ...(wasDisabled
+          ? {
+              autoDisabledReason: null,
+              autoReenabledAt: new Date().toISOString(),
+              priorAutoDisabledReason: existingMetadataObj.autoDisabledReason ?? null,
+              priorAutoDisabledAt: existingMetadataObj.autoDisabledAt ?? null,
+            }
+          : {}),
       },
       newCapabilities
     );
@@ -3180,11 +3714,44 @@ export class CentralModelDiscoveryService {
       changed = true;
     }
 
+    // `lastSyncedAt` means "a discovery source confirmed this model is still
+    // live today" — a DIFFERENT thing from `changed`/`updatedAt`, which track
+    // whether any DISPLAYED field drifted. It must be stamped unconditionally,
+    // not only inside `if (changed)`: a model whose price and capabilities are
+    // already correct and never change would otherwise never get its clock
+    // reset, and would eventually be indistinguishable from one that has
+    // genuinely been delisted and gone stale. See the ON CONFLICT SET comment
+    // in bulkUpsertModels (the primary write path) for the full rationale, and
+    // pricing-integrity-job.ts for the staleness check this stamp feeds.
+    const now = new Date();
+
     if (changed) {
+      updates.lastSyncedAt = now;
       await prisma.model.update({
         where: { uid: existing.uid },
         data: updates,
       });
+    } else {
+      // Nothing displayed changed, but this row WAS reconfirmed — touch just
+      // lastSyncedAt rather than skipping the write entirely.
+      await prisma.model.update({
+        where: { uid: existing.uid },
+        data: { lastSyncedAt: now },
+      });
+    }
+
+    if (wasDisabled) {
+      // Catalog-membership change — log structurally so an operator can audit
+      // it, mirroring pricing-integrity-job.ts's auto-disable logging.
+      this.log.info(
+        {
+          uid: existing.uid,
+          id: existing.id,
+          providerId: provider,
+          previousStatus: existing.status,
+        },
+        'Model auto-discovery re-enable: model reappeared in a live discovery source and was flipped from disabled back to active'
+      );
     }
 
     return changed;

@@ -13,7 +13,7 @@
  * Maximum quality through competition
  */
 
-import { BaseStrategy, safeResponseContent, type StrategyMetadata } from '../base-strategy';
+import { BaseStrategy, safeResponseContent, mergeArtifacts, type StrategyMetadata } from '../base-strategy';
 import { PROMPTS } from '../prompts/sota-system-prompts';
 import { resolvePreferredExecutor } from './preferred-model-helper';
 import {
@@ -230,6 +230,7 @@ export class CompetitiveStrategy extends BaseStrategy {
         totalCost: totalCost + arbiterCost,
         totalDuration,
         qualityScore: 0.95, // High quality from competition
+        toolArtifacts: mergeArtifacts(allExecutions),
         metadata: {
           competitorCount: successfulExecutions.length,
           arbiterModel: arbiter.name,

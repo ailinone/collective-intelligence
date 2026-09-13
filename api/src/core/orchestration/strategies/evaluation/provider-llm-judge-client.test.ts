@@ -223,6 +223,68 @@ describe('ProviderLLMJudgeClient', () => {
   });
 });
 
+describe('LOTE AZ — original-request reasoning-effort threading', () => {
+  it('forwards thinking_budget + reasoning_effort onto the judge ChatRequest when present', async () => {
+    const adapter = {
+      getName: () => 'mockprov',
+      chatCompletion: vi.fn(async () => fakeChatResponse('{"score":0.9,"verdict":"pass"}')),
+    };
+    const client = new ProviderLLMJudgeClient({ registry: fakeRegistry(adapter) });
+    await client.judge({
+      judgeModelId: 'judge-model',
+      rubricVersion: 'v1',
+      task: {},
+      output: 'candidate text',
+      maxCostUsd: 0.01,
+      timeoutMs: 1000,
+      originalRequestReasoning: { effort: 'high', thinkingBudget: 16384 },
+    });
+    expect(adapter.chatCompletion).toHaveBeenCalledOnce();
+    const sentRequest = adapter.chatCompletion.mock.calls[0][0];
+    expect(sentRequest.thinking_budget).toBe(16384);
+    expect(sentRequest.reasoning_effort).toBe('high');
+  });
+
+  it('sets neither field when the original request carried no reasoning signal', async () => {
+    const adapter = {
+      getName: () => 'mockprov',
+      chatCompletion: vi.fn(async () => fakeChatResponse('{"score":0.9,"verdict":"pass"}')),
+    };
+    const client = new ProviderLLMJudgeClient({ registry: fakeRegistry(adapter) });
+    await client.judge({
+      judgeModelId: 'judge-model',
+      rubricVersion: 'v1',
+      task: {},
+      output: 'candidate text',
+      maxCostUsd: 0.01,
+      timeoutMs: 1000,
+    });
+    const sentRequest = adapter.chatCompletion.mock.calls[0][0];
+    expect(sentRequest.thinking_budget).toBeUndefined();
+    expect(sentRequest.reasoning_effort).toBeUndefined();
+  });
+
+  it('forwards the effort label even without a numeric budget (budget-only omitted)', async () => {
+    const adapter = {
+      getName: () => 'mockprov',
+      chatCompletion: vi.fn(async () => fakeChatResponse('{"score":0.9,"verdict":"pass"}')),
+    };
+    const client = new ProviderLLMJudgeClient({ registry: fakeRegistry(adapter) });
+    await client.judge({
+      judgeModelId: 'judge-model',
+      rubricVersion: 'v1',
+      task: {},
+      output: 'candidate text',
+      maxCostUsd: 0.01,
+      timeoutMs: 1000,
+      originalRequestReasoning: { effort: 'low' },
+    });
+    const sentRequest = adapter.chatCompletion.mock.calls[0][0];
+    expect(sentRequest.thinking_budget).toBeUndefined();
+    expect(sentRequest.reasoning_effort).toBe('low');
+  });
+});
+
 describe('pure helpers', () => {
   it('extractJsonContent handles fenced + braced + plain', () => {
     expect(extractJsonContent(fakeChatResponse('```json\n{"a":1}\n```'))).toBe('{"a":1}');

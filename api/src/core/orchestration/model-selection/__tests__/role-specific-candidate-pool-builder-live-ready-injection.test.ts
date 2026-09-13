@@ -19,12 +19,12 @@
  *   - cooldown_active state is filtered out (not injected)
  *   - per-role traces are emitted
  *
- * No DB, no fetch. The repository + store are both faked.
+ * No DB, no fetch. The catalog + store are both faked.
  */
 import { describe, it, expect } from 'vitest';
 import { buildConsensusRoleSpecificCandidatePools } from '@/core/orchestration/model-selection/role-specific-candidate-pool-builder';
 import type {
-  ModelRepositoryLike,
+  CandidateCatalogSource,
   LiveChatOperabilityStoreLike,
 } from '@/core/orchestration/model-selection/role-specific-candidate-pool-builder';
 import type { Model, ModelCapability } from '@/types';
@@ -47,12 +47,8 @@ function mkModel(overrides: Partial<Model> & Pick<Model, 'id' | 'provider'>): Mo
   } as Model;
 }
 
-function mkRepo(rows: Model[]): ModelRepositoryLike {
-  return {
-    async searchModels() {
-      return rows;
-    },
-  };
+function mkCatalog(rows: Model[]): CandidateCatalogSource {
+  return { listCatalogModels: async () => rows };
 }
 
 function mkStore(states: LiveChatOperabilityState[]): LiveChatOperabilityStoreLike {
@@ -77,19 +73,19 @@ function mkState(
 
 describe('01C.1B-J1D-R4A — pool builder × live-ready injection', () => {
   it('default behavior: no injection flag → no liveReadyInjection field', async () => {
-    const repo = mkRepo([
+    const catalog = mkCatalog([
       mkModel({ id: 'gpt-4o-mini', provider: 'openai' }),
       mkModel({ id: 'claude-3.5-sonnet', provider: 'anthropic' }),
     ]);
-    const r = await buildConsensusRoleSpecificCandidatePools({ repo });
+    const r = await buildConsensusRoleSpecificCandidatePools({ catalog });
     expect(r.liveReadyInjection).toBeUndefined();
     expect(r.sharedPool.length).toBe(2);
   });
 
   it('flag ON without store provided → no injection, no field', async () => {
-    const repo = mkRepo([mkModel({ id: 'gpt-4o-mini', provider: 'openai' })]);
+    const catalog = mkCatalog([mkModel({ id: 'gpt-4o-mini', provider: 'openai' })]);
     const r = await buildConsensusRoleSpecificCandidatePools({
-      repo,
+      catalog,
       injectLiveReadyFromStore: true,
     });
     expect(r.liveReadyInjection).toBeUndefined();
@@ -102,11 +98,11 @@ describe('01C.1B-J1D-R4A — pool builder × live-ready injection', () => {
     });
     const popularModel = mkModel({ id: 'gpt-4o-mini', provider: 'openai' });
 
-    const repo = mkRepo([popularModel, liveReadyModel]);
+    const catalog = mkCatalog([popularModel, liveReadyModel]);
     const store = mkStore([mkState({ providerId: 'deepinfra', modelId: 'openai/gpt-oss-120b' })]);
 
     const r = await buildConsensusRoleSpecificCandidatePools({
-      repo,
+      catalog,
       injectLiveReadyFromStore: true,
       liveOperabilityStore: store,
     });
@@ -126,13 +122,13 @@ describe('01C.1B-J1D-R4A — pool builder × live-ready injection', () => {
   });
 
   it('chatReady state NOT in catalog → rejected (live_ready_state_not_in_catalog)', async () => {
-    const repo = mkRepo([mkModel({ id: 'gpt-4o-mini', provider: 'openai' })]);
+    const catalog = mkCatalog([mkModel({ id: 'gpt-4o-mini', provider: 'openai' })]);
     const store = mkStore([
       mkState({ providerId: 'mystery-provider', modelId: 'unknown-model-9000' }),
     ]);
 
     const r = await buildConsensusRoleSpecificCandidatePools({
-      repo,
+      catalog,
       injectLiveReadyFromStore: true,
       liveOperabilityStore: store,
     });
@@ -148,7 +144,7 @@ describe('01C.1B-J1D-R4A — pool builder × live-ready injection', () => {
       id: 'openai/gpt-oss-120b',
       provider: 'deepinfra',
     });
-    const repo = mkRepo([liveReadyModel]);
+    const catalog = mkCatalog([liveReadyModel]);
     const store = mkStore([
       mkState({
         providerId: 'deepinfra',
@@ -159,7 +155,7 @@ describe('01C.1B-J1D-R4A — pool builder × live-ready injection', () => {
     ]);
 
     const r = await buildConsensusRoleSpecificCandidatePools({
-      repo,
+      catalog,
       injectLiveReadyFromStore: true,
       liveOperabilityStore: store,
     });
@@ -174,11 +170,11 @@ describe('01C.1B-J1D-R4A — pool builder × live-ready injection', () => {
     });
     // Catalog returns the live-ready model so it's both in the base
     // pool AND matched by the live-ready state.
-    const repo = mkRepo([liveReadyModel]);
+    const catalog = mkCatalog([liveReadyModel]);
     const store = mkStore([mkState({ providerId: 'deepinfra', modelId: 'openai/gpt-oss-120b' })]);
 
     const r = await buildConsensusRoleSpecificCandidatePools({
-      repo,
+      catalog,
       injectLiveReadyFromStore: true,
       liveOperabilityStore: store,
     });
@@ -195,10 +191,10 @@ describe('01C.1B-J1D-R4A — pool builder × live-ready injection', () => {
       id: 'openai/gpt-oss-120b',
       provider: 'deepinfra',
     });
-    const repo = mkRepo([liveReadyModel]);
+    const catalog = mkCatalog([liveReadyModel]);
     const store = mkStore([mkState({ providerId: 'deepinfra', modelId: 'openai/gpt-oss-120b' })]);
     const r = await buildConsensusRoleSpecificCandidatePools({
-      repo,
+      catalog,
       injectLiveReadyFromStore: true,
       liveOperabilityStore: store,
     });
@@ -207,10 +203,10 @@ describe('01C.1B-J1D-R4A — pool builder × live-ready injection', () => {
   });
 
   it('snapshot hash propagates into liveReadyInjection.snapshotHash', async () => {
-    const repo = mkRepo([mkModel({ id: 'openai/gpt-oss-120b', provider: 'deepinfra' })]);
+    const catalog = mkCatalog([mkModel({ id: 'openai/gpt-oss-120b', provider: 'deepinfra' })]);
     const store = mkStore([mkState({ providerId: 'deepinfra', modelId: 'openai/gpt-oss-120b' })]);
     const r = await buildConsensusRoleSpecificCandidatePools({
-      repo,
+      catalog,
       injectLiveReadyFromStore: true,
       liveOperabilityStore: store,
       liveOperabilitySnapshotHash: 'sha256-stub-abc',
@@ -225,7 +221,7 @@ describe('01C.1B-J1D-R4A — pool builder × live-ready injection', () => {
       mkModel({ id: 'openai/gpt-oss-120b', provider: 'deepinfra' }),
       mkModel({ id: 'Qwen/Qwen3-235B-A22B-Thinking-2507', provider: 'huggingface' }),
     ];
-    const repo = mkRepo(models);
+    const catalog = mkCatalog(models);
     const store = mkStore([
       mkState({ providerId: 'deepinfra', modelId: 'openai/gpt-oss-120b' }),
       mkState({
@@ -234,7 +230,7 @@ describe('01C.1B-J1D-R4A — pool builder × live-ready injection', () => {
       }),
     ]);
     const r = await buildConsensusRoleSpecificCandidatePools({
-      repo,
+      catalog,
       injectLiveReadyFromStore: true,
       liveOperabilityStore: store,
     });
@@ -244,9 +240,9 @@ describe('01C.1B-J1D-R4A — pool builder × live-ready injection', () => {
   });
 
   it('empty store snapshot → enabled, but zero injected, zero rejected', async () => {
-    const repo = mkRepo([mkModel({ id: 'gpt-4o-mini', provider: 'openai' })]);
+    const catalog = mkCatalog([mkModel({ id: 'gpt-4o-mini', provider: 'openai' })]);
     const r = await buildConsensusRoleSpecificCandidatePools({
-      repo,
+      catalog,
       injectLiveReadyFromStore: true,
       liveOperabilityStore: mkStore([]),
     });
@@ -258,11 +254,11 @@ describe('01C.1B-J1D-R4A — pool builder × live-ready injection', () => {
   });
 
   it('does NOT use provider-only readiness (provider OR model mismatch → no match)', async () => {
-    const repo = mkRepo([mkModel({ id: 'openai/gpt-oss-120b', provider: 'deepinfra' })]);
+    const catalog = mkCatalog([mkModel({ id: 'openai/gpt-oss-120b', provider: 'deepinfra' })]);
     // Store has deepinfra but a different model id
     const store = mkStore([mkState({ providerId: 'deepinfra', modelId: 'some/other-model' })]);
     const r = await buildConsensusRoleSpecificCandidatePools({
-      repo,
+      catalog,
       injectLiveReadyFromStore: true,
       liveOperabilityStore: store,
     });
@@ -275,8 +271,8 @@ describe('01C.1B-J1D-R4A — pool builder × live-ready injection', () => {
   });
 
   it('default behavior preserved: roleCandidateStats shape unchanged when injection OFF', async () => {
-    const repo = mkRepo([mkModel({ id: 'gpt-4o-mini', provider: 'openai' })]);
-    const r = await buildConsensusRoleSpecificCandidatePools({ repo });
+    const catalog = mkCatalog([mkModel({ id: 'gpt-4o-mini', provider: 'openai' })]);
+    const r = await buildConsensusRoleSpecificCandidatePools({ catalog });
     expect(r.roleCandidateStats.participant.source).toBe('shared_pool');
     expect(r.roleCandidateStats.fallback.source).toBe('shared_pool');
   });

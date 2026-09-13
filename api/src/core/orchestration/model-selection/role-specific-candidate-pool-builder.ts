@@ -10,26 +10,50 @@
 /**
  * 01C.1B-P — Shared role-specific candidate pool builder.
  *
- * Centralizes the per-role catalog query that 01C.1B-J introduced so
+ * Centralizes the per-role candidate derivation that 01C.1B-J introduced so
  * BOTH the dry-run path AND the real execution path (when reconstructing
  * a plan to compare against the approved fingerprint) use the SAME
  * source data. Without this single-source-of-truth, dry-run could
- * approve a plan derived from a 512-cap judge-aware pool while real
- * execution recomputes against a 64-cap generic pool — and the resulting
- * fingerprints would never match, leading either to spurious
- * `PLAN_EXECUTION_PARITY_FAILED` errors or (worse) to silent divergence.
+ * approve a plan derived from one universe while real execution
+ * recomputes against another, and the resulting fingerprints would never
+ * match, leading either to spurious `PLAN_EXECUTION_PARITY_FAILED` errors
+ * or (worse) to silent divergence.
+ *
+ * Source of truth: the in-memory catalog cache (`getAllCatalogModels`),
+ * NOT a repository query. The earlier `searchModels(...)` queries carried
+ * a `limit` (256/512/256, and 10_000 for live-ready injection) on top of
+ * the repository's default `ORDER BY created_at DESC`, so every pool was
+ * really "the N most recently discovered chat models", never the catalog.
+ * Reading the full catalog once and filtering in memory means:
+ *   - every pool sees every eligible model (no recency window),
+ *   - zero extra Postgres round-trips per plan (the catalog snapshot is
+ *     already refreshed fleet-wide by the catalog-cache-refresh job and
+ *     shared through Redis, so every replica derives pools from the same
+ *     rows, which also tightens fingerprint parity between replicas),
+ *   - the column projection is the catalog hot-path one by construction.
+ *
+ * Status semantics are preserved on purpose: the repository queries
+ * filtered `status = 'active'`, while the catalog cache holds every row
+ * with `status != 'disabled'` (deprecated/maintenance/preview/legacy
+ * included). The in-memory filter below keeps only `active`, so those
+ * other statuses stay OUT of the pools exactly as before.
+ *
+ * Ordering is explicit for fingerprint determinism only. Downstream
+ * consumers (PoolBuilder, ModelRoleResolver) re-rank every pool with
+ * stable sorts and cut the top N, so the order chosen here decides ties
+ * and nothing else; the catalog array itself has no stable order
+ * (Postgres heap order or the Redis snapshot), which is why we cannot
+ * just pass it through. Nothing depends on `created_at` any more.
  *
  * The builder is intentionally framework-agnostic:
- *   - takes a `ModelRepositoryLike` so tests can inject a fake DB,
+ *   - takes a `CandidateCatalogSource` so tests can inject a fake catalog,
  *   - emits both raw `Model` arrays AND lightweight `roleCandidateStats`
  *     so callers can attach per-role audit data without re-querying.
  *
- * The pool sizes / sort orders mirror the 01C.1B-J judge audit findings:
- *   - judge:        ≥16k context, sortBy quality, limit 512
- *   - synthesizer:  ≥32k context, sortBy quality, limit 256
- *   - participant + fallback share the generic 256-cap pool — their
- *     constraints (chat-capable, ≥8k context, no structured-output
- *     requirement) are comfortably satisfied by usage-sorted samples.
+ * Per-role constraints mirror the 01C.1B-J judge audit findings:
+ *   - judge:        ≥16k context, quality-first order
+ *   - synthesizer:  ≥32k context, quality-first order
+ *   - participant + fallback share the generic active chat pool
  */
 import type { Model, ModelCapability } from '@/types';
 import type { LiveChatOperabilityState } from '@/core/operability/live-chat-operability-state';
@@ -42,18 +66,15 @@ import {
   type LiveReadyInjectionMetadata,
 } from './live-ready-candidate-injection';
 
-/** Minimal surface this module needs from the repository. Defined locally
- *  so tests can supply a tiny fake without depending on the full DB. */
-export interface ModelRepositoryLike {
-  searchModels(criteria: {
-    status?: 'active' | 'inactive' | 'maintenance';
-    capabilities?: readonly ModelCapability[];
-    minContextWindow?: number;
-    sortBy?: 'cost' | 'quality' | 'context' | 'performance' | 'reliability';
-    sortOrder?: 'asc' | 'desc';
-    limit?: number;
-  }): Promise<Model[]>;
+/** Minimal surface this module needs from the catalog. Defined locally
+ *  so tests can supply a tiny fake without depending on the full cache.
+ *  Production wires `getAllCatalogModels` from model-catalog-service. */
+export interface CandidateCatalogSource {
+  listCatalogModels(): Promise<readonly Model[]>;
 }
+
+export const JUDGE_MIN_CONTEXT_WINDOW = 16_000;
+export const SYNTHESIZER_MIN_CONTEXT_WINDOW = 32_000;
 
 /** 01C.1B-J1D-R4A — minimal surface the live-ready injector needs from
  *  the LiveChatOperabilityStore. Defined here so the pool builder stays
@@ -64,18 +85,9 @@ export interface LiveChatOperabilityStoreLike {
 }
 
 export interface RoleSpecificPoolBuilderOptions {
-  readonly repo: ModelRepositoryLike;
-  /** Generic shared pool size — used as fallback for participant + fallback
-   *  roles when their dedicated query is unnecessary. Default 256. */
-  readonly sharedPoolLimit?: number;
-  /** Judge-specific pool size. 01C.1B-J audit showed 512 is generous —
-   *  the catalog has ~2,470 ctx≥16k chat-capable models. */
-  readonly judgePoolLimit?: number;
-  /** Synthesizer-specific pool size. ~2,000 ctx≥32k models in catalog,
-   *  256 is sufficient for top-quality picks. */
-  readonly synthesizerPoolLimit?: number;
-  /** When provided, the judge query is restricted to `inputCostPer1k ≤
-   *  maxCostPer1kJudge`. Mirrors `STRATEGY_EVALUATOR_MAX_COST_USD`. */
+  readonly catalog: CandidateCatalogSource;
+  /** Recorded in the judge stats (mirrors `STRATEGY_EVALUATOR_MAX_COST_USD`).
+   *  The pool itself is not cost-filtered here; the planner applies cost. */
   readonly maxCostPer1kJudge?: number;
 
   // ─── 01C.1B-J1D-R4A — live-ready injection options ────────────────────
@@ -120,12 +132,13 @@ export interface LiveReadyInjectionPerRoleTrace {
 }
 
 export interface RoleSpecificPools {
-  /** The shared (legacy) generic pool. Used as fallback when a role
-   *  doesn't get its own dedicated query (currently participant +
-   *  fallback). Always populated. */
+  /** The shared generic pool (every active chat-capable catalog row).
+   *  Used by participant + fallback. Always populated. */
   readonly sharedPool: readonly Model[];
   /** Role-specific pools. `undefined` means the role should use
-   *  `sharedPool` instead. */
+   *  `sharedPool` instead. Judge + synthesizer are always populated by this
+   *  builder; the optionality is kept so the dry-run service contract stays
+   *  unchanged. */
   readonly participantPool?: readonly Model[];
   readonly synthesizerPool?: readonly Model[];
   readonly judgePool?: readonly Model[];
@@ -165,71 +178,59 @@ export interface RoleSpecificPools {
   };
 }
 
+function isActiveChatModel(m: Model): boolean {
+  return (
+    m.status === 'active' &&
+    Array.isArray(m.capabilities) &&
+    m.capabilities.includes('chat' as ModelCapability)
+  );
+}
+
+function compareProviderThenId(a: Model, b: Model): number {
+  if (a.provider !== b.provider) return a.provider < b.provider ? -1 : 1;
+  if (a.id !== b.id) return a.id < b.id ? -1 : 1;
+  return 0;
+}
+
+function compareQualityDescThenProviderId(a: Model, b: Model): number {
+  const qa = a.performance?.quality ?? 0;
+  const qb = b.performance?.quality ?? 0;
+  if (qa !== qb) return qb - qa;
+  return compareProviderThenId(a, b);
+}
+
 /**
- * Build role-specific candidate pools from the catalog. SAME function
+ * Build role-specific candidate pools from the full catalog. SAME function
  * is used by:
  *   - `applyDryRunFailClosedGate` (chat-request-processor.ts) for the
  *     dry-run short-circuit path,
- *   - the planned-but-not-yet-implemented `executionParityCheck` path,
- *   - the future real-execution path when reconstructing the plan to
- *     compare fingerprints.
+ *   - the `executionParityCheck` recompute,
+ *   - the real-execution path when reconstructing the plan to compare
+ *     fingerprints.
  *
- * Failures of role-specific queries are NOT fatal: the caller falls
- * back to the shared pool and the role's `sourceUniverseCount` reflects
- * the smaller pool (visible in `roleCandidateStats`).
+ * A catalog read failure is fatal (it is a hard precondition for the rest
+ * of the planner). There is no per-role I/O any more, so there is nothing
+ * left to fall back from: every pool is derived from the same array.
  */
 export async function buildConsensusRoleSpecificCandidatePools(
   opts: RoleSpecificPoolBuilderOptions
 ): Promise<RoleSpecificPools> {
-  const sharedPoolLimit = opts.sharedPoolLimit ?? 256;
-  const judgePoolLimit = opts.judgePoolLimit ?? 512;
-  const synthesizerPoolLimit = opts.synthesizerPoolLimit ?? 256;
+  const catalog = await opts.catalog.listCatalogModels();
+  const chatActive = catalog.filter(isActiveChatModel);
 
-  // Shared generic pool — always populated.
-  const sharedPool = await opts.repo.searchModels({
-    status: 'active',
-    capabilities: ['chat'],
-    limit: sharedPoolLimit,
-  });
+  const sharedPool: readonly Model[] = [...chatActive].sort(compareProviderThenId);
+  const judgePool: readonly Model[] = chatActive
+    .filter((m) => m.contextWindow >= JUDGE_MIN_CONTEXT_WINDOW)
+    .sort(compareQualityDescThenProviderId);
+  const synthesizerPool: readonly Model[] = chatActive
+    .filter((m) => m.contextWindow >= SYNTHESIZER_MIN_CONTEXT_WINDOW)
+    .sort(compareQualityDescThenProviderId);
 
-  // Judge pool: ≥16k context, sortBy quality, optional cost cap.
-  let judgePool: readonly Model[] | undefined;
-  try {
-    judgePool = await opts.repo.searchModels({
-      status: 'active',
-      capabilities: ['chat'],
-      minContextWindow: 16000,
-      sortBy: 'quality',
-      sortOrder: 'desc',
-      limit: judgePoolLimit,
-    });
-  } catch {
-    // Fail silently — judge will fall back to sharedPool.
-    judgePool = undefined;
-  }
-
-  // Synthesizer pool: ≥32k context, sortBy quality.
-  let synthesizerPool: readonly Model[] | undefined;
-  try {
-    synthesizerPool = await opts.repo.searchModels({
-      status: 'active',
-      capabilities: ['chat'],
-      minContextWindow: 32000,
-      sortBy: 'quality',
-      sortOrder: 'desc',
-      limit: synthesizerPoolLimit,
-    });
-  } catch {
-    synthesizerPool = undefined;
-  }
-
-  // Participant + fallback: use shared pool. Their constraints are
-  // looser; the 256-cap sample already satisfies them.
   let participantPool: readonly Model[] | undefined = undefined;
   let fallbackPool: readonly Model[] | undefined = undefined;
   let augmentedSharedPool: readonly Model[] = sharedPool;
-  let augmentedSynthesizerPool = synthesizerPool;
-  let augmentedJudgePool = judgePool;
+  let augmentedSynthesizerPool: readonly Model[] = synthesizerPool;
+  let augmentedJudgePool: readonly Model[] = judgePool;
 
   // ─── 01C.1B-J1D-R4A — live-ready injection ──────────────────────────
   //
@@ -242,26 +243,15 @@ export async function buildConsensusRoleSpecificCandidatePools(
     const allStates = opts.liveOperabilityStore.snapshot();
     const eligibleStates = allStates.filter((s) => isStateCurrentlyEligible(s));
 
-    // Cache catalog rows for the eligible (providerId, modelId) pairs.
-    // This is a single DB query (status=active, no limit) filtered in
-    // memory by the eligible set. Keeps lookups O(1) thereafter.
+    // Index the (providerId, modelId) pairs the store knows about over the
+    // same active chat rows the pools were derived from, so injection can
+    // never resolve a row the pools could not have seen.
     const eligibleProviderModelPairs = new Set(
       eligibleStates.map((s) => `${s.providerId.toLowerCase()}|${s.modelId.toLowerCase()}`)
     );
     const catalogIndex = new Map<string, Model[]>();
     if (eligibleStates.length > 0) {
-      // We do NOT widen the limit (would re-introduce the J1D-R3 gap on
-      // the OTHER side). Instead, query unrestricted by chat capability —
-      // the live-ready filter already gated the relevant models. Cap is
-      // still large enough to cover any single-stage operator workflow
-      // (up to 10k entries), but only the ones matching the eligible
-      // (provider, model) pairs are indexed.
-      const catalogRows = await opts.repo.searchModels({
-        status: 'active',
-        capabilities: ['chat'],
-        limit: 10_000,
-      });
-      for (const row of catalogRows) {
+      for (const row of chatActive) {
         const key = `${row.provider.toLowerCase()}|${row.id.toLowerCase()}`;
         if (!eligibleProviderModelPairs.has(key)) continue;
         const arr = catalogIndex.get(key) ?? [];
@@ -298,7 +288,8 @@ export async function buildConsensusRoleSpecificCandidatePools(
     const attachInjectionMetadata = (m: Model, _metadata: LiveReadyInjectionMetadata): Model =>
       // The pool builder works at Model granularity. Per-candidate injection
       // metadata is recorded centrally in `liveReadyInjection.byRole[].injectedCandidates`
-      // (not mutated onto the Model — Model is shared across roles). The
+      // (not mutated onto the Model: Model objects come straight from the
+      // shared catalog cache and are visible to every other consumer). The
       // downstream wrapper (`wrapAsCandidate` in ConsensusPlanDryRunService)
       // can carry per-role metadata if needed in a future stage.
       m;
@@ -369,17 +360,11 @@ export async function buildConsensusRoleSpecificCandidatePools(
     // (We use the same augmented sharedPool above; this run records the
     // independent rejection set + injection trace for the fallback role.)
 
-    const synthRun = synthesizerPool
-      ? runForRole('synthesizer', synthesizerPool)
-      : runForRole('synthesizer', sharedPool);
-    augmentedSynthesizerPool = synthesizerPool ? synthRun.newPool : synthesizerPool;
-    // For synthesizer / judge: when role-specific pool exists, we
-    // augment it. When it doesn't, the role falls back to the shared
-    // pool which is already augmented above — so we just record the
-    // trace without changing pool wiring.
+    const synthRun = runForRole('synthesizer', synthesizerPool);
+    augmentedSynthesizerPool = synthRun.newPool;
 
-    const judgeRun = judgePool ? runForRole('judge', judgePool) : runForRole('judge', sharedPool);
-    augmentedJudgePool = judgePool ? judgeRun.newPool : judgePool;
+    const judgeRun = runForRole('judge', judgePool);
+    augmentedJudgePool = judgeRun.newPool;
 
     liveReadyInjection = {
       enabled: true,
@@ -403,21 +388,17 @@ export async function buildConsensusRoleSpecificCandidatePools(
       sourceUniverseCount: augmentedSharedPool.length,
       source: 'shared_pool',
     },
-    synthesizer: augmentedSynthesizerPool
-      ? {
-          sourceUniverseCount: augmentedSynthesizerPool.length,
-          source: 'role_specific_pool',
-          minContextWindow: 32000,
-        }
-      : { sourceUniverseCount: augmentedSharedPool.length, source: 'shared_pool' },
-    judge: augmentedJudgePool
-      ? {
-          sourceUniverseCount: augmentedJudgePool.length,
-          source: 'role_specific_pool',
-          minContextWindow: 16000,
-          maxCostPer1k: opts.maxCostPer1kJudge,
-        }
-      : { sourceUniverseCount: augmentedSharedPool.length, source: 'shared_pool' },
+    synthesizer: {
+      sourceUniverseCount: augmentedSynthesizerPool.length,
+      source: 'role_specific_pool',
+      minContextWindow: SYNTHESIZER_MIN_CONTEXT_WINDOW,
+    },
+    judge: {
+      sourceUniverseCount: augmentedJudgePool.length,
+      source: 'role_specific_pool',
+      minContextWindow: JUDGE_MIN_CONTEXT_WINDOW,
+      maxCostPer1k: opts.maxCostPer1kJudge,
+    },
     fallback: {
       sourceUniverseCount: augmentedSharedPool.length,
       source: 'shared_pool',

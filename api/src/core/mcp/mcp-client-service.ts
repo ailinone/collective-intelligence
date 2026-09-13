@@ -32,6 +32,7 @@ import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
 // SSE transport imported dynamically when needed
 import { toolRegistry, type ToolHandler } from '@/core/tools/tool-registry';
 import { logger } from '@/utils/logger';
+import { isMcpClientEnabled } from '@/core/sandbox/sandbox-policy';
 
 const log = logger.child({ component: 'mcp-client-service' });
 
@@ -49,7 +50,7 @@ export interface McpServerConfig {
   env?: Record<string, string>;
   /** For sse: URL of the MCP server */
   url?: string;
-  /** Whether tools from this server are safe for strategy execution */
+  /** Whether tools from this server are safe for strategy execution (secure default: false) */
   safeForStrategies?: boolean;
   /** Tool category for registry */
   category?: 'web' | 'search' | 'code' | 'file' | 'analysis' | 'general';
@@ -62,6 +63,40 @@ interface McpConnection {
   transport: StdioClientTransport | unknown;
   tools: string[];
   connected: boolean;
+}
+
+/**
+ * TS-03: environment variables a stdio MCP child process may inherit. The
+ * child must NEVER see the whole `process.env` (provider API keys, JWT_SECRET,
+ * DATABASE_URL, ...) — only process-lookup basics plus anything explicitly
+ * declared in the server's own `config.env`.
+ */
+const MCP_STDIO_ENV_ALLOWLIST = new Set([
+  'PATH',
+  'HOME',
+  'LANG',
+  'LC_ALL',
+  'TERM',
+  'SHELL',
+  'TMPDIR',
+  'TEMP',
+  'TMP',
+  'USERPROFILE',
+  'APPDATA',
+  'LOCALAPPDATA',
+  'SYSTEMROOT',
+  'COMSPEC',
+  'PATHEXT',
+]);
+
+/** Build the (allowlisted) env for a stdio MCP child process. Exported for tests. */
+export function buildMcpStdioEnv(config: McpServerConfig): Record<string, string> {
+  const env: Record<string, string> = {};
+  for (const key of MCP_STDIO_ENV_ALLOWLIST) {
+    const value = process.env[key];
+    if (value !== undefined) env[key] = value;
+  }
+  return { ...env, ...(config.env || {}) };
 }
 
 /**
@@ -78,6 +113,12 @@ class McpClientServiceImpl {
    */
   async initialize(): Promise<void> {
     if (this.initialized) return;
+
+    if (!isMcpClientEnabled()) {
+      log.info('MCP client disabled (set MCP_CLIENT_ENABLED=true to enable)');
+      this.initialized = true;
+      return;
+    }
 
     const configs = this.loadConfig();
     if (configs.length === 0) {
@@ -130,7 +171,8 @@ class McpClientServiceImpl {
       transport = new StdioClientTransport({
         command: config.command,
         args: config.args || [],
-        env: { ...process.env, ...(config.env || {}) } as Record<string, string>,
+        // TS-03: allowlist only — no full process.env inheritance.
+        env: buildMcpStdioEnv(config),
       });
     } else if (config.transport === 'sse') {
       if (!config.url) throw new Error(`MCP server ${config.name}: sse transport requires 'url'`);
@@ -156,6 +198,22 @@ class McpClientServiceImpl {
     // Register each tool in Tool Registry
     for (const tool of tools) {
       const toolName = `mcp_${config.name}_${tool.name}`;
+
+      // TS-02 (shadowing): an MCP server must never overwrite an existing
+      // (native or other-source) tool via its raw name alias. Skip registration
+      // on conflict — re-registration of this server's OWN namespaced tool
+      // (e.g. on reconnect) is still allowed.
+      const conflicts = [toolName, tool.name].filter(
+        (candidate) => toolRegistry.has(candidate) && toolRegistry.get(candidate)?.name !== toolName
+      );
+      if (conflicts.length > 0) {
+        log.warn(
+          { server: config.name, tool: tool.name, conflicts },
+          'MCP tool registration skipped: name/alias conflicts with an existing tool'
+        );
+        continue;
+      }
+
       const handler = this.createToolHandler(client, tool.name);
 
       toolRegistry.register({
@@ -163,7 +221,14 @@ class McpClientServiceImpl {
         aliases: [tool.name], // Allow direct name access too
         description: tool.description || `MCP tool: ${tool.name} (${config.name})`,
         category: config.category || 'general',
-        safeForStrategies: config.safeForStrategies !== false,
+        // TS-02 (fail-open): secure default — MCP tools are NOT strategy-executable
+        // unless the operator explicitly opts in via config/env.
+        safeForStrategies: config.safeForStrategies === true,
+        // ADR-024: an MCP-sourced tool must never be triage-auto-attached to
+        // a request that did not explicitly ask for tools — the server, its
+        // capabilities, and even its identity are operator-configured at
+        // runtime, not vetted the way a native tool is.
+        autoRecommendable: false,
         handler,
         parameters: tool.inputSchema as Record<string, unknown> | undefined,
       });
@@ -259,7 +324,7 @@ class McpClientServiceImpl {
         command: command || undefined,
         args: argsStr ? argsStr.split(' ') : undefined,
         url: url || undefined,
-        safeForStrategies: process.env[`MCP_SERVER_${name}_SAFE`] !== 'false',
+        safeForStrategies: process.env[`MCP_SERVER_${name}_SAFE`] === 'true',
         category: 'general',
       });
     }

@@ -19,8 +19,68 @@ import type { ExtendedFastifyRequest } from '@/types/fastify-extended';
 import { getHeaderString } from '@/utils/type-guards';
 import { resolveOrganizationId } from '@/utils/context-headers';
 import { looksLikeApiKey } from '@/utils/api-key-format';
+import { config } from '@/config';
+import { recordSecurityEvent } from '@/services/security-audit-service';
+import { verifyServiceToken, ServiceTokenError } from '@/services/service-token-verifier';
 
 const log = logger.child({ component: 'auth-middleware' });
+
+// See ailin-chat-server in the id repo and chat's _is_ci_connection/
+// X-Ailin-Actor-Token wiring in the chat repo.
+const CHAT_FORWARD_IDENTITY_SCOPE = 'chat:forward-identity';
+const ACTOR_UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * Attaches a forwarded end-user identity for USAGE/QUOTA ATTRIBUTION ONLY --
+ * never for authorization. Called after the request's own auth (its API key)
+ * has already resolved organizationId/roles/userId; those are NEVER
+ * overwritten here except userId, which this may replace with the real
+ * per-user id a chat-completions request is actually for (today it collapses
+ * onto the API key's own shared service-account id, e.g. for the free-tier
+ * or anonymous-guest keys, which breaks free-tier-quota-gate.ts's per-user
+ * bucketing -- see that file's own "always carries a real user id" comment).
+ *
+ * Best-effort and silent on any failure: a missing/invalid/expired token or
+ * header here just leaves userId as whatever the primary auth already set.
+ * This is an attribution *enhancement*, never a reason to fail a chat
+ * completion the caller's real API key already authenticated correctly.
+ */
+async function attachForwardedActorIdentity(
+  request: FastifyRequest,
+  extendedRequest: ExtendedFastifyRequest
+): Promise<void> {
+  const actorToken = getHeaderString(request.headers, 'x-ailin-actor-token');
+  if (!actorToken) {
+    return;
+  }
+
+  let context;
+  try {
+    context = await verifyServiceToken(actorToken);
+  } catch (error) {
+    const reason = error instanceof ServiceTokenError ? error.reason : 'invalid_token';
+    log.debug({ reason }, 'forwarded actor token rejected; keeping the primary auth identity');
+    return;
+  }
+
+  if (context.tokenType !== 'service' || !context.scopes.includes(CHAT_FORWARD_IDENTITY_SCOPE)) {
+    log.warn(
+      { clientId: context.clientId, tokenType: context.tokenType, scopes: context.scopes },
+      'forwarded actor token lacks the chat:forward-identity scope; ignoring'
+    );
+    return;
+  }
+
+  const actingUserId = getHeaderString(request.headers, 'x-acting-user');
+  if (!actingUserId || !ACTOR_UUID_RE.test(actingUserId)) {
+    return;
+  }
+
+  extendedRequest.userId = actingUserId;
+  if (extendedRequest.user && typeof extendedRequest.user === 'object') {
+    (extendedRequest.user as { userId?: string }).userId = actingUserId;
+  }
+}
 
 function getExistingAuthIds(
   request: ExtendedFastifyRequest
@@ -151,7 +211,37 @@ export async function authenticate(request: FastifyRequest, reply: FastifyReply)
 
       // Attach user info to request
       const extendedRequest = request as ExtendedFastifyRequest;
-      const organizationId = organizationHeader || payload.organizationId;
+      // SECURITY (org-header-spoofing, 2026-09-09): `organizationHeader` is
+      // 100% client-controlled (the `X-Organization-Id` header or an
+      // `organizationId`/`organization_id` query param — see
+      // resolveOrganizationId()/context-headers.ts) and was previously used
+      // to OVERRIDE the authenticated organization for API-key requests,
+      // with no check that it matched the key's real org. `payload.roles`
+      // always reflected the key's REAL organization's grants, but the
+      // organizationId attached to the request could be forged to any
+      // value — completely defeating isPlatformAdminRequest()/
+      // requirePlatformAdmin() (any tenant key could claim to be the
+      // reserved platform org) and the "same organization" ownership checks
+      // in api-key-rotation-routes.ts (trivially satisfied by forging the
+      // header to match the target's org). An API key is scoped to exactly
+      // ONE organization (ApiKey.organizationId in prisma/schema.prisma —
+      // there is no multi-org grant per key), so for API-key auth the
+      // request's organizationId is ALWAYS the key's real organization; the
+      // header/query param is never consulted for authorization. (The JWT
+      // bearer path above never read this header at all.)
+      if (organizationHeader && organizationHeader !== payload.organizationId) {
+        log.warn(
+          {
+            apiKeyId: payload.apiKeyId,
+            userId: payload.userId,
+            realOrganizationId: payload.organizationId,
+            spoofedOrganizationId: organizationHeader,
+            url: request.url,
+          },
+          'API key request supplied X-Organization-Id/organizationId that does not match the key\'s real organization; ignoring it (org-header-spoofing guard)'
+        );
+      }
+      const organizationId = payload.organizationId;
       extendedRequest.user = {
         userId: payload.userId,
         organizationId,
@@ -170,6 +260,8 @@ export async function authenticate(request: FastifyRequest, reply: FastifyReply)
           permissions: payload.apiKeyPermissions || null,
         };
       }
+
+      await attachForwardedActorIdentity(request, extendedRequest);
       return;
     }
 
@@ -288,6 +380,144 @@ export function requireRole(...roles: string[]) {
       return reply.code(403).send({
         error: 'Forbidden',
         message: 'Insufficient permissions',
+      });
+    }
+  };
+}
+
+/**
+ * Require true platform-operator authority — NOT a tenant's own admin/owner.
+ *
+ * SECURITY (platform-admin-vs-tenant-admin, 2026-09-08): `requireRole('admin',
+ * 'owner')` checks a PER-ORGANIZATION UserRole grant. Any tenant's own org
+ * `owner` can self-service-promote another user in the SAME org to `admin`
+ * via `PUT /v1/users/:id` — there is no platform-superadmin concept in that
+ * check. Routes that operate on GLOBAL/cross-tenant resources (the model
+ * catalog/discovery, benchmark & experiment infrastructure, DLQ replay,
+ * cross-org API-key rotation, the shared shell/git tool-execution surface)
+ * were gated with `requireRole('admin','owner')` alone, which any tenant's
+ * self-promoted admin also satisfies — an unintended privilege-tier
+ * confusion, not a deliberate grant. Audit: see the platform-admin-rbac-audit
+ * findings (2026-09-08).
+ *
+ * Reuses the EXISTING per-org RBAC primitives with zero schema change: one
+ * reserved Organization row (`config.security.platformOrganizationId`,
+ * provisioned out-of-band by an operator, e.g. via `pnpm run rbac:grant-owner`
+ * against that org) is designated the platform org. A caller is a platform
+ * admin only if their token's `organizationId` IS that reserved org AND their
+ * `roles` include `admin` or `owner` *for that org* — i.e., admin/owner of
+ * the platform org, not of their own tenant.
+ *
+ * Fails CLOSED: if `platformOrganizationId` is unset (not yet provisioned),
+ * every route behind this check denies everyone and logs at error level,
+ * rather than silently falling back to "any tenant admin" — so shipping this
+ * fix immediately closes the hole even before an operator finishes
+ * provisioning the real platform org.
+ */
+function getUserIdFromRequestUser(user: ExtendedFastifyRequest['user']): string {
+  if (typeof user === 'object' && user !== null) {
+    if ('userId' in user && typeof user.userId === 'string') return user.userId;
+    if ('id' in user && typeof user.id === 'string') return user.id;
+  }
+  return 'unknown';
+}
+
+/**
+ * Pure check: is this authenticated request a genuine platform admin — i.e.
+ * admin/owner of the reserved `config.security.platformOrganizationId` org,
+ * not merely admin/owner of the caller's own tenant? Returns `false` (never
+ * throws) when unauthenticated or when `platformOrganizationId` is unset.
+ *
+ * Exported separately from {@link requirePlatformAdmin} so a route that
+ * legitimately serves BOTH "a tenant managing its own resource" and "a
+ * platform operator managing any tenant's resource" can branch on this
+ * instead of being fully gated — see e.g. api-key-rotation-routes.ts, where
+ * a tenant may rotate its OWN key but only a platform admin may target
+ * another organization's.
+ */
+export function isPlatformAdminRequest(request: FastifyRequest): boolean {
+  const extendedRequest = request as ExtendedFastifyRequest;
+  const user = extendedRequest.user;
+  if (!user) return false;
+
+  const platformOrgId = config.security.platformOrganizationId;
+  if (!platformOrgId) return false;
+
+  const callerOrgId =
+    typeof user === 'object' && user !== null && 'organizationId' in user
+      ? String((user as { organizationId?: unknown }).organizationId ?? '')
+      : '';
+  // SECURITY (rbac-silent-role-downgrade): same rule as requireRole() — only
+  // the `roles: string[]` array counts, never a scalar `role` hint.
+  const userRoles: string[] =
+    user && typeof user === 'object' && 'roles' in user && Array.isArray(user.roles)
+      ? user.roles
+      : [];
+
+  return callerOrgId === platformOrgId && userRoles.some((role) => role === 'admin' || role === 'owner');
+}
+
+export function requirePlatformAdmin() {
+  return async (request: FastifyRequest, reply: FastifyReply): Promise<void> => {
+    const extendedRequest = request as ExtendedFastifyRequest;
+    const user = extendedRequest.user;
+
+    if (!user) {
+      return reply.code(401).send({
+        error: 'Unauthorized',
+        message: 'Authentication required',
+      });
+    }
+
+    const userId = getUserIdFromRequestUser(user);
+    const callerOrgId =
+      typeof user === 'object' && user !== null && 'organizationId' in user
+        ? String((user as { organizationId?: unknown }).organizationId ?? '')
+        : '';
+
+    const platformOrgId = config.security.platformOrganizationId;
+
+    if (!platformOrgId) {
+      log.error(
+        { userId, url: request.url, method: request.method },
+        'requirePlatformAdmin: PLATFORM_ORGANIZATION_ID is not configured — denying by default (fail closed)'
+      );
+      if (reply.sent) return;
+      return reply.code(403).send({
+        error: 'Forbidden',
+        message: 'Platform administration is not configured',
+      });
+    }
+
+    const userRoles: string[] =
+      user && typeof user === 'object' && 'roles' in user && Array.isArray(user.roles)
+        ? user.roles
+        : [];
+    const authorized = isPlatformAdminRequest(request);
+
+    if (!authorized) {
+      log.warn(
+        {
+          userId,
+          callerOrgId,
+          userRoles,
+          url: request.url,
+          method: request.method,
+        },
+        'requirePlatformAdmin: denied — caller is not admin/owner of the platform organization'
+      );
+      await recordSecurityEvent({
+        eventType: 'platform_admin_check_failed',
+        severity: 'warning',
+        message: 'Platform-admin route denied to a non-platform-admin caller',
+        userId,
+        organizationId: callerOrgId || undefined,
+        metadata: { requiredOrganizationId: platformOrgId, userRoles, url: request.url },
+      });
+      if (reply.sent) return;
+      return reply.code(403).send({
+        error: 'Forbidden',
+        message: 'Platform administrator privileges required',
       });
     }
   };

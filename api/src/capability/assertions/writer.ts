@@ -67,6 +67,20 @@ export interface WriteAssertionOptions {
   origin: string;
   /** TTL in days — overrides per-source default (used in freshness decay). */
   ttlDays?: number;
+  /**
+   * Polarity of every claim in this batch. Defaults to `true` ("the model HAS
+   * this capability"), which is what discovery and every backfill emit.
+   *
+   * `false` records a NEGATIVE observation — currently only written by the
+   * runtime capability probe, which can prove a model rejects tool-calling.
+   * Note the materialiser does not yet consume negation (its noisy-OR fuses
+   * positive evidence only, and its own header flags decisive negation as
+   * "Sprint 3+ wiring"), so a `false` row is an audit-trail and
+   * cross-validation record today, not a suppression signal. It is written
+   * anyway because the observation is real and discarding it would leave the
+   * probe's most decisive verdict unrecorded.
+   */
+  assertedValue?: boolean;
 }
 
 export interface WriteAssertionStats {
@@ -87,6 +101,11 @@ const DEFAULT_TTL_DAYS_BY_SOURCE: Readonly<Record<CapabilitySignal['source'], nu
     'modality-derived': 60,
     'parameter-derived': 60,
     'name-regex': 90,
+    // Matches the function-calling probe's own 7-day Redis TTL. An empirical
+    // verdict is the freshest evidence we have, but it is also the most
+    // perishable — a provider can enable tool-calling on a model between two
+    // probes — so it ages out on the same clock the probe itself uses.
+    'runtime-probe': 7,
   });
 
 type PrismaRunner = Pick<PrismaClient, '$executeRawUnsafe' | '$queryRawUnsafe'>;
@@ -168,8 +187,8 @@ export async function writeAssertions(
   // Step 2 — bulk insert fresh rows via UNNEST (single round-trip).
   const insertResult = await runner.$executeRawUnsafe(
     `INSERT INTO model_capability_assertions
-       (model_uid, capability_uri, source, source_detail, confidence, ttl_days)
-     SELECT * FROM UNNEST(
+       (model_uid, capability_uri, source, source_detail, confidence, ttl_days, asserted_value)
+     SELECT *, $7::boolean FROM UNNEST(
        $1::varchar[],
        $2::text[],
        $3::text[],
@@ -182,7 +201,8 @@ export async function writeAssertions(
     rows.map((r) => r.source),
     rows.map((r) => JSON.stringify(r.detail)),
     rows.map((r) => r.confidence),
-    rows.map((r) => r.ttlDays)
+    rows.map((r) => r.ttlDays),
+    opts.assertedValue ?? true
   );
   stats.rowsInserted = Number(insertResult ?? 0);
 
@@ -191,6 +211,8 @@ export async function writeAssertions(
 
 function defaultConfidenceForSource(source: CapabilitySignal['source']): number {
   switch (source) {
+    case 'runtime-probe':
+      return 1.0;
     case 'provider-declared':
       return 1.0;
     case 'helicone-oracle':

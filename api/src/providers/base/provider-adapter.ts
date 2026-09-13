@@ -33,10 +33,14 @@ import type {
   ImageVariationResponse,
   VideoGenRequest,
   VideoGenResponse,
+  MusicGenRequest,
+  MusicGenResponse,
   VisionRequest,
   VisionResponse,
   ModerationRequest,
   ModerationResponse,
+  RerankRequest,
+  RerankResponse,
 } from '@/types/model-client';
 import { logger } from '@/utils/logger';
 import { getErrorMessage } from '@/utils/type-guards';
@@ -82,6 +86,50 @@ export interface ProviderConfig {
 }
 
 /**
+ * Wire protocol a provider speaks for a realtime, bidirectional audio session.
+ * These are TRANSPORTS, not capabilities: `realtime` / `realtime_audio` /
+ * `audio_to_audio` in the ontology say what the session does; this says how
+ * the bytes get there.
+ *
+ *  - `openai-realtime-ws`: WebSocket to `/realtime`, `Authorization: Bearer`,
+ *    JSON client/server events (`session.update`,
+ *    `input_audio_buffer.append`, `response.audio.delta`, …).
+ *  - `google-live-ws`: WebSocket to the Live API `BidiGenerateContent`
+ *    endpoint, `setup` handshake then `realtimeInput` / `serverContent`.
+ */
+export type RealtimeTransportKind = 'openai-realtime-ws' | 'google-live-ws';
+
+export interface RealtimeTransportSupport {
+  /** `null` = this provider has no realtime transport the gateway can bridge. */
+  readonly kind: RealtimeTransportKind | null;
+  /** Vendor documentation for the protocol. MANDATORY when `kind` is set. */
+  readonly evidenceUrl?: string;
+}
+
+/**
+ * Declared NATIVE speaker-diarization support for a provider's transcription
+ * API. See `ProviderAdapter.getDiarizationSupport()`.
+ */
+export interface DiarizationSupport {
+  /**
+   * True only when the provider's own API returns speaker labels in response
+   * to a documented request parameter. Prompt-level "please label speakers"
+   * does NOT qualify — that produces invented labels.
+   */
+  readonly native: boolean;
+  /**
+   * Vendor documentation URL proving the parameter exists. MANDATORY whenever
+   * `native` is true; this is the audit trail that separates a verified claim
+   * from an optimistic one.
+   */
+  readonly evidenceUrl?: string;
+  /** Documented request parameter(s) the adapter sets. Diagnostics only. */
+  readonly requestParameters?: readonly string[];
+  /** True when the provider accepts a caller-supplied speaker count hint. */
+  readonly acceptsSpeakerCountHint?: boolean;
+}
+
+/**
  * Abstract base class for all provider adapters
  */
 export abstract class ProviderAdapter {
@@ -95,6 +143,13 @@ export abstract class ProviderAdapter {
     lastUpdate: number;
     recordLatency?: (latency: number) => Promise<void>;
   } | null = null; // Adaptive timeout tracker (v5.0)
+
+  /** Public read access to the provider's registry key (balance probing, jobs).
+   *  Named `adapterKey` because several subclasses already declare a
+   *  `providerName` field and TypeScript forbids redeclaring it. */
+  get adapterKey(): string {
+    return this.name;
+  }
 
   constructor(name: string, displayName: string, config: ProviderConfig) {
     this.name = name;
@@ -482,6 +537,44 @@ export abstract class ProviderAdapter {
   }
 
   /**
+   * Whether this provider's transcription API performs speaker diarization
+   * NATIVELY — i.e. the upstream returns per-word or per-utterance speaker
+   * labels because a request parameter asked it to.
+   *
+   * Why this is a declaration and not an inference: every STT provider can be
+   * *asked* for speaker labels in a prompt, and most will happily invent them.
+   * The `diarization` capability is therefore gated on this method returning
+   * `native: true`, and `AudioOrchestrationService` fails closed rather than
+   * transcribing with a provider that would return an unlabelled transcript
+   * the caller could mistake for a diarized one.
+   *
+   * Overriding this WITHOUT an `evidenceUrl` pointing at the vendor's own
+   * documentation for the parameter is a contract violation — the
+   * `diarization-support-contract` test asserts the pair.
+   *
+   * Default: not supported. Subclasses opt in.
+   */
+  getDiarizationSupport(): DiarizationSupport {
+    return { native: false };
+  }
+
+  /**
+   * The realtime WebSocket transport this provider exposes, if any.
+   *
+   * `/v1/realtime` bridges a client session to a provider session. Which wire
+   * protocol to speak upstream is a PROVIDER fact, so it is declared here
+   * rather than inferred from a provider-name list in the route — a new
+   * realtime provider becomes bridgeable by overriding this method and
+   * nothing else.
+   *
+   * Default: no transport. The gateway then serves the session with its own
+   * composite STT→chat→TTS pipeline instead.
+   */
+  getRealtimeTransport(): RealtimeTransportSupport {
+    return { kind: null };
+  }
+
+  /**
    * Image Generation
    * Generates images from text prompts
    *
@@ -530,6 +623,18 @@ export abstract class ProviderAdapter {
   }
 
   /**
+   * Music Generation (LOTE AX, 2026-09-06)
+   * Generates a musical composition from a text prompt or structured
+   * composition plan. Distinct from `textToSpeech` — no spoken text input,
+   * minutes-long output, provider-shaped composition plans.
+   */
+  async generateMusic(_model: Model, _request: MusicGenRequest): Promise<MusicGenResponse> {
+    throw new Error(
+      `${this.name}: generateMusic not implemented. Provider does not support music generation capability.`
+    );
+  }
+
+  /**
    * Web Search
    * Performs web search for grounding
    *
@@ -557,6 +662,29 @@ export abstract class ProviderAdapter {
    * @throws Error if provider doesn't support moderation
    */
   abstract moderate(model: Model, request: ModerationRequest): Promise<ModerationResponse>;
+
+  /**
+   * Document reranking (cross-encoder second stage of retrieval).
+   *
+   * Deliberately NOT given a base fallback: unlike `vision()`, which can be
+   * emulated on top of `chatCompletion`, there is no honest way to fake a
+   * cross-encoder. An LLM asked to "score these documents" is a different
+   * (slower, pricier, unranked) operation, and pretending otherwise would
+   * re-introduce the advertise-then-react failure mode the operability layer
+   * exists to prevent. Providers that cannot rerank must keep throwing here
+   * so `isAdapterMethodImplemented` reports them as non-rerank.
+   *
+   * @param model Model with the `reranking` capability
+   * @param request Query + candidate documents
+   * @returns Documents ordered by descending relevance, indices referring to
+   *          the ORIGINAL request order
+   * @throws Error if the provider does not support reranking
+   */
+  async rerank(_model: Model, _request: RerankRequest): Promise<RerankResponse> {
+    throw new Error(
+      `${this.name}: rerank not implemented. Provider does not support reranking capability.`
+    );
+  }
 
   /**
    * Vision (Image Understanding)

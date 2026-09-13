@@ -41,8 +41,20 @@ export const METRIC_NAMES = Object.freeze({
   PROVIDER_CONFIGURED_TOTAL: 'provider_configured_total',
   PROVIDER_DISCOVERED_TOTAL: 'provider_discovered_total',
   PROVIDER_DISCOVERY_DURATION_MS: 'provider_discovery_duration_ms',
+  /**
+   * Per-provider discovery probe latency (2026-09-04, LOTE AK).
+   *
+   * `PROVIDER_DISCOVERY_DURATION_MS` above is the WHOLE-RUN wall clock with
+   * no labels, so it could answer "was the sweep slow?" but never "which
+   * provider made it slow?". `probeLatencyMs` was already computed per
+   * provider and surfaced on the admin endpoint — it just never reached
+   * Prometheus, so no dashboard or alert could see it.
+   */
+  PROVIDER_DISCOVERY_PROBE_LATENCY_MS: 'provider_discovery_probe_latency_ms',
   PROVIDER_CREDENTIAL_VALID_TOTAL: 'provider_credential_valid_total',
   PROVIDER_CREDIT_STATUS_TOTAL: 'provider_credit_status_total',
+  PROVIDER_BALANCE: 'provider_balance',
+  PROVIDER_BALANCE_CHECKED_AT: 'provider_balance_checked_at_timestamp_seconds',
   PROVIDER_CONFIGURED_BUT_NOT_DISCOVERED_TOTAL: 'provider_configured_but_not_discovered_total',
   PROVIDER_WITH_CREDIT_NOT_CONSIDERED_TOTAL: 'provider_with_credit_not_considered_total',
   CANDIDATE_TRACE_TOTAL: 'candidate_trace_total',
@@ -62,7 +74,57 @@ export const METRIC_NAMES = Object.freeze({
   SEMANTIC_INDEX_LAST_REBUILD_AT: 'semantic_index_last_rebuild_at',
   TEI_HEALTH_STATE: 'tei_health_state',
   EMBEDDING_CACHE_HIT_RATE: 'embedding_cache_hit_rate',
+  /**
+   * Latency of ONE embedding computation against TEI (2026-09-04, LOTE AK).
+   *
+   * The embedding cache used to record this under
+   * `PROVIDER_DISCOVERY_DURATION_MS`, which is a different subsystem
+   * entirely — every cache miss polluted the discovery-duration histogram
+   * with a TEI round-trip, so neither series meant what its name said.
+   */
+  EMBEDDING_COMPUTE_DURATION_MS: 'embedding_compute_duration_ms',
+  /**
+   * kNN search time inside the SemanticIndex, isolated from the embedding
+   * round-trip and the pool filter around it (2026-09-04, LOTE AK).
+   * `CANDIDATE_RESOLUTION_LATENCY_MS` times the whole resolve, so a slow
+   * TEI and a slow index were indistinguishable in it.
+   */
+  SEMANTIC_INDEX_SEARCH_LATENCY_MS: 'semantic_index_search_latency_ms',
   CANDIDATE_RESOLUTION_LATENCY_MS: 'candidate_resolution_latency_ms',
+  /**
+   * Capability probes (2026-09-04, LOTE AK) — the lazy function-calling
+   * probe and any future capability probe on the same pattern. It kept
+   * process-local counters reachable only via `getProbeStats()` plus log
+   * lines, so probe volume, verdict mix and cost were invisible to
+   * Prometheus. `outcome` distinguishes a real capability verdict
+   * (supported/unsupported) from a non-verdict (inconclusive/provider-dead),
+   * which matters because only the first two are cached long-term.
+   */
+  CAPABILITY_PROBE_TOTAL: 'capability_probe_total',
+  CAPABILITY_PROBE_LATENCY_MS: 'capability_probe_latency_ms',
+  /**
+   * Capability assertions written by the LIVE discovery path (2026-09-05,
+   * GAP-A12). Before this, `writeAssertions()` was reachable only from
+   * one-shot backfill scripts, so `capability_uris` silently went stale for
+   * every provider onboarded after the last manual run — and nothing emitted
+   * a signal that it had. These two make the write observable: `outcome`
+   * separates a real write from a no-op (`empty`), an operator kill-switch
+   * (`disabled`) and a swallowed failure (`failed`), which matters precisely
+   * because the failure path is deliberately non-fatal to discovery.
+   */
+  CAPABILITY_ASSERTION_WRITE_TOTAL: 'capability_assertion_write_total',
+  CAPABILITY_ASSERTION_WRITE_LATENCY_MS: 'capability_assertion_write_latency_ms',
+  /** Assertion ROWS inserted, so drift can be watched as a rate, not a count of calls. */
+  CAPABILITY_ASSERTION_ROWS_TOTAL: 'capability_assertion_rows_total',
+  /**
+   * Persistence of an EMPIRICAL capability verdict (2026-09-05, GAP-A13).
+   * `model-not-found` is the expected, benign outcome when the probe fires for
+   * a model this deployment's discovery has not materialised — it is broken
+   * out rather than folded into `failed` because a rising rate means probe and
+   * discovery disagree about provider/model identity, which is a real problem
+   * that a generic failure counter would hide.
+   */
+  CAPABILITY_PROBE_ASSERTION_TOTAL: 'capability_probe_assertion_total',
   SEMANTIC_RETRY_USED_TOTAL: 'semantic_retry_used_total',
   SEMANTIC_RETRY_FALLBACK_TOTAL: 'semantic_retry_fallback_total',
   // ─── LLM-judge observability (LLMJudgeEvaluator path) ───────────────────
@@ -74,6 +136,45 @@ export const METRIC_NAMES = Object.freeze({
   LLM_JUDGE_RESULT_TOTAL: 'llm_judge_result_total',
   LLM_JUDGE_LATENCY_MS: 'llm_judge_latency_ms',
   LLM_JUDGE_SCORE: 'llm_judge_score',
+  // ─── Retrieval + rerank (LOTE AP, 2026-09-05) ──────────────────────────
+  /**
+   * Two-stage retrieval executions. `outcome` separates a retrieval that
+   * returned chunks from one that found none — an empty corpus and a broken
+   * embedder look identical in a plain request counter, and `reranked` says
+   * whether the cross-encoder second stage actually ran. Because reranking is
+   * deliberately FAIL-SOFT, a rising `reranked="false"` rate on requests that
+   * asked for it is the ONLY externally visible symptom of a reranker outage.
+   */
+  RETRIEVAL_REQUEST_TOTAL: 'retrieval_request_total',
+  RETRIEVAL_LATENCY_MS: 'retrieval_latency_ms',
+  /**
+   * PDF understanding by extraction path (LOTE AP). `path` distinguishes a
+   * document answered from its native text layer from one that needed page
+   * rasterization + a vision model (the OCR fallback), and `hybrid` from
+   * both. The two cost and take wildly different amounts of time, so a shift
+   * in the mix is the first sign that either the text extractor regressed or
+   * the incoming document population changed.
+   */
+  PDF_ANALYSIS_TOTAL: 'pdf_analysis_total',
+  PDF_ANALYSIS_LATENCY_MS: 'pdf_analysis_latency_ms',
+  /** Pages rasterized for the vision-OCR fallback, so its cost is countable. */
+  PDF_OCR_PAGES_TOTAL: 'pdf_ocr_pages_total',
+  // ─── Agentic sandbox (ADR-024, LOTE AV, 2026-09-06) ────────────────────
+  /**
+   * Every `execInSandbox` terminal outcome (ok/blocked/timeout/error/oom),
+   * labeled by the network mode actually in force. `computer_use`, `mcp`
+   * tool calls, and every step of the bounded agent loop all funnel through
+   * this one counter, so an operator can see the capability's real traffic
+   * and failure mix even while it sits behind a default-off flag.
+   */
+  SANDBOX_EXEC_TOTAL: 'sandbox_exec_total',
+  SANDBOX_EXEC_DURATION_MS: 'sandbox_exec_duration_ms',
+  /** A command or argument refused by the policy gate BEFORE anything spawned. */
+  SANDBOX_POLICY_VIOLATION_TOTAL: 'sandbox_policy_violation_total',
+  /** One bounded agent-loop run, labeled by its terminal stop reason. */
+  AGENT_RUN_TOTAL: 'agent_run_total',
+  /** One step within an agent run (one model turn + at most one tool call). */
+  AGENT_STEP_TOTAL: 'agent_step_total',
 } as const);
 
 export type MetricName = (typeof METRIC_NAMES)[keyof typeof METRIC_NAMES];
@@ -111,6 +212,14 @@ const METRIC_DEFS: Record<
     labels: [],
     buckets: [50, 100, 250, 500, 1000, 2500, 5000, 10000, 30000],
   },
+  // providerId cardinality here is not a new class: PROVIDER_DISCOVERED_TOTAL
+  // and PROVIDER_HEALTH_STATE already carry the same label.
+  [METRIC_NAMES.PROVIDER_DISCOVERY_PROBE_LATENCY_MS]: {
+    kind: 'histogram',
+    help: 'Latency of the discovery probe for one provider, by outcome',
+    labels: ['providerId', 'status'],
+    buckets: [10, 50, 100, 250, 500, 1000, 2500, 5000, 10000, 30000],
+  },
   [METRIC_NAMES.PROVIDER_CREDENTIAL_VALID_TOTAL]: {
     kind: 'counter',
     help: 'Credential probe outcomes per provider',
@@ -120,6 +229,16 @@ const METRIC_DEFS: Record<
     kind: 'counter',
     help: 'Credit/balance probe outcomes',
     labels: ['providerId', 'status'],
+  },
+  [METRIC_NAMES.PROVIDER_BALANCE]: {
+    kind: 'gauge',
+    help: 'Last known account balance reported by the provider billing API (NaN = unknown)',
+    labels: ['providerId', 'currency'],
+  },
+  [METRIC_NAMES.PROVIDER_BALANCE_CHECKED_AT]: {
+    kind: 'gauge',
+    help: 'Unix timestamp of the last successful balance probe per provider',
+    labels: ['providerId'],
   },
   [METRIC_NAMES.PROVIDER_CONFIGURED_BUT_NOT_DISCOVERED_TOTAL]: {
     kind: 'counter',
@@ -220,11 +339,55 @@ const METRIC_DEFS: Record<
     help: 'Embedding cache hit rate (0.0 to 1.0)',
     labels: [],
   },
+  [METRIC_NAMES.EMBEDDING_COMPUTE_DURATION_MS]: {
+    kind: 'histogram',
+    help: 'Latency of one TEI embedding computation (cache miss path)',
+    labels: [],
+    buckets: [1, 5, 10, 25, 50, 100, 250, 500, 1000, 5000],
+  },
+  [METRIC_NAMES.SEMANTIC_INDEX_SEARCH_LATENCY_MS]: {
+    kind: 'histogram',
+    help: 'SemanticIndex kNN search latency, isolated from embedding + filtering',
+    labels: [],
+    buckets: [0.1, 0.5, 1, 2, 5, 10, 25, 50, 100, 500],
+  },
   [METRIC_NAMES.CANDIDATE_RESOLUTION_LATENCY_MS]: {
     kind: 'histogram',
     help: 'resolveSemanticCandidates wall-clock duration',
     labels: ['outcome'],
     buckets: [0.5, 1, 2, 5, 10, 50, 100, 500],
+  },
+  [METRIC_NAMES.CAPABILITY_PROBE_TOTAL]: {
+    kind: 'counter',
+    help: 'Capability probe outcomes (supported/unsupported/inconclusive/provider-dead)',
+    labels: ['capability', 'providerId', 'outcome'],
+  },
+  [METRIC_NAMES.CAPABILITY_ASSERTION_WRITE_TOTAL]: {
+    kind: 'counter',
+    help: 'Discovery capability-assertion write outcomes (written/empty/failed/disabled)',
+    labels: ['providerId', 'outcome'],
+  },
+  [METRIC_NAMES.CAPABILITY_ASSERTION_WRITE_LATENCY_MS]: {
+    kind: 'histogram',
+    help: 'Wall-clock latency of one discovery capability-assertion write, by outcome',
+    labels: ['outcome'],
+    buckets: [1, 5, 10, 25, 50, 100, 250, 500, 1000, 5000],
+  },
+  [METRIC_NAMES.CAPABILITY_ASSERTION_ROWS_TOTAL]: {
+    kind: 'counter',
+    help: 'Capability assertion rows inserted by the live discovery path',
+    labels: ['providerId'],
+  },
+  [METRIC_NAMES.CAPABILITY_PROBE_ASSERTION_TOTAL]: {
+    kind: 'counter',
+    help: 'Runtime probe verdicts persisted as assertions (written/disabled/model-not-found/unmapped-capability/failed)',
+    labels: ['capability', 'outcome'],
+  },
+  [METRIC_NAMES.CAPABILITY_PROBE_LATENCY_MS]: {
+    kind: 'histogram',
+    help: 'Wall-clock latency of one capability probe, by outcome',
+    labels: ['capability', 'outcome'],
+    buckets: [50, 100, 250, 500, 1000, 2500, 5000, 10000, 30000],
   },
   [METRIC_NAMES.SEMANTIC_RETRY_USED_TOTAL]: {
     kind: 'counter',
@@ -252,6 +415,59 @@ const METRIC_DEFS: Record<
     help: 'Distribution of LLM-judge scores in [0,1], by verdict',
     labels: ['verdict'],
     buckets: [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1],
+  },
+  [METRIC_NAMES.RETRIEVAL_REQUEST_TOTAL]: {
+    kind: 'counter',
+    help: 'Two-stage retrieval executions by outcome and whether rerank applied',
+    labels: ['outcome', 'reranked'],
+  },
+  [METRIC_NAMES.RETRIEVAL_LATENCY_MS]: {
+    kind: 'histogram',
+    help: 'Wall-clock latency of a retrieval execution, by rerank participation',
+    labels: ['reranked'],
+    buckets: [10, 50, 100, 250, 500, 1000, 2500, 5000, 10000, 30000],
+  },
+  [METRIC_NAMES.PDF_ANALYSIS_TOTAL]: {
+    kind: 'counter',
+    help: 'PDF analyses by extraction path (native_text/vision_ocr/hybrid) and outcome',
+    labels: ['path', 'outcome'],
+  },
+  [METRIC_NAMES.PDF_ANALYSIS_LATENCY_MS]: {
+    kind: 'histogram',
+    help: 'Wall-clock latency of a PDF analysis, by extraction path',
+    labels: ['path'],
+    buckets: [100, 250, 500, 1000, 2500, 5000, 10000, 30000, 60000, 120000],
+  },
+  [METRIC_NAMES.PDF_OCR_PAGES_TOTAL]: {
+    kind: 'counter',
+    help: 'PDF pages rasterized and sent through the vision pipeline as OCR fallback',
+    labels: ['outcome'],
+  },
+  [METRIC_NAMES.SANDBOX_EXEC_TOTAL]: {
+    kind: 'counter',
+    help: 'Agentic sandbox (ADR-024) container executions by outcome and network mode',
+    labels: ['outcome', 'networkMode'],
+  },
+  [METRIC_NAMES.SANDBOX_EXEC_DURATION_MS]: {
+    kind: 'histogram',
+    help: 'Wall-clock latency of one agentic sandbox container execution, by outcome',
+    labels: ['outcome'],
+    buckets: [50, 100, 250, 500, 1000, 2500, 5000, 10000, 30000, 60000],
+  },
+  [METRIC_NAMES.SANDBOX_POLICY_VIOLATION_TOTAL]: {
+    kind: 'counter',
+    help: 'Commands or arguments refused by the sandbox policy gate before execution, by violation type',
+    labels: ['violation'],
+  },
+  [METRIC_NAMES.AGENT_RUN_TOTAL]: {
+    kind: 'counter',
+    help: 'Bounded agent-loop runs by terminal stop reason',
+    labels: ['stopReason'],
+  },
+  [METRIC_NAMES.AGENT_STEP_TOTAL]: {
+    kind: 'counter',
+    help: 'Bounded agent-loop steps by outcome',
+    labels: ['outcome'],
   },
 };
 

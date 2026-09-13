@@ -22,6 +22,7 @@
  */
 import { vi } from 'vitest';
 import type {
+  ArtifactRef,
   ChatRequest,
   ChatResponse,
   Model,
@@ -132,6 +133,11 @@ export interface PresetResponse {
   cost?: number;
   durationMs?: number;
   error?: string;
+  /** PR3a — tool-call artifacts to attach to this voter's `ModelExecution`,
+   *  as if `executeModelWithTools()` (PR2) had surfaced them. Lets tests
+   *  assert `mergeArtifacts()` / `OrchestrationResult.toolArtifacts` carry
+   *  a participant's artifact through consensus's synthesis/fallback paths. */
+  artifacts?: ArtifactRef[];
 }
 
 /**
@@ -211,6 +217,7 @@ export function wireStrategy(opts: {
         durationMs: preset?.durationMs ?? 100,
         success,
         error: success ? undefined : (preset?.error ?? 'execution_failed'),
+        artifacts: preset?.artifacts,
       };
     }
   );

@@ -115,6 +115,98 @@ describe('Outcome Measurement', () => {
 
       expect(mockExecuteRaw).toHaveBeenCalledOnce();
     });
+
+    // ─── Regression: 2026-02-20 negative-cost incident (write boundary) ────
+    // This is the ONLY write path into execution_outcomes, which
+    // drift-detection.ts / learning-validation.ts / performance-snapshots.ts
+    // all later aggregate with AVG(cost_usd). Guarding here stops a
+    // negative/NaN/Infinite cost from ever reaching the column.
+    it('never persists a negative costUsd — guard rejects it before the INSERT runs', async () => {
+      const originalPolicy = process.env.CI_COST_INTEGRITY_POLICY;
+      const originalNodeEnv = process.env.NODE_ENV;
+      delete process.env.CI_COST_INTEGRITY_POLICY; // exercise the real default
+      process.env.NODE_ENV = 'test'; // env-dependent -> strict-throw outside production
+
+      try {
+        const { recordOutcome } = await import('../outcome-measurement');
+
+        // -58.04 is the exact per-execution signature from the incident
+        // (48 x -58.04 aggregated to avgCostPerRequest: -2786 USD).
+        await recordOutcome({
+          decisionTraceId: 'req-negative-cost',
+          strategy: 'debate',
+          startedAt: new Date(),
+          finishedAt: new Date(),
+          latencyMs: 5000,
+          costUsd: -58.04,
+          totalTokens: 2000,
+          success: true,
+          retries: 0,
+          fallbackUsed: false,
+          escalationUsed: false,
+          qualityScore: 0.8,
+          feedbackIterations: 1,
+          modelsUsed: ['gpt-4o'],
+        });
+
+        // guardCost() throws under strict-throw; recordOutcome's own
+        // try/catch swallows it (fire-and-forget contract) — the INSERT
+        // must never run with the corrupted value.
+        expect(mockExecuteRaw).not.toHaveBeenCalled();
+      } finally {
+        if (originalPolicy !== undefined) {
+          process.env.CI_COST_INTEGRITY_POLICY = originalPolicy;
+        } else {
+          delete process.env.CI_COST_INTEGRITY_POLICY;
+        }
+        if (originalNodeEnv !== undefined) {
+          process.env.NODE_ENV = originalNodeEnv;
+        } else {
+          delete process.env.NODE_ENV;
+        }
+      }
+    });
+
+    it('coalesces a rejected cost to 0 (never negative) when the policy does not throw', async () => {
+      const originalPolicy = process.env.CI_COST_INTEGRITY_POLICY;
+      process.env.CI_COST_INTEGRITY_POLICY = 'warn-and-null';
+
+      try {
+        const { recordOutcome } = await import('../outcome-measurement');
+
+        await recordOutcome({
+          decisionTraceId: 'req-negative-cost-prod',
+          strategy: 'debate',
+          startedAt: new Date(),
+          finishedAt: new Date(),
+          latencyMs: 5000,
+          costUsd: -2786.097718,
+          totalTokens: 2000,
+          success: true,
+          retries: 0,
+          fallbackUsed: false,
+          escalationUsed: false,
+          qualityScore: 0.8,
+          feedbackIterations: 1,
+          modelsUsed: ['gpt-4o'],
+        });
+
+        expect(mockExecuteRaw).toHaveBeenCalledOnce();
+        // `cost_usd` is NOT NULL Decimal(10,6) DEFAULT 0 — the guard's `null`
+        // result is coalesced to 0 for storage, never left negative.
+        // $executeRaw is invoked as a template tag: calls[0] = [strings, ...values];
+        // VALUES order is decisionTraceId(1), strategy(2), startedAt(3),
+        // finishedAt(4), latencyMs(5), costUsd(6).
+        const insertedCostUsd = mockExecuteRaw.mock.calls[0][6];
+        expect(insertedCostUsd).toBe(0);
+      } finally {
+        if (originalPolicy !== undefined) {
+          process.env.CI_COST_INTEGRITY_POLICY = originalPolicy;
+        } else {
+          delete process.env.CI_COST_INTEGRITY_POLICY;
+        }
+      }
+    });
   });
 
   describe('getRecentOutcomes', () => {
@@ -160,7 +252,7 @@ describe('Outcome Measurement', () => {
           sample_size: BigInt(50),
           avg_quality: 0.82,
           avg_latency_ms: 3000,
-          avg_cost_usd: 0.025,
+          cost_usd_samples: Array.from({ length: 50 }, () => 0.025),
           success_rate: 0.92,
           quality_p10: 0.65,
           quality_p90: 0.95,
@@ -181,6 +273,7 @@ describe('Outcome Measurement', () => {
       expect(metrics!.sampleSize).toBe(50);
       expect(metrics!.avgQuality).toBeCloseTo(0.82, 2);
       expect(metrics!.successRate).toBeCloseTo(0.92, 2);
+      expect(metrics!.avgCostUsd).toBeCloseTo(0.025, 6);
     });
 
     it('returns null when no data', async () => {
@@ -189,7 +282,7 @@ describe('Outcome Measurement', () => {
           sample_size: BigInt(0),
           avg_quality: null,
           avg_latency_ms: null,
-          avg_cost_usd: null,
+          cost_usd_samples: null,
           success_rate: null,
           quality_p10: null,
           quality_p90: null,
@@ -207,6 +300,75 @@ describe('Outcome Measurement', () => {
       });
 
       expect(metrics).toBeNull();
+    });
+
+    // ─── Regression: 2026-02-20 negative-cost incident ──────────────────────
+    // eval-baseline-metrics.json reported `avgCostPerRequest: -2786 USD` for
+    // the debate strategy — the SQL AVG(cost_usd) blindly averaged corrupted
+    // negative rows. getAggregatedMetrics now fetches the raw per-row samples
+    // and runs them through filterValidCosts() before averaging, so the same
+    // input can no longer reproduce that corrupted output.
+    it('does not reproduce the -2786 avgCostPerRequest incident when corrupted rows are present', async () => {
+      // 48 debate executions at -58.04 USD each == -2786.xx aggregated, the
+      // exact shape observed in the incident.
+      mockQueryRaw.mockResolvedValue([
+        {
+          sample_size: BigInt(48),
+          avg_quality: 0.7,
+          avg_latency_ms: 4000,
+          cost_usd_samples: Array.from({ length: 48 }, () => -58.04),
+          success_rate: 1.0,
+          quality_p10: 0.6,
+          quality_p90: 0.8,
+          quality_stddev: 0.05,
+        },
+      ]);
+
+      const { getAggregatedMetrics } = await import('../outcome-measurement');
+      const metrics = await getAggregatedMetrics({
+        strategy: 'debate',
+        taskType: 'code-generation',
+        complexity: 'medium',
+        since: new Date(Date.now() - 7 * 86_400_000),
+        until: new Date(),
+      });
+
+      expect(metrics).not.toBeNull();
+      // Critical: NOT -2786-ish, NOT -58.04 — every sample was invalid, so
+      // the aggregate falls back to 0 rather than propagating corruption.
+      expect(metrics!.avgCostUsd).toBe(0);
+      expect(metrics!.avgCostUsd).not.toBeLessThan(0);
+    });
+
+    it('averages only the valid samples when corrupted rows are mixed with clean ones', async () => {
+      mockQueryRaw.mockResolvedValue([
+        {
+          sample_size: BigInt(4),
+          avg_quality: 0.75,
+          avg_latency_ms: 2500,
+          // 2 clean executions at 0.05 + 2 corrupted negative rows. A naive
+          // SQL AVG(cost_usd) would report (0.05 + 0.05 - 58.04 - 58.04) / 4
+          // = -28.995, still negative. Filtered, it must average only the
+          // clean pair.
+          cost_usd_samples: [0.05, 0.05, -58.04, -58.04],
+          success_rate: 1.0,
+          quality_p10: 0.6,
+          quality_p90: 0.9,
+          quality_stddev: 0.05,
+        },
+      ]);
+
+      const { getAggregatedMetrics } = await import('../outcome-measurement');
+      const metrics = await getAggregatedMetrics({
+        strategy: 'debate',
+        taskType: 'code-generation',
+        complexity: 'medium',
+        since: new Date(Date.now() - 7 * 86_400_000),
+        until: new Date(),
+      });
+
+      expect(metrics).not.toBeNull();
+      expect(metrics!.avgCostUsd).toBeCloseTo(0.05, 6);
     });
   });
 });

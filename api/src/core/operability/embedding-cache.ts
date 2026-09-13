@@ -77,7 +77,11 @@ class EmbeddingCache {
       throw err;
     }
     const elapsed = performance.now() - t0;
-    observeHistogram(METRIC_NAMES.PROVIDER_DISCOVERY_DURATION_MS, elapsed, {});
+    // 2026-09-04 (LOTE AK): this used to observe
+    // PROVIDER_DISCOVERY_DURATION_MS — a different subsystem's metric. Every
+    // cache miss injected a TEI round-trip into the provider-discovery
+    // histogram, so neither series measured what its name claimed.
+    observeHistogram(METRIC_NAMES.EMBEDDING_COMPUTE_DURATION_MS, elapsed, {});
 
     // Evict oldest if at capacity
     if (this.cache.size >= this.maxEntries) {

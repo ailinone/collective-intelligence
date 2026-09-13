@@ -19,7 +19,7 @@
  * Enterprise-ready, production-grade implementation
  */
 
-import type { ChatResponse, TextContent, ToolCall } from '@/types';
+import type { ChatResponse, Model, ReasoningEffort, TextContent, ToolCall } from '@/types';
 import { logger } from '@/utils/logger';
 import { getErrorMessage } from '@/utils/type-guards';
 import { nanoid } from 'nanoid';
@@ -28,8 +28,11 @@ import { PROMPTS } from '@/core/orchestration/prompts/sota-system-prompts';
 const log = logger.child({ component: 'response-aggregator' });
 
 /** Normalize a tool_call's arguments so semantically-equal calls compare equal
- *  (top-level key order ignored). */
-function normalizeToolArgs(raw: unknown): string {
+ *  (top-level key order ignored). Exported so callers outside this module
+ *  (e.g. `toolCallsMatch()` below, and `base-strategy.ts`'s
+ *  `executeModelWithTools` quorum gate) compare tool_call args the SAME way
+ *  `computeQuorumToolCall()` does, rather than reimplementing it. */
+export function normalizeToolArgs(raw: unknown): string {
   if (typeof raw !== 'string') return JSON.stringify(raw ?? null);
   try {
     const parsed = JSON.parse(raw) as Record<string, unknown>;
@@ -40,13 +43,36 @@ function normalizeToolArgs(raw: unknown): string {
 }
 
 /**
+ * Whether two tool_calls represent the "same call" for quorum purposes: same
+ * function name and normalized (key-order-insensitive) arguments. Used both
+ * to group votes inside `computeQuorumToolCall()` and, in `base-strategy.ts`,
+ * to check whether a SPECIFIC voter's call is the one the collective
+ * quorum-approved (`computeQuorumToolCall()`'s return value is one voter's
+ * own tool_call object — a sibling voter's structurally-identical call is a
+ * different reference, so identity comparison would wrongly reject it).
+ */
+export function toolCallsMatch(
+  a: Pick<ToolCall, 'function'> | null | undefined,
+  b: Pick<ToolCall, 'function'> | null | undefined
+): boolean {
+  const nameA = a?.function?.name;
+  const nameB = b?.function?.name;
+  if (!nameA || !nameB || nameA !== nameB) return false;
+  return normalizeToolArgs(a?.function?.arguments) === normalizeToolArgs(b?.function?.arguments);
+}
+
+/**
  * Elo 3 QUORUM (option B): return the tool_call that a STRICT MAJORITY of the
  * given (successful) voter responses agree on — same function name + normalized
  * args — or null. Only the primary (first) tool_call per voter is considered.
  * This is what lets a collective fire exactly ONE billable modality generation,
  * and only when the collective agrees.
+ *
+ * Exported so `base-strategy.ts`'s `executeModelWithTools` can reuse this SAME
+ * mechanism to authorize a `strategyExecutionMode:'quorumOnly'` tool call,
+ * instead of a parallel implementation.
  */
-function computeQuorumToolCall(responses: ModelResponse[]): ToolCall | null {
+export function computeQuorumToolCall(responses: ModelResponse[]): ToolCall | null {
   const n = responses.length;
   if (n === 0) return null;
   const groups = new Map<string, { call: ToolCall; count: number }>();
@@ -94,6 +120,26 @@ export interface AggregationContext {
    *  coordinator honors it (capped at COORDINATOR_MAX_TOKENS_CEILING) instead of
    *  the historical hardcoded 2000 — a client asking for a 128k answer gets it. */
   maxTokens?: number;
+  /**
+   * Models that already answered this request successfully, best first. Used to
+   * pick the synthesis coordinator: they returned 200s moments ago, so they are
+   * provably credentialed, operable and adapter-resolvable — unlike the
+   * catalog-wide "highest quality anywhere" scan, which routinely selects a model
+   * with no registered adapter and silently drops to the concatenation fallback.
+   */
+  coordinatorCandidateModelIds?: readonly string[];
+  /**
+   * LOTE AZ (2026-09) — the ORIGINAL request's resolved reasoning-effort
+   * signal (via `resolveReasoningEffort()`), forwarded onto the coordinator's
+   * own `ChatRequest` in `synthesizeWithLLM`. Before this, the final
+   * synthesis call was assembled from scratch (model/messages/temperature/
+   * max_tokens only) with zero knowledge of what the caller asked for, so a
+   * high-effort original request silently got a no-effort synthesizer.
+   * Both fields are independently optional and only forwarded when set —
+   * see resolveReasoningEffort's precedence rule for how they interact.
+   */
+  reasoningEffort?: ReasoningEffort;
+  thinkingBudget?: number;
 }
 
 /** Absolute ceiling for the coordinator's output (128k = 131_072 tokens),
@@ -147,6 +193,12 @@ export interface AggregatedResponse {
   usage?: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number };
   /** Identity of the coordinator/synthesizer model used (when an LLM coordinator ran). */
   coordinator?: { id: string; name: string };
+  /**
+   * True when synthesis did not actually run and `response` is the internal
+   * `### From <model>` concatenation digest. Callers MUST NOT serve that digest
+   * to a user; consensus uses this to fall back to the best individual answer.
+   */
+  synthesisUnavailable?: boolean;
   metadata: {
     sourcesUsed: string[];
     totalSources: number;
@@ -162,6 +214,11 @@ export interface AggregatedResponse {
 interface SynthesisResult {
   response: ChatResponse;
   cost: number;
+  /**
+   * True when no coordinator LLM ran and `response` is the internal
+   * concatenation digest rather than a synthesized answer.
+   */
+  synthesisUnavailable?: boolean;
   usage?: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number };
   coordinator?: { id: string; name: string };
 }
@@ -442,6 +499,7 @@ export class ResponseAggregator {
       cost: synthesized.cost,
       usage: synthesized.usage,
       coordinator: synthesized.coordinator,
+      synthesisUnavailable: synthesized.synthesisUnavailable,
       metadata: {
         sourcesUsed: bestParts.map((p) => p.source),
         totalSources: responses.length,
@@ -450,7 +508,9 @@ export class ResponseAggregator {
           strengthsUsed: analysis.strengths.length,
           weaknessesAvoided: analysis.weaknesses.length,
           partsSelected: bestParts.length,
-          coordinatorUsed: 'llm',
+          // Was hardcoded 'llm' on every path, including all three fallbacks —
+          // so a digest was indistinguishable from a real synthesis in metrics.
+          coordinatorUsed: synthesized.synthesisUnavailable ? 'simple' : 'llm',
         },
       },
     };
@@ -476,22 +536,68 @@ export class ResponseAggregator {
       const registry = getProviderRegistry();
       const allModels = await registry.getAllModels();
 
-      // Find best coordinator model (high quality, supports long context)
-      const coordinator = allModels
-        .filter((m) => m.contextWindow >= 32000 && m.performance?.quality >= 0.85)
-        .sort((a, b) => b.performance.quality - a.performance.quality)[0];
+      // Prefer a model that already answered THIS request. Those returned 200s
+      // moments ago, so they are provably credentialed, operable and
+      // adapter-resolvable. The catalog-wide scan below ignores all three and is
+      // the main reason synthesis silently degraded to the digest in production.
+      let coordinator: Model | undefined;
+      let resolved: Awaited<ReturnType<typeof registry.findModel>> | null = null;
 
-      if (!coordinator) {
-        log.warn('No suitable coordinator model found, using simple synthesis');
-        return { response: this.synthesizeResponse(parts, responses[0].response), cost: 0 };
+      for (const candidateId of context.coordinatorCandidateModelIds ?? []) {
+        const candidateModel = allModels.find((m) => m.id === candidateId);
+        if (!candidateModel) continue;
+        const candidate = await registry.findModel(candidateId);
+        if (candidate) {
+          resolved = candidate;
+          coordinator = candidateModel;
+          break;
+        }
       }
 
-      const result = await registry.findModel(coordinator.id);
-      if (!result) {
-        return { response: this.synthesizeResponse(parts, responses[0].response), cost: 0 };
+      if (!resolved) {
+        // Fallback: best in the catalog by quality with a long-enough context.
+        coordinator = allModels
+          .filter((m) => m.contextWindow >= 32000 && m.performance?.quality >= 0.85)
+          .sort((a, b) => b.performance.quality - a.performance.quality)[0];
+
+        if (!coordinator) {
+          log.warn('No suitable coordinator model found, using simple synthesis');
+          return {
+            response: this.synthesizeResponse(parts, responses[0].response),
+            cost: 0,
+            synthesisUnavailable: true,
+          };
+        }
+
+        resolved = await registry.findModel(coordinator.id);
+        if (!resolved) {
+          // Previously returned with no log line at all, which is why this path
+          // was invisible despite being the common one.
+          log.warn(
+            { requestId: context.requestId, coordinatorId: coordinator.id },
+            'Coordinator model has no registered adapter, using simple synthesis'
+          );
+          return {
+            response: this.synthesizeResponse(parts, responses[0].response),
+            cost: 0,
+            synthesisUnavailable: true,
+          };
+        }
       }
 
-      const { adapter } = result;
+      if (!coordinator || !resolved) {
+        log.warn(
+          { requestId: context.requestId },
+          'No resolvable coordinator model, using simple synthesis'
+        );
+        return {
+          response: this.synthesizeResponse(parts, responses[0].response),
+          cost: 0,
+          synthesisUnavailable: true,
+        };
+      }
+
+      const { adapter } = resolved;
 
       // Build coordination prompt
       const coordinationPrompt = this.buildCoordinationPrompt(
@@ -524,6 +630,12 @@ export class ResponseAggregator {
         // coordinator model's OWN output capability (frontier-parity, per-model)
         // — never a static 2000 that clips the collective below a frontier single.
         max_tokens: resolveCoordinatorMaxTokens(context.maxTokens, coordinator.maxOutputTokens),
+        // LOTE AZ (2026-09) — forward the original request's reasoning-effort
+        // signal (see AggregationContext doc comment). Only set when the
+        // caller actually expressed one; an unrelated synthesis call is
+        // unaffected.
+        ...(context.thinkingBudget ? { thinking_budget: context.thinkingBudget } : {}),
+        ...(context.reasoningEffort ? { reasoning_effort: context.reasoningEffort } : {}),
       });
 
       // Cost-accounting integrity: the coordinator call is billable. Compute its
@@ -565,7 +677,11 @@ export class ResponseAggregator {
         'LLM synthesis failed, falling back to simple synthesis'
       );
       // Fallback to simple synthesis — no paid call was completed, cost 0.
-      return { response: this.synthesizeResponse(parts, responses[0].response), cost: 0 };
+      return {
+        response: this.synthesizeResponse(parts, responses[0].response),
+        cost: 0,
+        synthesisUnavailable: true,
+      };
     }
   }
 

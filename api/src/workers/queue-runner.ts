@@ -19,11 +19,12 @@ import http from 'node:http';
 import { register } from 'prom-client';
 import { config, validateConfig } from '@/config';
 import { logger } from '@/utils/logger';
-import { connectDatabase, disconnectDatabase } from '@/database/client';
+import { checkDatabaseHealth, connectDatabase, disconnectDatabase } from '@/database/client';
 import { markSecretAuditPersistenceReady } from '@/services/secret-audit-service';
 import { initializeCacheRuntime, isCacheEnabled } from '@/cache/cache-runtime-state';
 import { serializeError } from '@/utils/type-guards';
 import { authorizeWorkerMetricsScrape } from './worker-metrics-auth';
+import { createWorkerHttpHandler } from './worker-http-handler';
 import {
   getQueueRuntimeState,
   initializeQueueRuntime,
@@ -41,6 +42,31 @@ async function bootstrapWorker(): Promise<void> {
       await import('@/config/secrets-manager.js');
     await initializeSecretsManager(config.secrets);
     logger.info('✅ Secrets Manager initialized');
+
+    // Load GCP secrets into process.env — documented call order in
+    // load-secrets-into-env.ts is initializeSecretsManager() →
+    // loadSecretsIntoEnv() → validateConfig(). index.ts (the API
+    // entrypoint) already does this; this worker entrypoint never did.
+    //
+    // 2026-09-08 incident root cause: model-discovery-hourly and
+    // pricing-integrity-check (register-scheduled-jobs.ts) execute their
+    // payload in THIS process, and every native/hub fetcher in
+    // central-model-discovery-service.ts reads its credential straight off
+    // process.env.<PROVIDER>_API_KEY at call time (e.g. openai-native,
+    // anthropic-native, aws-bedrock-hub, orqai-hub, edenai-hub, ai302-hub,
+    // routeway-hub). Without this call those env vars stayed empty for the
+    // entire lifetime of the worker process — even though every affected
+    // GCP secret was present and ENABLED (verified via `gcloud secrets
+    // versions list`) — so discovery could never authenticate, every
+    // affected provider's catalog rows went unconfirmed past the 14-day
+    // threshold, and pricing-integrity-job.ts's autoDisableDelistedModels()
+    // mass-disabled 19,875 models believing they had been delisted. See
+    // pricing-integrity-job.ts and central-model-discovery-service.ts for
+    // the accompanying fixes this incident also required.
+    logger.info('Loading provider/critical secrets from GCP into environment...');
+    const { loadSecretsIntoEnv } = await import('@/config/load-secrets-into-env.js');
+    await loadSecretsIntoEnv();
+    logger.info('✅ Secrets loaded into environment');
 
     // Validate configuration
     validateConfig();
@@ -65,40 +91,14 @@ async function bootstrapWorker(): Promise<void> {
       logger.info('Initializing Prometheus metrics for worker...');
       const { initializeMetrics } = await import('@/utils/metrics.js');
       initializeMetrics();
-      metricsServer = http.createServer(async (req, res) => {
-        if (req.url === '/metrics') {
-          if (!authorizeWorkerMetricsScrape(req)) {
-            res.writeHead(403, { 'Content-Type': 'application/json' });
-            res.end(
-              JSON.stringify({
-                error: {
-                  code: 'forbidden',
-                  message: config.observability.prometheusToken
-                    ? 'Invalid or missing scrape token'
-                    : 'Metrics endpoint is disabled in production until PROMETHEUS_SCRAPE_TOKEN is configured',
-                },
-              })
-            );
-            return;
-          }
-          const data = await register.metrics();
-          res.writeHead(200, {
-            'Content-Type': register.contentType,
-            'Content-Length': Buffer.byteLength(data),
-          });
-          res.end(data);
-          return;
-        }
-
-        if (req.url === '/health') {
-          res.writeHead(200, { 'Content-Type': 'text/plain' });
-          res.end('ok');
-          return;
-        }
-
-        res.writeHead(404);
-        res.end();
-      });
+      metricsServer = http.createServer(
+        createWorkerHttpHandler({
+          authorizeScrape: authorizeWorkerMetricsScrape,
+          metricsRegister: register,
+          checkDatabaseHealth,
+          scrapeTokenConfigured: !!config.observability.prometheusToken,
+        })
+      );
       await new Promise<void>((resolve, reject) => {
         metricsServer!.listen(config.queue.workerMetricsPort, '0.0.0.0', () => {
           logger.info(

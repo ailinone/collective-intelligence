@@ -152,7 +152,14 @@ export class TopazAdapter extends ProviderAdapter {
         provider: 'topaz',
         contextWindow: 0,
         maxOutputTokens: 0,
-        capabilities: ['image_upscale', 'image_enhance'],
+        // `image_enhance` used to sit here. It is not a member of the
+        // `ModelCapability` union (it survived only because this object goes
+        // through `narrowAs`), so it matched no route, no filter and no
+        // ontology id — while `image_denoise`, which the catalog DOES declare
+        // for these pipelines and which `noise_reduction` actually
+        // implements, was missing. Corrected in LOTE AP so the
+        // adapter-sourced and catalog-sourced inventories agree.
+        capabilities: ['image_upscale', 'image_denoise'],
       })
     );
   }

@@ -14,15 +14,137 @@
 
 import type { FastifyReply } from 'fastify';
 import type { OutgoingHttpHeaders } from 'node:http';
-import type { ChatResponse, AilinMetadata } from '@/types';
+import type { ChatResponse, AilinMetadata, AilinErrorMetadata } from '@/types';
 import { logger } from './logger';
 import { applyBranding } from './branding';
+
+/**
+ * Maximum safe size (bytes) for a single SSE `data: ...\n\n` line.
+ *
+ * SSE is a line-oriented protocol — a `data:` frame is read by consumers as
+ * ONE line before it is parsed. Real-world SSE/HTTP clients enforce a hard
+ * per-line buffer limit; e.g. Python's `aiohttp.StreamReader` (used by
+ * ailin-chat's backend proxy — `routers/openai.py` — to relay this exact
+ * stream when CI is registered as its OpenAI-compatible provider) iterates a
+ * raw stream via `readline()`, which raises `LineTooLong` ("Got more than
+ * 131072 bytes when reading: ...") once a line exceeds its default
+ * `_high_water` mark (2x its 65536-byte default `limit`). That is the
+ * verbatim production incident (2026-09-08): a real image-generation
+ * response, redirected through the streaming media-generation gate
+ * (chat-routes.ts), embedded a full base64 image inline in
+ * `ailin_metadata.artifacts[].b64_json` inside a single JSON-stringified SSE
+ * line — hundreds of KB, unbroken by any newline — and the browser surfaced
+ * aiohttp's read failure as a hard 400 to the end user.
+ *
+ * Kept well under the smallest widely-observed real-world limit (131072) for
+ * margin against other line-based consumers with smaller ones. Overridable
+ * for environments with different constraints, same convention as
+ * `ARTIFACT_MAX_B64_CHARS` (orchestration-engine.ts).
+ */
+const SSE_LINE_SAFE_MAX_BYTES = Number(process.env.SSE_LINE_SAFE_MAX_BYTES) || 60_000;
+
+/**
+ * Type guard: `ailin_metadata` is a discriminated union (see `ChatResponse`)
+ * — only the final-completion `AilinMetadata` shape (no `type` field) ever
+ * carries `.artifacts`; the SSE-only progress/observer/clarification variants
+ * always carry one.
+ */
+function hasInlineArtifacts(
+  metadata: ChatResponse['ailin_metadata']
+): metadata is AilinMetadata & { artifacts: NonNullable<AilinMetadata['artifacts']> } {
+  return (
+    !!metadata &&
+    !('type' in metadata) &&
+    Array.isArray((metadata as AilinMetadata).artifacts) &&
+    (metadata as AilinMetadata).artifacts!.length > 0
+  );
+}
+
+/**
+ * Strip any inline base64 artifact payload that would make this chunk unsafe
+ * to ship as a single SSE line. Never mutates the input; returns the same
+ * reference when there is nothing to strip (the overwhelmingly common case —
+ * most chunks carry no artifacts at all).
+ *
+ * Deliberately NOT a "raise the buffer" fix: a line-based SSE reader (the
+ * normal, idiomatic way to consume Server-Sent Events) cannot safely receive
+ * an arbitrarily large single line no matter how generous any one buffer is
+ * set to — a big enough generated image/video/audio/file will always
+ * eventually exceed a fixed limit. The only correct fix is to never inline
+ * such payloads into one transport line. When the artifact already carries a
+ * `url` (the established pattern elsewhere in this codebase — see
+ * `ArtifactRef`, which has no b64 field at all), the inline copy is pure
+ * redundant weight and is always dropped, not just when oversized.
+ */
+function stripUnsafeInlineArtifacts(chunk: ChatResponse): ChatResponse {
+  const metadata = chunk.ailin_metadata;
+  if (!hasInlineArtifacts(metadata)) return chunk;
+
+  let mutated = false;
+  const safeArtifacts = metadata.artifacts.map((artifact) => {
+    if (!artifact.b64_json) return artifact;
+    const oversized = artifact.b64_json.length > SSE_LINE_SAFE_MAX_BYTES;
+    if (!artifact.url && !oversized) return artifact;
+    mutated = true;
+    return {
+      ...artifact,
+      b64_json: undefined,
+      ...(artifact.url
+        ? {}
+        : {
+            error:
+              artifact.error ??
+              'Generated payload omitted from this streaming response (too large to inline safely) — retry with stream:false to receive it.',
+          }),
+    };
+  });
+
+  if (!mutated) return chunk;
+  return { ...chunk, ailin_metadata: { ...metadata, artifacts: safeArtifacts } };
+}
+
+/**
+ * Last-resort guard for any OTHER unbounded field (present or future) that
+ * could still push a line over budget after artifact-stripping. Replaces the
+ * chunk with a small, honest, safely-sized placeholder rather than ever
+ * emitting a line long enough to break a downstream line-based reader.
+ */
+function buildOversizedFallback(chunk: ChatResponse): ChatResponse {
+  const [firstChoice, ...restChoices] = chunk.choices;
+  return {
+    ...chunk,
+    ailin_metadata: undefined,
+    choices: firstChoice
+      ? [
+          {
+            ...firstChoice,
+            message: {
+              role: 'assistant',
+              content:
+                'Response too large to deliver over a streaming connection. Retry with stream:false.',
+            },
+            delta: undefined,
+          },
+          ...restChoices,
+        ]
+      : chunk.choices,
+  };
+}
 
 /**
  * Format SSE data
  */
 export function formatSSE(data: ChatResponse): string {
-  return `data: ${JSON.stringify(data)}\n\n`;
+  const safeData = stripUnsafeInlineArtifacts(data);
+  const line = `data: ${JSON.stringify(safeData)}\n\n`;
+  if (Buffer.byteLength(line, 'utf8') <= SSE_LINE_SAFE_MAX_BYTES) {
+    return line;
+  }
+  logger.warn(
+    { id: safeData.id, bytes: Buffer.byteLength(line, 'utf8') },
+    'SSE chunk exceeded the safe line-length budget even after stripping inline artifacts — replacing with a degraded placeholder instead of emitting an oversized line'
+  );
+  return `data: ${JSON.stringify(buildOversizedFallback(safeData))}\n\n`;
 }
 
 /**
@@ -67,9 +189,18 @@ export function sendSSEDone(reply: FastifyReply): void {
 
 /**
  * Send SSE error
+ *
+ * Context-window preflight audit (2026-09): `error.code`, when present
+ * (e.g. `ContextWindowExceededError`'s `code: 'context_exceeded'`), is now
+ * additionally surfaced as `ailin_metadata: { type: 'error', code }` — a
+ * machine-readable companion to the human-readable text already placed in
+ * `choices[0].message.content` below, so an agentic client can react
+ * programmatically instead of only pattern-matching prose. Absent for any
+ * plain `Error` with no `.code` (every existing call site), so this is
+ * purely additive.
  */
 export function sendSSEError(reply: FastifyReply, error: Error): void {
-  const _errorWithCode = error as ErrorWithCode;
+  const errorWithCode = error as ErrorWithCode;
   // ChatResponse doesn't have error property, create a minimal response with error in choices
   const errorData: ChatResponse = {
     id: `error-${Date.now()}`,
@@ -87,6 +218,14 @@ export function sendSSEError(reply: FastifyReply, error: Error): void {
         logprobs: null,
       },
     ],
+    ...(errorWithCode.code
+      ? {
+          ailin_metadata: {
+            type: 'error',
+            code: errorWithCode.code,
+          } satisfies AilinErrorMetadata,
+        }
+      : {}),
   };
   reply.raw.write(formatSSE(errorData));
 }
