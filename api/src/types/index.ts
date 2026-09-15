@@ -1966,6 +1966,7 @@ export interface QueueConfig {
   priority: {
     enterprise: number;
     pro: number;
+    starter: number;
     free: number;
     jitter: number;
   };
@@ -2582,6 +2583,35 @@ export interface CreateInvoiceRequest {
 
 export interface SubscriptionRequest {
   organizationId: string;
+  /**
+   * A plan/product identifier — deliberately kept as `string`, not narrowed to a
+   * closed union like `billingCycle` below.
+   *
+   * Investigated (hardening program, subscription-plan validation gap): unlike
+   * `billingCycle` (a genuine 2-value set from Stripe's own interval model),
+   * `plan` has no single fixed universe of valid values in this system —
+   * `prisma.billingPlan` (billing-plan-service.ts's `syncStripeCatalog`/
+   * `listBillingPlans`) is a per-organization catalog synced FROM this
+   * deployment's own Stripe account, so legitimate values change as products
+   * are added/renamed in Stripe without a `ci` code change. It is also
+   * independent from both `OrganizationTier`'s `TierLevel` (free/starter/pro/
+   * enterprise — the API gateway's resource-tier vocabulary) and the separate
+   * `billing` service's own `Plan.plan_id` catalog (sandbox/professional/team,
+   * read via billing-entitlements-client.ts) — three distinct, independently
+   * evolving vocabularies, none of which is "the" answer for this field.
+   * `createSubscription` (billing-service.ts) also never looks `plan` up
+   * against any catalog — it is stored as a descriptive label alongside the
+   * real product selection, which flows through `priceId`/`billingPrice`
+   * instead — consistent with this route supporting manual/ops-created
+   * subscriptions (custom `amount`/`currency`, no `priceId`) that intentionally
+   * fall outside the synced catalog.
+   *
+   * The real, narrow gap this route's JSON schema had was FORMAT, not a
+   * missing enum: `plan` accepted any string at all (empty, unbounded length,
+   * arbitrary bytes) before being written to the database and to Stripe
+   * subscription metadata. The route's schema now bounds it to a slug-shaped
+   * string (`minLength`/`maxLength`/`pattern`); see billing-routes.ts.
+   */
   plan: string;
   billingCycle: 'monthly' | 'yearly';
   amount?: number;

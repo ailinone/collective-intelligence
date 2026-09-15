@@ -14,6 +14,11 @@
  * DDD Pattern: Value Object
  */
 
+import { TIER_CONFIGS } from '@/config/multi-tenancy-config';
+import { logger } from '@/utils/logger';
+
+const log = logger.child({ component: 'organization-tier' });
+
 export enum TierLevel {
   FREE = 'free',
   STARTER = 'starter',
@@ -50,8 +55,23 @@ export class OrganizationTier {
 
   /**
    * Get default limits for each tier
+   *
+   * `prioritySupport`/`customModels`/`advancedOrchestration` are sourced
+   * from TIER_CONFIGS (multi-tenancy-config.ts, the API-gateway's own tier
+   * table) rather than a second independent copy here (cross-repo
+   * quota/tier follow-up, item 1) -- these 3 fields are the only ones both
+   * tables represent, and having two meant they could (and did: TIER_CONFIGS
+   * once said PRO's prioritySupport/customModels were false while this table
+   * always said true, per this file's own long-standing tests) silently
+   * drift apart. `maxApiKeys`/`maxMembers`/`maxRequestsPerDay`/
+   * `maxModelsPerRequest` stay defined here: they are genuinely domain-only
+   * concepts (organization-level business limits) with no TIER_CONFIGS
+   * analogue -- that table is infra-shaped (connections, storage,
+   * requests/time), not domain-shaped.
    */
   private static getLimitsForTier(tier: TierLevel): TierLimits {
+    const features = TIER_CONFIGS[tier]?.features;
+
     switch (tier) {
       case TierLevel.FREE:
         return {
@@ -59,9 +79,9 @@ export class OrganizationTier {
           maxMembers: 1,
           maxRequestsPerDay: 1000,
           maxModelsPerRequest: 1,
-          prioritySupport: false,
-          customModels: false,
-          advancedOrchestration: false,
+          prioritySupport: features?.prioritySupport ?? false,
+          customModels: features?.customModels ?? false,
+          advancedOrchestration: features?.advancedOrchestration ?? false,
         };
 
       case TierLevel.STARTER:
@@ -70,9 +90,9 @@ export class OrganizationTier {
           maxMembers: 3,
           maxRequestsPerDay: 10000,
           maxModelsPerRequest: 3,
-          prioritySupport: false,
-          customModels: false,
-          advancedOrchestration: true,
+          prioritySupport: features?.prioritySupport ?? false,
+          customModels: features?.customModels ?? false,
+          advancedOrchestration: features?.advancedOrchestration ?? true,
         };
 
       case TierLevel.PRO:
@@ -81,9 +101,9 @@ export class OrganizationTier {
           maxMembers: 10,
           maxRequestsPerDay: 100000,
           maxModelsPerRequest: 6,
-          prioritySupport: true,
-          customModels: true,
-          advancedOrchestration: true,
+          prioritySupport: features?.prioritySupport ?? true,
+          customModels: features?.customModels ?? true,
+          advancedOrchestration: features?.advancedOrchestration ?? true,
         };
 
       case TierLevel.ENTERPRISE:
@@ -92,10 +112,27 @@ export class OrganizationTier {
           maxMembers: -1, // Unlimited
           maxRequestsPerDay: -1, // Unlimited
           maxModelsPerRequest: 9,
-          prioritySupport: true,
-          customModels: true,
-          advancedOrchestration: true,
+          prioritySupport: features?.prioritySupport ?? true,
+          customModels: features?.customModels ?? true,
+          advancedOrchestration: features?.advancedOrchestration ?? true,
         };
+
+      default:
+        // Fail-closed, not silently-undefined: this switch used to have no
+        // default, so a tier value that doesn't match any TierLevel member
+        // (bad/legacy DB data -- e.g. the schema comment's stale "team" --
+        // a typo, or a future tier removed/renamed without a migration)
+        // made this function return `undefined`. Every caller
+        // (canAddApiKey/canAddMember/isWithinRequestLimit/canUseModels/
+        // hasFeature) then threw a TypeError reading a property off
+        // `undefined`, turning one bad row into an unhandled 500. Treat the
+        // unknown tier as the most restrictive real tier (FREE) instead, and
+        // log loudly so the bad data actually gets noticed and fixed.
+        log.error(
+          { tier },
+          `Unknown organization tier "${String(tier)}" — falling back to FREE limits`
+        );
+        return OrganizationTier.getLimitsForTier(TierLevel.FREE);
     }
   }
 

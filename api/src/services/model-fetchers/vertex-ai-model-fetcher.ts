@@ -99,130 +99,293 @@ export class VertexAIModelFetcher extends BaseProviderModelFetcher {
     }
   }
 
-  private async fetchModelsFromGoogleAPI(): Promise<ProviderModel[]> {
-    const { default: fetch } = await import('node-fetch');
-    let endpoint: URL;
-    let headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  /**
+   * Safety cap for {@link fetchAllPages} — a paginated Google API response
+   * that never stops handing back a `nextPageToken` (buggy server, or an
+   * unbounded/looping catalog) must not turn into an infinite loop. 20 pages
+   * at the ~50-per-page sizes these endpoints use is already an order of
+   * magnitude past the real catalogs observed (see the 2026-09-14 live
+   * check below).
+   */
+  private static readonly MAX_PAGINATION_PAGES = 20;
 
-    if (this.apiKey) {
-      // Express mode - use API key
-      endpoint = new URL('https://generativelanguage.googleapis.com/v1beta/models');
-      endpoint.searchParams.set('key', this.apiKey);
-    } else if (this.projectId) {
-      // Standard mode - use gcloud auth application-default
-      try {
-        const accessToken = await this.executeGcloudCommand([
-          'auth',
-          'application-default',
-          'print-access-token',
-        ]);
-        // Vertex AI Model Garden foundation models are listed via publishers endpoint
-        // First try to get publishers (Google, Anthropic, etc.) which contain foundation models
-        const modelLocation = 'us-central1'; // Model Garden publishers are typically in us-central1
-        endpoint = new URL(
-          `https://aiplatform.googleapis.com/v1/projects/${this.projectId}/locations/${modelLocation}/publishers`
+  /**
+   * Follow `nextPageToken` across a Google-style paginated list endpoint.
+   *
+   * Both Google AI Studio (`generativelanguage.googleapis.com`) and Vertex
+   * AI (`aiplatform.googleapis.com`) use the same list-pagination contract:
+   * the response optionally carries a `nextPageToken` string, and the next
+   * page is requested by adding `?pageToken=<token>` to the same URL.
+   *
+   * Confirmed LIVE 2026-09-14 for the Google AI Studio branch
+   * (`generativelanguage.googleapis.com/v1beta/models`) using the real
+   * `<prefix>-vertex-key` secret: page 1 returns 50 models plus a non-empty
+   * `nextPageToken`; following it manually returns a second (final) page of
+   * 6 more models with no further token — 56 real models total, not the 50
+   * the un-paginated code used to stop at.
+   *
+   * For the Model Garden branch (`aiplatform.googleapis.com`
+   * `publishers.models.list`), pagination support is confirmed from the
+   * official Google API Discovery document rather than a live call — the
+   * production service account does not currently have `roles/aiplatform.user`
+   * (see consolidation-matrix.ts ~L524-532), so a real 200 response was not
+   * obtainable to verify this by hand. Source consulted:
+   * `https://aiplatform.googleapis.com/$discovery/rest?version=v1beta1`,
+   * method id `aiplatform.publishers.models.list` — its `pageToken` query
+   * parameter and `GoogleCloudAiplatformV1beta1ListPublisherModelsResponse.nextPageToken`
+   * response field are both documented there, so this loop is applied to
+   * that branch too rather than guessed defensively without a source.
+   */
+  private async fetchAllPages<T>(
+    fetchImpl: (typeof import('node-fetch'))['default'],
+    baseEndpoint: URL,
+    headers: Record<string, string>,
+    extractItems: (payload: Record<string, unknown>) => T[]
+  ): Promise<T[]> {
+    const items: T[] = [];
+    let pageToken: string | undefined;
+    let page = 0;
+
+    do {
+      page += 1;
+      const endpoint = new URL(baseEndpoint.toString());
+      if (pageToken) {
+        endpoint.searchParams.set('pageToken', pageToken);
+      }
+
+      const response = await fetchImpl(endpoint.toString(), { method: 'GET', headers });
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(
+          `Vertex AI models request failed: ${response.status} ${response.statusText} - ${errorText}`
         );
-        headers.Authorization = `Bearer ${accessToken}`;
-      } catch (error: unknown) {
-        const { getErrorMessage, extractErrorCodeFromObject } = await import('@/utils/type-guards');
-        const errorMessage = getErrorMessage(error);
-        const errorCode = extractErrorCodeFromObject(error);
+      }
 
-        // Safely extract stderr from error object
-        let stderr: unknown;
-        if (typeof error === 'object' && error !== null && 'stderr' in error) {
-          stderr = error.stderr;
-        }
+      const payload = (await response.json()) as Record<string, unknown>;
+      items.push(...extractItems(payload));
 
-        const errorDetails = {
-          message: errorMessage,
-          code: errorCode,
-          stderr,
-        };
+      const nextToken = payload.nextPageToken;
+      pageToken = typeof nextToken === 'string' && nextToken.length > 0 ? nextToken : undefined;
+
+      if (pageToken && page >= VertexAIModelFetcher.MAX_PAGINATION_PAGES) {
         this.log.warn(
-          {
-            error: errorDetails,
-            projectId: this.projectId,
-            location: this.location,
-            hint: 'Run "gcloud auth application-default login" to configure authentication',
-          },
-          'Failed to get gcloud access token, falling back to Google AI API (may return limited models)'
+          { endpoint: baseEndpoint.toString(), pages: page },
+          `Vertex AI pagination hit the safety cap of ${VertexAIModelFetcher.MAX_PAGINATION_PAGES} pages ` +
+            'while a nextPageToken was still present - stopping early to avoid an unbounded loop'
         );
-        // Fallback to Google AI API (may not return Vertex AI models)
-        endpoint = new URL('https://generativelanguage.googleapis.com/v1beta/models');
+        pageToken = undefined;
       }
-    } else {
-      throw new Error('Vertex AI requires either API key or projectId with gcloud auth');
-    }
+    } while (pageToken);
 
-    const response = await fetch(endpoint.toString(), {
-      method: 'GET',
+    return items;
+  }
+
+  /**
+   * Google AI Studio (`generativelanguage.googleapis.com`) branch — native
+   * Gemini models only, keyed by API key. Paginates via {@link fetchAllPages}
+   * (see that method's doc comment for the live 50+6=56 confirmation).
+   */
+  private async fetchFromGoogleAIStudio(): Promise<ProviderModel[]> {
+    const { default: fetch } = await import('node-fetch');
+    const endpoint = new URL('https://generativelanguage.googleapis.com/v1beta/models');
+    if (this.apiKey) {
+      endpoint.searchParams.set('key', this.apiKey);
+    }
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+
+    const models = await this.fetchAllPages<Record<string, unknown>>(
+      fetch,
+      endpoint,
       headers,
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(
-        `Vertex AI models request failed: ${response.status} ${response.statusText} - ${errorText}`
-      );
-    }
-
-    const payload = (await response.json()) as {
-      models?: Array<Record<string, unknown>>;
-      publishers?: Array<{ name: string; displayName?: string }>;
-    };
-
-    // If we got publishers (Model Garden), fetch models from each publisher
-    if (payload.publishers && Array.isArray(payload.publishers)) {
-      const allModels: ProviderModel[] = [];
-
-      for (const publisher of payload.publishers) {
-        try {
-          // Fetch models from this publisher
-          const publisherName = publisher.name.replace('publishers/', '');
-          const publisherModelsEndpoint = new URL(
-            `https://aiplatform.googleapis.com/v1/projects/${this.projectId}/locations/${this.location || 'us-central1'}/publishers/${publisherName}/models`
-          );
-
-          const publisherResponse = await fetch(publisherModelsEndpoint.toString(), {
-            method: 'GET',
-            headers: {
-              Authorization: headers.Authorization!,
-              'Content-Type': 'application/json',
-            },
-          });
-
-          if (publisherResponse.ok) {
-            const publisherData = (await publisherResponse.json()) as {
-              models?: Array<Record<string, unknown>>;
-            };
-            if (publisherData.models && Array.isArray(publisherData.models)) {
-              const converted = publisherData.models
-                .map((model) => this.convertVertexAIModel(model, publisherName))
-                .filter((m): m is ProviderModel => Boolean(m));
-              allModels.push(...converted);
-            }
-          }
-        } catch (error) {
-          this.log.warn({ publisher, error }, 'Failed to fetch models from publisher');
-        }
-      }
-
-      if (allModels.length > 0) {
-        this.log.info(
-          { models: allModels.length, publishers: payload.publishers.length },
-          'Successfully fetched foundation models from Vertex AI Model Garden'
-        );
-        return allModels;
-      }
-    }
-
-    // Fallback: if no publishers, try direct models endpoint (Google AI Studio)
-    const models = payload.models ?? [];
+      (payload) => (Array.isArray(payload.models) ? (payload.models as Array<Record<string, unknown>>) : [])
+    );
 
     return models
       .map((model) => this.convertGoogleAIModel(model))
       .filter((converted): converted is ProviderModel => Boolean(converted));
+  }
+
+  /**
+   * Vertex AI Model Garden (`aiplatform.googleapis.com`) branch — foundation
+   * models from every publisher (Google, Anthropic, Meta, etc.), keyed by
+   * gcloud application-default credentials for {@link projectId}.
+   *
+   * KNOWN GAP, deliberately left as-is by this change (see PR description):
+   * the official Google API Discovery document for `aiplatform.googleapis.com`
+   * (`https://aiplatform.googleapis.com/$discovery/rest?version=v1beta1`,
+   * checked 2026-09-14) shows the real `publishers.models.list` method takes
+   * an UNSCOPED `parent` of the form `publishers/{publisher}` (pattern
+   * `^publishers/[^/]+$`) with no project/location segment, exists only in
+   * `v1beta1` (the stable `v1` `publishers.models` resource has no `list`
+   * method at all, only inference methods), and its response field is
+   * `publisherModels[]`, not `models[]`. Neither API version exposes a
+   * `publishers.list` (or `projects.locations.publishers.list`) method to
+   * enumerate publishers dynamically at all. The endpoints called below
+   * (project/location-scoped) do not match that documented shape. This was
+   * NOT rewritten here because (a) this fix's scope is the projectId-vs-apiKey
+   * priority + pagination, not a full endpoint redesign, and (b) the
+   * production service account lacks `roles/aiplatform.user`, so there is no
+   * way to make a real authenticated call right now and confirm a rewritten
+   * endpoint would actually work instead of just failing a different way.
+   * Parsing below defensively accepts both `publisherModels` (the documented
+   * field) and `models` (this code's pre-existing assumption) so a real
+   * response is not silently dropped either way once IAM is granted.
+   */
+  private async fetchFromModelGarden(): Promise<ProviderModel[]> {
+    const { default: fetch } = await import('node-fetch');
+
+    let accessToken: string;
+    try {
+      accessToken = await this.executeGcloudCommand([
+        'auth',
+        'application-default',
+        'print-access-token',
+      ]);
+    } catch (error: unknown) {
+      const { getErrorMessage, extractErrorCodeFromObject } = await import('@/utils/type-guards');
+      const errorMessage = getErrorMessage(error);
+      const errorCode = extractErrorCodeFromObject(error);
+
+      // Safely extract stderr from error object
+      let stderr: unknown;
+      if (typeof error === 'object' && error !== null && 'stderr' in error) {
+        stderr = error.stderr;
+      }
+
+      this.log.warn(
+        {
+          error: { message: errorMessage, code: errorCode, stderr },
+          projectId: this.projectId,
+          location: this.location,
+          hint: 'Run "gcloud auth application-default login" to configure authentication',
+        },
+        'Failed to get gcloud access token for Vertex AI Model Garden'
+      );
+      throw error instanceof Error ? error : new Error(errorMessage);
+    }
+
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${accessToken}`,
+    };
+
+    // Vertex AI Model Garden foundation models are listed via publishers endpoint.
+    // First get publishers (Google, Anthropic, etc.) which contain foundation models.
+    const modelLocation = 'us-central1'; // Model Garden publishers are typically in us-central1
+    const publishersEndpoint = new URL(
+      `https://aiplatform.googleapis.com/v1/projects/${this.projectId}/locations/${modelLocation}/publishers`
+    );
+
+    const publishers = await this.fetchAllPages<{ name: string; displayName?: string }>(
+      fetch,
+      publishersEndpoint,
+      headers,
+      (payload) =>
+        Array.isArray(payload.publishers)
+          ? (payload.publishers as Array<{ name: string; displayName?: string }>)
+          : []
+    );
+
+    const allModels: ProviderModel[] = [];
+
+    for (const publisher of publishers) {
+      try {
+        // Fetch models from this publisher
+        const publisherName = publisher.name.replace('publishers/', '');
+        const publisherModelsEndpoint = new URL(
+          `https://aiplatform.googleapis.com/v1/projects/${this.projectId}/locations/${this.location || 'us-central1'}/publishers/${publisherName}/models`
+        );
+
+        const publisherModels = await this.fetchAllPages<Record<string, unknown>>(
+          fetch,
+          publisherModelsEndpoint,
+          headers,
+          (payload) => {
+            if (Array.isArray(payload.publisherModels)) {
+              return payload.publisherModels as Array<Record<string, unknown>>;
+            }
+            if (Array.isArray(payload.models)) {
+              return payload.models as Array<Record<string, unknown>>;
+            }
+            return [];
+          }
+        );
+
+        const converted = publisherModels
+          .map((model) => this.convertVertexAIModel(model, publisherName))
+          .filter((m): m is ProviderModel => Boolean(m));
+        allModels.push(...converted);
+      } catch (error) {
+        this.log.warn({ publisher, error }, 'Failed to fetch models from publisher');
+      }
+    }
+
+    if (allModels.length > 0) {
+      this.log.info(
+        { models: allModels.length, publishers: publishers.length },
+        'Successfully fetched foundation models from Vertex AI Model Garden'
+      );
+    }
+
+    return allModels;
+  }
+
+  private async fetchModelsFromGoogleAPI(): Promise<ProviderModel[]> {
+    if (this.projectId) {
+      // 2026-09 priority fix: Model Garden (Anthropic/Meta/etc. foundation
+      // models) is now tried FIRST whenever a projectId is configured, even
+      // if an apiKey is ALSO present. Production passes both
+      // `<prefix>-vertex-key` (apiKey) and `<prefix>-vertex-project-id` (projectId)
+      // together (see central-model-discovery-service.ts ~L1309-1316) — under
+      // the OLD apiKey-first priority, Model Garden was never even attempted,
+      // so this provider was permanently stuck on Google AI Studio's native
+      // Gemini catalog only (confirmed LIVE 2026-09-14: 50/56 models, zero
+      // matches for claude|anthropic|llama|meta). Falls back to
+      // apiKey/Google AI Studio below on ANY Model Garden failure (auth,
+      // network, wrong endpoint shape, zero results) so this reorder cannot
+      // regress the apiKey-only behavior that was already working.
+      try {
+        const modelGardenModels = await this.fetchFromModelGarden();
+        if (modelGardenModels.length > 0) {
+          return modelGardenModels;
+        }
+        this.log.warn(
+          { projectId: this.projectId, location: this.location },
+          'Vertex AI Model Garden returned zero models'
+        );
+      } catch (error: unknown) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        const errorObj = error && typeof error === 'object' && error !== null ? error : {};
+        const errorDetails: { message: string; code?: unknown; status?: unknown } = {
+          message: errorMessage,
+        };
+        if ('code' in errorObj) errorDetails.code = errorObj.code;
+        if ('status' in errorObj) errorDetails.status = errorObj.status;
+        this.log.warn(
+          { error: errorDetails, projectId: this.projectId, location: this.location },
+          'Vertex AI Model Garden discovery failed'
+        );
+      }
+
+      if (this.apiKey) {
+        this.log.warn(
+          'Falling back to Google AI Studio (generativelanguage.googleapis.com) after Model ' +
+            'Garden produced no models - this only returns native Gemini models, not ' +
+            'third-party Model Garden publishers (Anthropic, Meta, etc.)'
+        );
+        return this.fetchFromGoogleAIStudio();
+      }
+
+      // No apiKey available to fall back to - surface the Model Garden
+      // outcome (empty) as-is, same as before this change.
+      return [];
+    }
+
+    if (this.apiKey) {
+      return this.fetchFromGoogleAIStudio();
+    }
+
+    throw new Error('Vertex AI requires either API key or projectId with gcloud auth');
   }
 
   /**

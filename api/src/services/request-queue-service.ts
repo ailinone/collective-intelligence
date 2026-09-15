@@ -16,7 +16,7 @@
  * Architecture:
  *   - Queue: Absorbs bursts (10,000+ req/s → managed processing)
  *   - Workers: Process queued requests (20 workers, 100 concurrency each)
- *   - Priority: Enterprise > Pro > Free tiers
+ *   - Priority: Enterprise > Pro > Starter > Free tiers
  *   - Timeout: Max 120s in queue
  *
  * Benefits:
@@ -41,6 +41,8 @@ import { config } from '@/config';
 import { disableQueueRuntime, getQueueRuntimeState } from '@/queue/queue-runtime-state';
 import { queueResultService } from '@/services/request-queue-result-service';
 import { queueSize, queueProcessed, queueWaitTime } from '@/utils/metrics';
+import { TierLevel } from '@/domain/value-objects/organization-tier';
+import { calculateQueuePriority } from '@/services/queue-priority';
 
 /**
  * Queue job data
@@ -238,7 +240,7 @@ class RequestQueueService {
     userId: string | undefined,
     request: ChatRequest,
     context: OrchestrationContext | undefined,
-    tier: 'enterprise' | 'pro' | 'free' = 'free'
+    tier: TierLevel = TierLevel.FREE
   ): Promise<QueuedResponse> {
     const runtimeState = getQueueRuntimeState();
     if (!runtimeState.enabled || !this.queue) {
@@ -313,26 +315,13 @@ class RequestQueueService {
   }
 
   /**
-   * Calculate priority based on tier
-   *
-   * Priority tiers:
-   *   - Enterprise: 1-1000 (highest priority)
-   *   - Pro: 1001-5000
-   *   - Free: 5001-10000 (lowest priority)
+   * Calculate priority based on tier. See `@/services/queue-priority` for
+   * the actual (unit-tested) calculation — kept out of this class because
+   * this class's constructor has real Redis/BullMQ side effects that make
+   * it unsuitable to import from a hermetic unit test.
    */
-  private calculatePriority(tier: 'enterprise' | 'pro' | 'free'): number {
-    const basePriorities = {
-      enterprise: config.queue.priority.enterprise,
-      pro: config.queue.priority.pro,
-      free: config.queue.priority.free,
-    };
-
-    // Add jitter to prevent starvation
-    const jitterRange = config.queue.priority.jitter;
-    const jitter =
-      jitterRange > 0 ? Math.floor(Math.random() * (jitterRange * 2 + 1)) - jitterRange : 0;
-
-    return Math.max(1, basePriorities[tier] + jitter);
+  private calculatePriority(tier: TierLevel): number {
+    return calculateQueuePriority(tier);
   }
 
   /**

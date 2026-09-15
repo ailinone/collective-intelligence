@@ -30,6 +30,22 @@
  *
  * Also carries the same explicit-User-Agent fix as #208/#210: featherless's
  * Cloudflare edge silently 404s Node's default `User-Agent: node`.
+ *
+ * Deep-pagination ceiling (confirmed live 2026-09-14): beyond an offset of
+ * roughly 21,957 rows, every page comes back with `data: []` while
+ * `pagination.total_items`/`total_pages` keep reporting the full, unchanged
+ * catalog size — reproducible across per_page values (100/500/1000) at the
+ * same offset, and stable across immediate retries and all the way through
+ * the vendor's own reported last page. This is very likely the vendor's
+ * search/index backend hitting its own max pagination-depth window (common
+ * for Elasticsearch/OpenSearch-style deep pagination) while its COUNT query
+ * (used for total_items/total_pages) is unaffected. Because that ceiling
+ * could shift between runs (index resize, backend fix, etc.), the loop below
+ * does NOT treat "empty page" as "catalog exhausted" — it trusts the
+ * vendor's own total_pages instead, logging empty-but-in-range pages as a
+ * warning rather than stopping on them. See the getModels()/maxConsecutiveEmptyPages
+ * comments below for the full reasoning and the separate safety net for a
+ * vendor whose total_pages itself never converges.
  */
 
 import { BaseProviderModelFetcher, type ProviderModel } from './provider-model-fetcher';
@@ -71,6 +87,7 @@ export class FeatherlessModelFetcher extends BaseProviderModelFetcher {
   private readonly apiKey: string;
   private readonly requestTimeoutMs: number;
   private readonly maxPages: number;
+  private readonly maxConsecutiveEmptyPages: number;
   private readonly log = logger.child({ component: 'featherless-ai-fetcher' });
 
   constructor(
@@ -95,12 +112,35 @@ export class FeatherlessModelFetcher extends BaseProviderModelFetcher {
     // after ~23 requests. Still env-overridable so raising it further never
     // requires a code change, and a warn-level log below makes it loud if a
     // run ever actually reaches it.
-    maxPages = Number(process.env.FEATHERLESS_DISCOVERY_MAX_PAGES || '500')
+    maxPages = Number(process.env.FEATHERLESS_DISCOVERY_MAX_PAGES || '500'),
+    // Safety valve for a vendor that reports `total_pages` but then never
+    // stops returning empty pages (see the empty-page handling below) — caps
+    // how many *consecutive* empty pages we tolerate before giving up early,
+    // independent of maxPages. Confirmed live 2026-09-14 (per_page=1000):
+    // featherless-ai's `/v1/models` has a deep-pagination ceiling around
+    // offset ~21,957 — every page at or beyond that offset comes back with
+    // `data: []` while `pagination.total_items`/`total_pages` keep reporting
+    // the full, unchanged catalog size (49,587 items / 50 pages). That is a
+    // genuine, reproducible run of ~28 consecutive empty pages (23 through
+    // the real last page, 50) that must NOT be treated as "vendor is broken,
+    // abort" — total_pages is the authoritative stop signal, so the loop
+    // below walks all the way to page > total_pages regardless of how many
+    // empty pages it sees along the way. This threshold exists only to catch
+    // a *different* failure: total_pages itself being wrong/stuck (e.g. a
+    // vendor regression that reports a wildly inflated total_pages forever)
+    // — set comfortably above the ~28-page anomaly actually observed so it
+    // never fires for that, but still short of the 500-page maxPages ceiling
+    // so a truly broken vendor fails loud instead of silently burning 500
+    // requests every single discovery run.
+    maxConsecutiveEmptyPages = Number(
+      process.env.FEATHERLESS_DISCOVERY_MAX_CONSECUTIVE_EMPTY_PAGES || '50'
+    )
   ) {
     super();
     this.apiKey = apiKey;
     this.requestTimeoutMs = requestTimeoutMs;
     this.maxPages = maxPages;
+    this.maxConsecutiveEmptyPages = maxConsecutiveEmptyPages;
   }
 
   async getModels(): Promise<ProviderModel[]> {
@@ -115,6 +155,8 @@ export class FeatherlessModelFetcher extends BaseProviderModelFetcher {
     const all: FeatherlessModelEntry[] = [];
     let totalPages = 1;
     let pagesFetched = 0;
+    let consecutiveEmptyPages = 0;
+    let abortedOnConsecutiveEmptyPages = false;
 
     for (let page = 1; page <= totalPages && page <= this.maxPages; page++) {
       const url = `https://api.featherless.ai/v1/models?page=${page}&per_page=${PER_PAGE}`;
@@ -148,20 +190,53 @@ export class FeatherlessModelFetcher extends BaseProviderModelFetcher {
 
       const pageModels = Array.isArray(body.data) ? body.data : [];
       pagesFetched++;
-      if (pageModels.length === 0) {
-        // A genuinely empty page (0 items) always means "no more data",
-        // regardless of what total_pages claims — trust this over the
-        // pagination metadata. A page with FEWER than per_page items is NOT
-        // treated as the end: featherless-ai's catalog is large and live,
-        // so even non-final pages can come back a few items short (e.g.
-        // 997-999 of 1000) — confirmed by direct reproduction. total_pages
-        // (re-read below, driving the loop's own bound) is what actually
-        // decides when to stop.
-        break;
-      }
-      all.push(...pageModels);
 
-      totalPages = body.pagination?.total_pages || totalPages;
+      // Re-read total_pages on every response (not just non-empty ones):
+      // it is the vendor's own, authoritative "is there more data" signal,
+      // and it can only be trusted if we keep refreshing it every page.
+      const nextTotalPages = body.pagination?.total_pages;
+
+      if (pageModels.length === 0) {
+        // An empty page does NOT reliably mean "no more data" for this
+        // vendor. Confirmed live 2026-09-14: featherless-ai's `/v1/models`
+        // has a deep-pagination ceiling around offset ~21,957 — every page
+        // at/after that offset comes back with `data: []` while
+        // `pagination.total_items`/`total_pages` keep reporting the full,
+        // unchanged catalog (49,587 items / 50 pages, including at the real
+        // last page, 50). Stopping on the first empty page here used to
+        // truncate the catalog to ~44% of its real size (~22k of ~49.5k
+        // models). total_pages is what actually decides when to stop, so an
+        // empty page inside that range is logged as an anomaly and treated
+        // as transient — the loop keeps walking toward total_pages instead
+        // of giving up.
+        consecutiveEmptyPages++;
+        totalPages = nextTotalPages || totalPages;
+
+        if (consecutiveEmptyPages > this.maxConsecutiveEmptyPages) {
+          // Distinct failure mode from the one above: this catches a vendor
+          // whose total_pages itself never converges (stuck/inflated), which
+          // would otherwise silently burn up to maxPages requests, all
+          // empty, on every single discovery run.
+          this.log.error(
+            { page, totalPages, consecutiveEmptyPages, maxConsecutiveEmptyPages: this.maxConsecutiveEmptyPages },
+            'Featherless AI discovery aborted: too many consecutive empty pages while ' +
+              'total_pages still claims more data exists — vendor pagination looks broken'
+          );
+          abortedOnConsecutiveEmptyPages = true;
+          break;
+        }
+
+        this.log.warn(
+          { page, totalPages, consecutiveEmptyPages },
+          'Featherless AI models page came back empty but total_pages says more data ' +
+            'should exist; treating as a transient vendor anomaly and continuing pagination'
+        );
+        continue;
+      }
+
+      consecutiveEmptyPages = 0;
+      all.push(...pageModels);
+      totalPages = nextTotalPages || totalPages;
     }
 
     const out = all
@@ -178,6 +253,7 @@ export class FeatherlessModelFetcher extends BaseProviderModelFetcher {
       received: all.length,
       emitted: out.length,
       capped,
+      abortedOnConsecutiveEmptyPages,
     };
     // Landmine guard (mirrors the HF Hub fetcher fix, 2026-09-08): `capped:
     // true` means featherless-ai's real catalog now exceeds this discovery's

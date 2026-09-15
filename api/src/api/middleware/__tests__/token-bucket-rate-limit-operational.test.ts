@@ -53,7 +53,7 @@ const mocks = vi.hoisted(() => {
     getBucketMock: vi.fn(),
     getRetryAfterMock: vi.fn(),
     getDefaultConfigMock: vi.fn(),
-    getTierConfigMock: vi.fn(),
+    resolveEffectiveTierConfigForHotPathMock: vi.fn(),
     resolveOrganizationIdMock: vi.fn(),
   };
 });
@@ -90,7 +90,7 @@ vi.mock('@/utils/logger', () => ({
 }));
 
 vi.mock('@/config/multi-tenancy-config', () => ({
-  getTierConfig: mocks.getTierConfigMock,
+  resolveEffectiveTierConfigForHotPath: mocks.resolveEffectiveTierConfigForHotPathMock,
 }));
 
 vi.mock('@/utils/context-headers', () => ({
@@ -172,7 +172,7 @@ beforeEach(() => {
   });
   mocks.getRetryAfterMock.mockResolvedValue(60_000);
   mocks.getDefaultConfigMock.mockReturnValue({ capacity: 100, refillRate: 1 });
-  mocks.getTierConfigMock.mockReturnValue(null);
+  mocks.resolveEffectiveTierConfigForHotPathMock.mockResolvedValue(null);
   mocks.resolveOrganizationIdMock.mockReturnValue(undefined);
 });
 

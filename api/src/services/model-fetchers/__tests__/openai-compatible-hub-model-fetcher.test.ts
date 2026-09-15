@@ -817,4 +817,133 @@ describe('openai-compatible-hub-model-fetcher', () => {
       expect(models[0].capabilities).toContain('vision');
     });
   });
+
+  describe('supported_endpoint_types declared-capability signal (UnoRouter and similar hubs)', () => {
+    // Live-verified 2026-09-14 against `GET https://api.unorouter.com/v1/models`
+    // (272 real models, field present on 100% of them). Before this fix,
+    // `supported_endpoint_types` was never read at all, so image-generation
+    // and embedding models with no recognizable id pattern silently fell
+    // through to the generic chat default -- and were therefore never
+    // returned by an `image_generation`/`embedding` capability search despite
+    // being physically present in the catalog. Ids below are real ones from
+    // that live response.
+
+    it('maps `image-generation` to the image_generation capability, ahead of the id-regex fallback', async () => {
+      vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+        jsonResponse({
+          data: [
+            {
+              id: 'dreamshaper-xl',
+              owned_by: 'runware',
+              supported_endpoint_types: ['image-generation'],
+            },
+          ],
+        })
+      );
+      const fetcher = new OpenAICompatibleHubModelFetcher({
+        providerName: 'unorouter',
+        apiKey: 'live-hub-key',
+        baseUrl: 'https://api.unorouter.com/v1',
+      });
+      const models = await fetcher.getModels();
+      expect(models).toHaveLength(1);
+      expect(models[0].capabilities).toContain('image_generation');
+      // Regression guard: `dreamshaper-xl` matches no pattern in
+      // model-capability-patterns.ts and previously landed on the generic
+      // ['chat', 'text_generation'] default -- must not happen now.
+      expect(models[0].capabilities).not.toContain('chat');
+    });
+
+    it('maps the `aihorde` endpoint type (AI Horde Stable Diffusion network) to image_generation', async () => {
+      vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+        jsonResponse({
+          data: [
+            {
+              id: 'albedobase-xl-31:free',
+              owned_by: 'ai horde',
+              supported_endpoint_types: ['aihorde'],
+            },
+          ],
+        })
+      );
+      const fetcher = new OpenAICompatibleHubModelFetcher({
+        providerName: 'unorouter',
+        apiKey: 'live-hub-key',
+        baseUrl: 'https://api.unorouter.com/v1',
+      });
+      const models = await fetcher.getModels();
+      expect(models[0].capabilities).toContain('image_generation');
+      expect(models[0].capabilities).not.toContain('chat');
+    });
+
+    it('maps `embedding` to the embedding/embeddings capabilities, ahead of the id-regex fallback', async () => {
+      vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+        jsonResponse({
+          data: [
+            {
+              id: 'qwen3-embedding-8b:free',
+              owned_by: 'openai',
+              supported_endpoint_types: ['openai', 'embedding'],
+            },
+          ],
+        })
+      );
+      const fetcher = new OpenAICompatibleHubModelFetcher({
+        providerName: 'unorouter',
+        apiKey: 'live-hub-key',
+        baseUrl: 'https://api.unorouter.com/v1',
+      });
+      const models = await fetcher.getModels();
+      expect(models[0].capabilities).toContain('embedding');
+      expect(models[0].capabilities).toContain('embeddings');
+      // Regression guard: bare `qwen3-embedding-8b` does not match the
+      // embedding patterns in model-capability-patterns.ts (only the
+      // delimiter-safe e5/bge/gte family patterns do), and `qwen` alone
+      // would otherwise match the chat family regex.
+      expect(models[0].capabilities).not.toContain('chat');
+    });
+
+    it('does not treat wire-protocol-only endpoint types (openai/anthropic/gemini/openai-response*) as a capability signal', async () => {
+      // `gemini` here just means "call this model via the Gemini native API
+      // shape" -- it says nothing about the model being anything other than
+      // a normal chat model, so it must not be mapped to any capability.
+      // This model still ends up with 'chat' via the pre-existing id-regex
+      // fallback (unaffected by this change).
+      vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+        jsonResponse({
+          data: [
+            {
+              id: 'gemini-3-flash',
+              owned_by: 'google gemini',
+              supported_endpoint_types: ['gemini', 'openai'],
+            },
+          ],
+        })
+      );
+      const fetcher = new OpenAICompatibleHubModelFetcher({
+        providerName: 'unorouter',
+        apiKey: 'live-hub-key',
+        baseUrl: 'https://api.unorouter.com/v1',
+      });
+      const models = await fetcher.getModels();
+      expect(models[0].capabilities).not.toContain('image_generation');
+      expect(models[0].capabilities).not.toContain('embedding');
+      expect(models[0].capabilities).toContain('chat');
+    });
+
+    it('falls back to the existing id-regex/default behavior when supported_endpoint_types is absent (no regression)', async () => {
+      vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+        jsonResponse({
+          data: [{ id: 'some-hub-model-with-no-endpoint-types' }],
+        })
+      );
+      const fetcher = new OpenAICompatibleHubModelFetcher({
+        providerName: 'some-other-hub',
+        apiKey: 'live-hub-key',
+        baseUrl: 'https://api.example.com',
+      });
+      const models = await fetcher.getModels();
+      expect(models[0].capabilities).toEqual(['chat', 'text_generation']);
+    });
+  });
 });

@@ -92,6 +92,46 @@ const HUB_METADATA_GAP_FILL: Record<
 const HUB_FETCHER_DEFAULT_CONTEXT_WINDOW = 8192;
 
 /**
+ * Maps a hub's declared `supported_endpoint_types` value to this codebase's
+ * canonical `ModelCapability` vocabulary (see `@/types`). This is a
+ * provider-DECLARED, structural signal — which backend route the vendor
+ * itself serves the model on — so it is folded into `declaredCapabilities`
+ * in `buildMetadata` below at the SAME priority as the `capabilities`/
+ * `features`/`supported_capabilities` keys: strictly before the model-id
+ * regex fallback (`inferCapabilitiesFromModelId`) in `convertRawModel`,
+ * which only ever runs when no declared capability was found at all.
+ *
+ * Live-verified 2026-09-14 against `GET https://api.unorouter.com/v1/models`
+ * (272 real models, `supported_endpoint_types` present on 100% of them).
+ * Eight distinct values were observed. Five of them —`openai`, `anthropic`,
+ * `gemini`, `openai-response`, `openai-response-compact`— are wire-protocol/
+ * routing labels (which chat-completions API shape to call), not an
+ * additional capability signal, and are intentionally NOT mapped here: chat
+ * is already this fetcher's default assumption, so mapping them would add
+ * no information. The three mapped below ARE a real capability declaration:
+ *   - `image-generation`: Runware/Cloudflare-hosted image checkpoints (e.g.
+ *     `dreamshaper-xl`, `flux.2-dev`) whose ids don't match any pattern in
+ *     `model-capability-patterns.ts`, so today they silently fall through to
+ *     the generic chat default. 55 of unorouter's 272 models (aihorde +
+ *     image-generation combined) were confirmed to be affected this way.
+ *   - `aihorde`: the AI Horde crowd-sourced Stable Diffusion network. 100%
+ *     of the 22 `aihorde`-tagged models observed are SD/SDXL image
+ *     checkpoints (`albedobase-xl-31:free`, `juggernaut-xl:free`, ...) —
+ *     never a text/chat backend on this hub.
+ *   - `embedding`: always paired with `openai` in the combo (e.g.
+ *     `qwen3-embedding-8b:free`, `jina-embeddings-v4:free`, `sea-lion-
+ *     modernbert-embedding-600m:free`). 11 of the 19 `embedding`-tagged
+ *     models had no embedding-shaped id at all (or, for the two
+ *     `gemini-embedding-*` rows, matched the unrelated `gemini` chat-family
+ *     regex instead) and fell through to chat/default before this fix.
+ */
+const ENDPOINT_TYPE_CAPABILITY_MAP: Record<string, ModelCapability[]> = {
+  'image-generation': ['image_generation'],
+  aihorde: ['image_generation'],
+  embedding: ['embedding', 'embeddings'],
+};
+
+/**
  * Node's global `fetch` (undici) sends `User-Agent: node` when no override
  * is given. Some providers front their API with a WAF that silently blocks
  * that exact UA (e.g. featherless-ai's Cloudflare edge returns a generic
@@ -526,6 +566,28 @@ export class OpenAICompatibleHubModelFetcher extends BaseProviderModelFetcher {
       'supported_capabilities',
       'supportedCapabilities',
     ]) as ModelCapability[];
+
+    // `supported_endpoint_types` (UnoRouter and similar OpenAI-compatible
+    // aggregators): a vendor-declared list of backend route labels for the
+    // model. Mapped via ENDPOINT_TYPE_CAPABILITY_MAP (see that constant's
+    // doc comment for the live-verified values and why only a subset of
+    // them carry capability information) and folded into the same
+    // `declaredCapabilities` bucket as `capabilities`/`features`/etc above —
+    // this is provider-declared, not inferred, so it must win over the
+    // model-id regex fallback further down in `convertRawModel`.
+    const declaredEndpointTypes = this.extractStringArray(rawModel, [
+      'supported_endpoint_types',
+      'supportedEndpointTypes',
+    ]);
+    for (const endpointType of declaredEndpointTypes) {
+      const mapped = ENDPOINT_TYPE_CAPABILITY_MAP[normalizeProviderToken(endpointType)];
+      if (!mapped) continue;
+      for (const capability of mapped) {
+        if (!declaredCapabilities.includes(capability)) {
+          declaredCapabilities.push(capability);
+        }
+      }
+    }
 
     // Vendor-extension capabilities (wafer serverless): per-surface boolean
     // flags under `wafer.capabilities` — {vision, tools, reasoning, ...} —

@@ -36,6 +36,7 @@
 import { timingSafeEqual } from 'crypto';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { FastifyInstance } from 'fastify';
+import { z } from 'zod';
 import { logger } from '@/utils/logger';
 import {
   requireServiceAuth,
@@ -43,10 +44,27 @@ import {
 } from '@/api/middleware/internal-service-auth-middleware';
 import { resolveOrProvisionActingUser } from '@/services/internal-acting-user';
 import { walletInstance, isWalletGateEnabled } from '@/services/prepaid-wallet-gate';
+import { getBillingActorHeaders } from '@/services/billing-actor-token';
 
 const log = logger.child({ component: 'internal-wallet-routes' });
 const SCOPE_READ = 'apikeys:read:on_behalf';
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * Shape of a successful `POST /v1/billing/checkout/credits` response body
+ * from the billing service, either flat or wrapped in billing's
+ * `ApiResponse.success` envelope (`{data: {...}}`) — see the call site below.
+ *
+ * Runtime-validated (not just cast) because this response crosses a service
+ * boundary: a malformed or shape-shifted billing response must fail loudly
+ * here rather than propagate as `{url: undefined}` to the portal BFF, which
+ * would otherwise try to redirect a user's browser to an undefined checkout
+ * URL with an HTTP 200.
+ */
+const billingCheckoutCreditsResponseSchema = z.object({
+  url: z.string().min(1),
+  session_id: z.string().optional(),
+});
 
 function secretsMatch(a: string, b: string): boolean {
   const ba = Buffer.from(a);
@@ -142,6 +160,19 @@ export async function internalWalletRoutes(server: FastifyInstance): Promise<voi
    * X-Acting-User), so the portal BFF only ever talks to ci-internal. Proxies to
    * the billing service's producer; on payment, billing's webhook mirrors the
    * credit into this org's wallet (POST /v1/internal/wallet/topup).
+   *
+   * Outbound auth to billing carries BOTH channels billing accepts (dual
+   * mode, Fase 4): the static `Billing-Api-Secret-Key` this call has always
+   * sent, and now also the signed service-token channel
+   * (services/billing-actor-token.ts — same helper billing-entitlements-
+   * client.ts uses) via `Authorization: Bearer` + `X-Acting-Tenant-Id`.
+   * Billing's `verify_service_token` cross-checks the token's tenant_id
+   * against the route's own tenant_id (here: `x-tenant-id`, still sent
+   * unchanged) and rejects a mismatch — this call has always asserted the
+   * acting user's OWN organizationId in both places, so that check can only
+   * ever agree with itself. Minting never blocks the call: a failure (id
+   * unreachable, secret unconfigured) yields an empty header set and this
+   * still proceeds on the static secret alone, exactly as it always has.
    */
   server.post(
     '/v1/internal/billing/checkout-credits',
@@ -184,12 +215,14 @@ export async function internalWalletRoutes(server: FastifyInstance): Promise<voi
       }
 
       try {
+        const actorHeaders = await getBillingActorHeaders(user.organizationId);
         const res = await fetch(`${billingUrl}/v1/billing/checkout/credits`, {
           method: 'POST',
           headers: {
             'content-type': 'application/json',
             'billing-api-secret-key': billingSecret,
             'x-tenant-id': user.organizationId,
+            ...actorHeaders,
           },
           body: JSON.stringify({
             amount_usd: amountUsd,
@@ -205,8 +238,22 @@ export async function internalWalletRoutes(server: FastifyInstance): Promise<voi
           return reply.code(res.status).send(data);
         }
         // billing wraps via ApiResponse.success — accept {url} or {data:{url}}.
-        const inner = (data.data ?? data) as { url?: string; session_id?: string };
-        return reply.send({ url: inner.url, sessionId: inner.session_id });
+        const innerRaw = data.data ?? data;
+        const parsed = billingCheckoutCreditsResponseSchema.safeParse(innerRaw);
+        if (!parsed.success) {
+          log.error(
+            {
+              organizationId: user.organizationId,
+              issues: parsed.error.issues,
+            },
+            'billing checkout-credits returned an unexpected response shape'
+          );
+          return reply.code(502).send({
+            error: 'billing_invalid_response',
+            message: 'Billing returned an unexpected response for the checkout session.',
+          });
+        }
+        return reply.send({ url: parsed.data.url, sessionId: parsed.data.session_id });
       } catch (error) {
         log.error({ error, organizationId: user.organizationId }, 'billing checkout proxy failed');
         return reply

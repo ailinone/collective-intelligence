@@ -11,7 +11,10 @@
  * Cartesia Provider Adapter
  *
  * TTS-first provider: Ultra-low latency speech synthesis (Sonic)
- * Auth: `X-API-Key: ${apiKey}`
+ * Auth: `Authorization: Bearer ${apiKey}` (see `authHeaders()` for the
+ * live-verification note: Cartesia's REST API also accepts the legacy
+ * `X-API-Key` header, but `Authorization: Bearer` is the one documented at
+ * docs.cartesia.ai and is what this adapter sends).
  * TTS REST: POST /tts/bytes
  * TTS WebSocket: wss://api.cartesia.ai/tts/websocket (streaming)
  *
@@ -111,9 +114,26 @@ export class CartesiaAdapter extends ProviderAdapter {
     this.baseUrl = (config.baseUrl || 'https://api.cartesia.ai').replace(/\/+$/, '');
   }
 
+  /**
+   * Auth header for `POST /tts/bytes` and `GET /voices`.
+   *
+   * Was `X-API-Key: ${apiKey}`, an undocumented header this adapter had
+   * been sending since the original discovery-audit note (2026-09-10/12)
+   * that only checked the model-listing route, not the auth scheme itself.
+   * docs.cartesia.ai's reference for both `POST /tts/bytes` and
+   * `GET /voices` (fetched 2026-09-14) defines the security scheme as
+   * `Authorization: Bearer $CARTESIA_API_KEY` (`sk_car_...`), not
+   * `X-API-Key`. Live-verified against the real API on 2026-09-14 (`GET
+   * /voices` with the production key): BOTH header forms currently return
+   * `200` with the same voice list, so `X-API-Key` was never actually
+   * broken here, but it is undocumented, unofficial behavior Cartesia
+   * could drop without notice. Switched to the documented
+   * `Authorization: Bearer` form so this adapter isn't relying on
+   * unofficial/legacy compatibility handling.
+   */
   private authHeaders(): Record<string, string> {
     return {
-      'X-API-Key': this.config.apiKey,
+      Authorization: `Bearer ${this.config.apiKey}`,
       'Cartesia-Version': CARTESIA_VERSION,
     };
   }

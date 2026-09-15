@@ -149,6 +149,42 @@ export const MODEL_AUTO_DISABLE_THRESHOLD_MS = (() => {
   return Number.isFinite(override) && override > 0 ? override : DEFAULT_MS;
 })();
 
+/**
+ * 2026-09-13 INCIDENT + FIX: a bulk data-correction UPDATE (retroactively
+ * reversing the 2026-09-08 incident above, plus later false-positive
+ * corrections) flipped `status` back to 'active' on ~18,470 rows WITHOUT
+ * setting `last_synced_at` — so those rows carried `last_synced_at: NULL`
+ * forward. This sweep's own candidate query below matches `last_synced_at IS
+ * NULL` unconditionally (no threshold applies to NULL), so any of those rows
+ * that ordinary discovery didn't happen to re-touch in the following two days
+ * got disabled AGAIN the very next time this sweep's cursor reached them —
+ * 13,569 rows, 13,179 of them `huggingface`, all disabled in the single
+ * 2026-09-13 05:00 UTC tick. Confirmed 100% correlated: every one of those
+ * rows had `metadata.manualReEnabledAt` set and `last_synced_at IS NULL`.
+ * This was not a new credential/discovery outage — HF discovery had a clean
+ * <7-day `last_synced_at` for every other active row the whole time — it was
+ * this sweep faithfully doing exactly what a manual reactivation that skips
+ * `last_synced_at` sets it up to do.
+ *
+ * Fix: a row manually reactivated recently is exempted from THIS sweep for
+ * `MODEL_MANUAL_REENABLE_GRACE_MS` after `metadata.manualReEnabledAt`,
+ * whether or not `last_synced_at` is null — giving ordinary discovery (or an
+ * operator's explicit live-check) a real window to either genuinely
+ * reconfirm the row or correct it back to 'disabled' with evidence, instead
+ * of this sweep silently redoing that judgment call from a NULL alone. This
+ * does not replace fixing the root cause (any future manual reactivation
+ * SQL/script MUST set `last_synced_at = now()` at the same time it flips
+ * `status`) — it is the row-level analogue of `getProvidersWithoutHealthy
+ * Discovery()`'s provider-level circuit breaker, for exactly the failure
+ * mode that breaker cannot see (the provider's discovery is healthy; these
+ * specific rows just were never individually reconfirmed).
+ */
+export const MODEL_MANUAL_REENABLE_GRACE_MS = (() => {
+  const override = Number(process.env.MODEL_MANUAL_REENABLE_GRACE_MS);
+  const DEFAULT_MS = 14 * 24 * 60 * 60 * 1000;
+  return Number.isFinite(override) && override > 0 ? override : DEFAULT_MS;
+})();
+
 export function isModelAutoDisableEnabled(): boolean {
   return process.env.MODEL_AUTO_DISABLE_DISABLED !== 'true';
 }
@@ -285,12 +321,13 @@ export async function autoDisableDelistedModels(): Promise<{
   found: number;
   disabled: number;
   skippedUnhealthySource: number;
+  skippedManualReenableGrace: number;
 }> {
   if (!isModelAutoDisableEnabled()) {
     log.info(
       'MODEL_AUTO_DISABLE_DISABLED=true — skipping delisted-model auto-disable sweep'
     );
-    return { found: 0, disabled: 0, skippedUnhealthySource: 0 };
+    return { found: 0, disabled: 0, skippedUnhealthySource: 0, skippedManualReenableGrace: 0 };
   }
 
   const cutoff = new Date(Date.now() - MODEL_AUTO_DISABLE_THRESHOLD_MS);
@@ -304,7 +341,7 @@ export async function autoDisableDelistedModels(): Promise<{
   const found = Number(totalRow[0]?.count ?? 0n);
 
   if (found === 0) {
-    return { found: 0, disabled: 0, skippedUnhealthySource: 0 };
+    return { found: 0, disabled: 0, skippedUnhealthySource: 0, skippedManualReenableGrace: 0 };
   }
 
   // Circuit breaker (2026-09-08 incident fix): a provider whose discovery
@@ -356,6 +393,7 @@ export async function autoDisableDelistedModels(): Promise<{
 
   let disabled = 0;
   let skippedUnhealthySource = 0;
+  let skippedManualReenableGrace = 0;
   let cursor: string | null = null;
   const disabledSample: Array<{
     uid: string;
@@ -400,6 +438,28 @@ export async function autoDisableDelistedModels(): Promise<{
         row.metadata && typeof row.metadata === 'object' && !Array.isArray(row.metadata)
           ? (row.metadata as Record<string, unknown>)
           : {};
+
+      // Row-level exemption (2026-09-13 incident fix, see the doc comment on
+      // MODEL_MANUAL_REENABLE_GRACE_MS above): a row manually reactivated
+      // recently gets a grace window before this sweep can re-disable it,
+      // even if `last_synced_at` is still null — a real discovery pass or an
+      // explicit re-verification gets to make the call, not a bare NULL.
+      const manualReEnabledAtRaw = meta.manualReEnabledAt;
+      if (typeof manualReEnabledAtRaw === 'string') {
+        const manualReEnabledAtMs = Date.parse(manualReEnabledAtRaw);
+        if (
+          Number.isFinite(manualReEnabledAtMs) &&
+          Date.now() - manualReEnabledAtMs < MODEL_MANUAL_REENABLE_GRACE_MS
+        ) {
+          skippedManualReenableGrace++;
+          log.info(
+            { uid: row.uid, id: row.id, providerId: row.provider_id, manualReEnabledAtRaw },
+            'Model auto-disable: skipped — row was manually reactivated recently, still inside ' +
+              'MODEL_MANUAL_REENABLE_GRACE_MS (grace period; see the 2026-09-13 doc comment)'
+          );
+          continue;
+        }
+      }
 
       const lastSyncedAtIso = row.last_synced_at ? row.last_synced_at.toISOString() : null;
       const newMeta: Record<string, unknown> = {
@@ -468,11 +528,11 @@ export async function autoDisableDelistedModels(): Promise<{
   }
 
   log.warn(
-    { found, disabled, skippedUnhealthySource, sample: disabledSample },
+    { found, disabled, skippedUnhealthySource, skippedManualReenableGrace, sample: disabledSample },
     'Model auto-disable sweep complete — see central-model-discovery-service.ts for the matching auto-re-enable path'
   );
 
-  return { found, disabled, skippedUnhealthySource };
+  return { found, disabled, skippedUnhealthySource, skippedManualReenableGrace };
 }
 
 /**

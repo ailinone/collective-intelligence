@@ -19,7 +19,7 @@
 import type { FastifyRequest, FastifyReply } from 'fastify';
 import { tokenBucketManager, safeLogIdentifier } from '@/core/resilience/token-bucket-limiter';
 import { logger } from '@/utils/logger';
-import { getTierConfig } from '@/config/multi-tenancy-config';
+import { resolveEffectiveTierConfigForHotPath, type TierConfig } from '@/config/multi-tenancy-config';
 import type { TenantContext } from '@/api/middleware/tenant-isolation-middleware';
 import type { ExtendedFastifyRequest } from '@/types/fastify-extended';
 import { getHeaderString } from '@/utils/type-guards';
@@ -106,9 +106,26 @@ function isOperationalRoute(path: string): boolean {
  */
 const MIN_SCOPE_BURST_CAPACITY = 10;
 
-function resolveScopeConfig(scope: string, tenantContext: TenantContext | undefined) {
+/**
+ * Resolves the effective TierConfig for a request ONCE (cross-repo quota/tier
+ * follow-up, item 1) — not once per scope. `tokenBucketRateLimitMiddleware`
+ * checks up to 4 scopes per request via `Promise.all`; calling this per scope
+ * would mean up to 4 independent billing/Redis round-trips for the exact
+ * same organization on the exact same request. Bounded-latency (see
+ * `resolveEffectiveTierConfigForHotPath`'s own doc) so a slow/cold billing
+ * call can only ever cost this one short, capped wait, never longer.
+ */
+async function resolveTierConfigForRequest(
+  tenantContext: TenantContext | undefined
+): Promise<TierConfig | null> {
+  if (!tenantContext?.tier) {
+    return null;
+  }
+  return await resolveEffectiveTierConfigForHotPath(tenantContext.tier, tenantContext.organizationId);
+}
+
+function resolveScopeConfig(scope: string, tierConfig: TierConfig | null) {
   const base = tokenBucketManager.getDefaultConfig(scope);
-  const tierConfig = tenantContext?.tier ? getTierConfig(tenantContext.tier) : null;
   if (!tierConfig) {
     return base;
   }
@@ -315,13 +332,14 @@ export async function tokenBucketRateLimitMiddleware(
   }
 
   const extendedRequest = request as ExtendedFastifyRequest;
+  const tierConfig = await resolveTierConfigForRequest(extendedRequest.tenantContext);
   const results = await Promise.all(
     activeChecks.map(async (check) => {
       try {
         const bucket = tokenBucketManager.getBucket(
           check.scope,
           check.identifier,
-          resolveScopeConfig(check.scope, extendedRequest.tenantContext)
+          resolveScopeConfig(check.scope, tierConfig)
         );
         // Single Redis round-trip for both the allow/deny decision AND the stats
         // needed for X-RateLimit-* headers (was consume() + getStats() = 2 round-trips).

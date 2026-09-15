@@ -17,6 +17,7 @@ import { container } from 'tsyringe';
 import { authenticate, requireRole } from '@/middleware/auth-middleware';
 import { requirePermission } from '@/middleware/require-permission-middleware';
 import type { ExtendedFastifyRequest } from '@/types/fastify-extended';
+import { TierLevel } from '@/domain/value-objects/organization-tier';
 import { ListOrganizationsHandler } from '@/application/handlers/list-organizations.handler';
 import { GetOrganizationHandler } from '@/application/handlers/get-organization.handler';
 import { UpdateOrganizationHandler } from '@/application/handlers/update-organization.handler';
@@ -28,6 +29,15 @@ import { UpdateOrganizationCommand } from '@/application/commands/update-organiz
 import { ListOrganizationMembersQuery } from '@/application/queries/list-organization-members.query';
 import { RemoveOrganizationMemberCommand } from '@/application/commands/remove-organization-member.command';
 import { initializeDIContainer } from '@/di/container';
+
+// Single source of truth for the tier enum both schemas below validate
+// against. GET /v1/organizations and PUT /v1/organizations/:id used to
+// declare this list independently (['free','pro','enterprise'] vs.
+// ['free','starter','pro','enterprise']) and drifted apart -- the GET
+// schema silently rejected `?tier=starter` with a 400 even though 'starter'
+// is a fully real, assignable TierLevel. Deriving both from the domain enum
+// makes that divergence a type-level impossibility.
+const ORGANIZATION_TIER_VALUES = Object.values(TierLevel);
 
 export async function organizationRoutesClean(server: FastifyInstance): Promise<void> {
   initializeDIContainer();
@@ -65,7 +75,7 @@ export async function organizationRoutesClean(server: FastifyInstance): Promise<
             // callers who already send `limit` are unaffected.
             limit: { type: 'number', minimum: 1, maximum: 100, default: 20 },
             offset: { type: 'number', minimum: 0, default: 0 },
-            tier: { type: 'string', enum: ['free', 'pro', 'enterprise'] },
+            tier: { type: 'string', enum: ORGANIZATION_TIER_VALUES },
           },
         },
       },
@@ -213,7 +223,7 @@ export async function organizationRoutesClean(server: FastifyInstance): Promise<
           type: 'object',
           properties: {
             name: { type: 'string', minLength: 1, maxLength: 100 },
-            tier: { type: 'string', enum: ['free', 'starter', 'pro', 'enterprise'] },
+            tier: { type: 'string', enum: ORGANIZATION_TIER_VALUES },
           },
         },
         response: {
