@@ -115,15 +115,44 @@ function baseResult(scores: Record<string, number>, flagged = false) {
 
 describe('Moderation policy routes', () => {
   let server: FastifyInstance;
+  // Generation counter (2026-09-14 fix): `beforeEach` does a dynamic import
+  // (real ESM resolution + TS transform on first touch) that measured 1.4s on
+  // a quiet machine — comfortably past the 10s default hookTimeout is not
+  // guaranteed on this repo's single shared, often-congested CI runner. If a
+  // beforeEach invocation DOES exceed hookTimeout, vitest reports the hook as
+  // failed and moves on, but the abandoned async function keeps running in
+  // the background (JS has no way to cancel an in-flight await) and, once
+  // whatever it was waiting on settles, resumes and calls
+  // `registerModerationsRoutes(server)` — reading `server` at THAT moment,
+  // which by then is the NEXT test's fresh instance, since `server` is a
+  // single `let` shared across every invocation. That produced this file's
+  // exact observed failure pair: test N's hook times out, and test N+1 (whose
+  // `server` the zombie continuation silently double-registers routes onto)
+  // fails with "Method 'POST' already declared for route '/v1/moderations'".
+  // Building the instance into a local `freshServer` and only publishing it
+  // to the shared `server` variable if this invocation is still the current
+  // one (`myGeneration === generation`) makes a stale continuation inert: it
+  // still finishes registering onto ITS OWN abandoned instance (harmless,
+  // nothing references it) instead of the current test's.
+  let generation = 0;
 
   beforeEach(async () => {
+    const myGeneration = ++generation;
     vi.clearAllMocks();
     moderateContentMock.mockReset();
-    server = Fastify();
+    const freshServer = Fastify();
     const { registerModerationsRoutes } = await import('@/routes/moderations/moderations-routes');
-    await registerModerationsRoutes(server);
-    await server.ready();
-  });
+    await registerModerationsRoutes(freshServer);
+    await freshServer.ready();
+    if (myGeneration !== generation) {
+      // A newer beforeEach already started (this one was abandoned past
+      // hookTimeout) — close the orphaned instance and leave the current
+      // test's `server` alone instead of clobbering it.
+      await freshServer.close();
+      return;
+    }
+    server = freshServer;
+  }, 30_000);
 
   afterEach(async () => {
     await server.close();

@@ -49,8 +49,10 @@ vi.mock('@/services/security-audit-service', () => ({
   recordSecurityEvent: vi.fn().mockResolvedValue(undefined),
 }));
 
-vi.mock('@/config/multi-tenancy-config', () => ({
-  getTierConfig: vi.fn().mockReturnValue({
+// `vi.mock` factories are hoisted above all top-level declarations, so the
+// fixture they reference must be hoisted alongside them via `vi.hoisted`.
+const { DEFAULT_TIER_CONFIG } = vi.hoisted(() => ({
+  DEFAULT_TIER_CONFIG: {
     features: {
       advancedOrchestration: false,
       multiModelExecution: false,
@@ -60,7 +62,16 @@ vi.mock('@/config/multi-tenancy-config', () => ({
     requestsPerMinute: 60,
     requestsPerHour: 600,
     concurrentRequests: 5,
-  }),
+  },
+}));
+
+vi.mock('@/config/multi-tenancy-config', () => ({
+  getTierConfig: vi.fn().mockReturnValue(DEFAULT_TIER_CONFIG),
+  // tenantIsolationMiddleware/requireTenantContext now resolve tier config
+  // via this (billing-aware, bounded-latency) helper instead of calling
+  // getTierConfig directly -- mocked here to resolve to the exact same
+  // fixture so this suite's assertions stay unchanged.
+  resolveEffectiveTierConfigForHotPath: vi.fn().mockResolvedValue(DEFAULT_TIER_CONFIG),
   checkQuota: vi.fn().mockResolvedValue({
     allowed: true,
     current: 10,

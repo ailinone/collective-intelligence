@@ -9,7 +9,7 @@
 
 import type { FastifyRequest, FastifyReply } from 'fastify';
 import { prisma } from '@/database/client';
-import { getTierConfig } from '@/config/multi-tenancy-config';
+import { getTierConfig, resolveEffectiveTierConfigForHotPath } from '@/config/multi-tenancy-config';
 import { getUserRoles } from '@/services/rbac-service';
 import { recordSecurityEvent } from '@/services/security-audit-service';
 import type { ExtendedFastifyRequest } from '@/types/fastify-extended';
@@ -53,26 +53,52 @@ function isTenantOptionalRoute(rawUrl: string): boolean {
   return PUBLIC_ROUTE_PREFIXES.some((prefix) => url.startsWith(prefix));
 }
 
+function payloadFromTierConfig(
+  tierConfig: ReturnType<typeof getTierConfig>
+): Pick<TenantContext, 'features' | 'quotas'> {
+  return {
+    features: tierConfig.features ?? {},
+    quotas: {
+      requestsPerMinute: tierConfig.requestsPerMinute ?? 60,
+      requestsPerHour: tierConfig.requestsPerHour ?? 600,
+      concurrentRequests: tierConfig.concurrentRequests ?? 5,
+    },
+  };
+}
+
+const FALLBACK_TIER_PAYLOAD: Pick<TenantContext, 'features' | 'quotas'> = {
+  features: {},
+  quotas: { requestsPerMinute: 60, requestsPerHour: 600, concurrentRequests: 5 },
+};
+
+/**
+ * Synchronous, hardcoded-only tier payload. Used ONLY by `getTenantContext`
+ * below, which cannot be made async without breaking its many existing
+ * synchronous callers (routes/**) — none of which read the `.features`/
+ * `.quotas` fields it derives here, so staying on the hardcoded TIER_CONFIGS
+ * value (rather than the billing-aware one) has no observed effect today.
+ */
 function defaultTierPayload(tier: string): Pick<TenantContext, 'features' | 'quotas'> {
   try {
-    const tierConfig = getTierConfig(tier);
-    return {
-      features: tierConfig.features ?? {},
-      quotas: {
-        requestsPerMinute: tierConfig.requestsPerMinute ?? 60,
-        requestsPerHour: tierConfig.requestsPerHour ?? 600,
-        concurrentRequests: tierConfig.concurrentRequests ?? 5,
-      },
-    };
+    return payloadFromTierConfig(getTierConfig(tier));
   } catch {
-    return {
-      features: {},
-      quotas: {
-        requestsPerMinute: 60,
-        requestsPerHour: 600,
-        concurrentRequests: 5,
-      },
-    };
+    return FALLBACK_TIER_PAYLOAD;
+  }
+}
+
+/**
+ * Billing-aware, bounded-latency tier payload (cross-repo quota/tier
+ * follow-up, item 1) — used by the two call sites below that are already
+ * async and can safely await `resolveEffectiveTierConfigForHotPath`.
+ */
+async function defaultTierPayloadAsync(
+  tier: string,
+  organizationId: string
+): Promise<Pick<TenantContext, 'features' | 'quotas'>> {
+  try {
+    return payloadFromTierConfig(await resolveEffectiveTierConfigForHotPath(tier, organizationId));
+  } catch {
+    return FALLBACK_TIER_PAYLOAD;
   }
 }
 
@@ -182,7 +208,7 @@ export async function tenantIsolationMiddleware(
     organization.tier ||
     (isCustomUser(extendedRequest.user) ? extendedRequest.user.tier : undefined) ||
     'free';
-  const tierPayload = defaultTierPayload(tier);
+  const tierPayload = await defaultTierPayloadAsync(tier, organizationId);
 
   extendedRequest.tenantContext = {
     organizationId,
@@ -199,7 +225,10 @@ export function requireTenantContext(options: { requireUser?: boolean } = {}) {
     const extendedRequest = request as ExtendedFastifyRequest;
 
     if (!extendedRequest.tenantContext?.organizationId && isCustomUser(extendedRequest.user)) {
-      const tierPayload = defaultTierPayload(extendedRequest.user.tier || 'free');
+      const tierPayload = await defaultTierPayloadAsync(
+        extendedRequest.user.tier || 'free',
+        extendedRequest.user.organizationId
+      );
       extendedRequest.tenantContext = {
         organizationId: extendedRequest.user.organizationId,
         userId: extendedRequest.user.userId,

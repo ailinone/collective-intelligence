@@ -82,6 +82,40 @@ export const TIER_CONFIGS: Record<string, TierConfig> = {
     },
   },
 
+  // Added as part of item 2(b) of the cross-repo quota/tier follow-up: 'starter'
+  // is a real, live-reachable organization tier (PUT /v1/organizations/:id's own
+  // schema enum, domain/value-objects/organization-tier.ts's TierLevel.STARTER)
+  // that TIER_CONFIGS never had an entry for. Every caller of getTierConfig
+  // (token-bucket-rate-limit.ts, tenant-isolation-middleware.ts,
+  // strategy-tiers.ts's TIER_CONFIGS[tier] lookup) silently fell back to `free`
+  // for any organization actually configured as 'starter' -- so that org's
+  // domain-level limits (OrganizationTier: 5 API keys, 3 members, 10,000
+  // requests/day, advancedOrchestration on) disagreed with what the API
+  // gateway actually enforced (free-tier throughput + free-tier features).
+  // Numbers below are a v0 placement strictly between free and pro on every
+  // dimension, consistent with OrganizationTier's own STARTER limits landing
+  // between its FREE and PRO -- a reasonable default to close the silent
+  // fallback, not a confirmed pricing/packaging decision; product should
+  // confirm or adjust the exact figures.
+  starter: {
+    name: 'Starter',
+    maxConnections: 10,
+    connectionPoolSize: 5,
+    queryTimeout: 7500,
+    requestsPerMinute: 40,
+    requestsPerHour: 1000,
+    concurrentRequests: 5,
+    maxStorageGB: 10,
+    maxFileSize: 25 * 1024 * 1024, // 25MB
+    features: {
+      advancedOrchestration: true, // matches OrganizationTier.STARTER's own advancedOrchestration: true
+      multiModelExecution: false,
+      prioritySupport: false,
+      customModels: false,
+      apiAccess: true,
+    },
+  },
+
   pro: {
     name: 'Pro',
     maxConnections: 20,
@@ -95,8 +129,18 @@ export const TIER_CONFIGS: Record<string, TierConfig> = {
     features: {
       advancedOrchestration: true,
       multiModelExecution: true,
-      prioritySupport: false,
-      customModels: false,
+      // Corrected as part of reconciling this table with
+      // domain/value-objects/organization-tier.ts's independent tier/limits
+      // table (cross-repo quota/tier follow-up, item 1): that table's PRO
+      // tier has always asserted prioritySupport/customModels: true (see
+      // its own long-standing, deliberately-written test expectations in
+      // tests/unit/domain/value-objects/organization-tier.test.ts) -- this
+      // table disagreed. Since OrganizationTier.getLimitsForTier now sources
+      // these 3 boolean flags FROM this table (see that file), this was the
+      // one of the two that had to give, and its own tested values are the
+      // stronger evidence of the actually-intended behavior.
+      prioritySupport: true,
+      customModels: true,
       apiAccess: true,
     },
   },
@@ -170,11 +214,14 @@ export function canPerformAction(tier: string, action: keyof TierConfig['feature
  * When billing is unreachable, or has no `knowledge_rate_limit` entry for
  * this tenant, this returns the unmodified hardcoded `TierConfig` — the
  * exact value `getTierConfig(tier)` always returned before this function
- * existed. `getTierConfig` itself, and its existing synchronous callers
- * (organization-settings-service.ts already awaits this async wrapper
- * instead; tenant-isolation-middleware.ts and token-bucket-rate-limit.ts —
- * both hot, per-request paths — are UNCHANGED, deliberately not migrated in
- * this phase to keep its blast radius small), are untouched.
+ * existed. `getTierConfig` itself is untouched.
+ *
+ * `organization-settings-service.ts` awaits this directly (a lower-frequency
+ * settings/admin read, where an occasional slow billing round-trip is fine).
+ * `tenant-isolation-middleware.ts` and `token-bucket-rate-limit.ts` — both
+ * hot, per-request paths — use `resolveEffectiveTierConfigForHotPath` below
+ * instead, which bounds the wait so a slow/cold billing call can never stall
+ * request-per-second-critical code.
  */
 export async function resolveEffectiveTierConfig(
   tier: string,
@@ -205,6 +252,57 @@ export async function resolveEffectiveTierConfig(
     ...hardcoded,
     requestsPerMinute: knowledgeRateLimit,
   };
+}
+
+function envInt(name: string, fallback: number): number {
+  const raw = process.env[name];
+  if (!raw) return fallback;
+  const parsed = parseInt(raw, 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+// Bounds how long a HOT PATH (every authenticated request) will wait on
+// `resolveEffectiveTierConfig` before falling back to the hardcoded value.
+// `getTenantEntitlements` (billing-entitlements-client.ts) checks its own
+// Redis cache first (a few ms on a hit) and only reaches out to billing over
+// HTTP on a miss (up to BILLING_ENTITLEMENTS_TIMEOUT_MS, default 3000ms) --
+// acceptable for a settings read, not for a rate-limiting decision made on
+// every request. This is deliberately much shorter than that timeout: the
+// common case (cache warm) resolves well within it, and a miss simply falls
+// back to the hardcoded config for THIS request rather than making every
+// concurrent request for that org wait out a slow/cold billing call.
+const HOT_PATH_RESOLUTION_TIMEOUT_MS = envInt('TIER_CONFIG_HOT_PATH_TIMEOUT_MS', 150);
+
+/**
+ * Bounded-latency variant of `resolveEffectiveTierConfig` for the two real
+ * per-request HOT PATHS (token-bucket-rate-limit.ts, tenant-isolation-
+ * middleware.ts) — every authenticated request, not just an occasional
+ * settings/admin read.
+ *
+ * Races the real resolution against a short local timer. Whichever settles
+ * first wins for THIS request; if the timer wins, the underlying
+ * `resolveEffectiveTierConfig` call is left running in the background (never
+ * aborted) so it still completes and populates the shared Redis entitlements
+ * cache — a slow first request for an org still warms the cache for the
+ * next one, it just doesn't itself wait for that. Never throws: the same
+ * fail-open guarantee as `resolveEffectiveTierConfig` itself.
+ */
+export async function resolveEffectiveTierConfigForHotPath(
+  tier: string,
+  organizationId: string
+): Promise<TierConfig> {
+  const hardcoded = getTierConfig(tier);
+
+  if (!organizationId) {
+    return hardcoded;
+  }
+
+  return await Promise.race([
+    resolveEffectiveTierConfig(tier, organizationId).catch(() => hardcoded),
+    new Promise<TierConfig>((resolve) => {
+      setTimeout(() => resolve(hardcoded), HOT_PATH_RESOLUTION_TIMEOUT_MS);
+    }),
+  ]);
 }
 
 /**

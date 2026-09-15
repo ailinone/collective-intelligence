@@ -69,6 +69,7 @@ vi.mock('@/services/central-model-discovery-service', () => ({
 
 const ORIGINAL_DISABLED = process.env.MODEL_AUTO_DISABLE_DISABLED;
 const ORIGINAL_THRESHOLD_MS = process.env.MODEL_AUTO_DISABLE_THRESHOLD_MS;
+const ORIGINAL_GRACE_MS = process.env.MODEL_MANUAL_REENABLE_GRACE_MS;
 
 async function loadModule() {
   return import('@/jobs/pricing-integrity-job');
@@ -85,6 +86,7 @@ beforeEach(() => {
   }));
   delete process.env.MODEL_AUTO_DISABLE_DISABLED;
   delete process.env.MODEL_AUTO_DISABLE_THRESHOLD_MS;
+  delete process.env.MODEL_MANUAL_REENABLE_GRACE_MS;
 });
 
 afterEach(() => {
@@ -92,6 +94,8 @@ afterEach(() => {
   else process.env.MODEL_AUTO_DISABLE_DISABLED = ORIGINAL_DISABLED;
   if (ORIGINAL_THRESHOLD_MS === undefined) delete process.env.MODEL_AUTO_DISABLE_THRESHOLD_MS;
   else process.env.MODEL_AUTO_DISABLE_THRESHOLD_MS = ORIGINAL_THRESHOLD_MS;
+  if (ORIGINAL_GRACE_MS === undefined) delete process.env.MODEL_MANUAL_REENABLE_GRACE_MS;
+  else process.env.MODEL_MANUAL_REENABLE_GRACE_MS = ORIGINAL_GRACE_MS;
 });
 
 describe('autoDisableDelistedModels', () => {
@@ -110,7 +114,12 @@ describe('autoDisableDelistedModels', () => {
     const { autoDisableDelistedModels } = await loadModule();
     const result = await autoDisableDelistedModels();
 
-    expect(result).toEqual({ found: 1, disabled: 1, skippedUnhealthySource: 0 });
+    expect(result).toEqual({
+      found: 1,
+      disabled: 1,
+      skippedUnhealthySource: 0,
+      skippedManualReenableGrace: 0,
+    });
     expect(modelUpdateManyMock).toHaveBeenCalledTimes(1);
     const call = modelUpdateManyMock.mock.calls[0][0] as {
       where: { uid: string; status: string };
@@ -133,7 +142,12 @@ describe('autoDisableDelistedModels', () => {
     const { autoDisableDelistedModels } = await loadModule();
     const result = await autoDisableDelistedModels();
 
-    expect(result).toEqual({ found: 0, disabled: 0, skippedUnhealthySource: 0 });
+    expect(result).toEqual({
+      found: 0,
+      disabled: 0,
+      skippedUnhealthySource: 0,
+      skippedManualReenableGrace: 0,
+    });
     expect(queryRawMock).not.toHaveBeenCalled();
     expect(queryRawUnsafeMock).not.toHaveBeenCalled();
     expect(modelUpdateManyMock).not.toHaveBeenCalled();
@@ -147,7 +161,12 @@ describe('autoDisableDelistedModels', () => {
     const result = await autoDisableDelistedModels();
 
     expect(queryRawMock).toHaveBeenCalledTimes(1);
-    expect(result).toEqual({ found: 0, disabled: 0, skippedUnhealthySource: 0 });
+    expect(result).toEqual({
+      found: 0,
+      disabled: 0,
+      skippedUnhealthySource: 0,
+      skippedManualReenableGrace: 0,
+    });
   });
 
   it('makes no UPDATE calls when nothing is past the threshold', async () => {
@@ -156,7 +175,12 @@ describe('autoDisableDelistedModels', () => {
     const { autoDisableDelistedModels } = await loadModule();
     const result = await autoDisableDelistedModels();
 
-    expect(result).toEqual({ found: 0, disabled: 0, skippedUnhealthySource: 0 });
+    expect(result).toEqual({
+      found: 0,
+      disabled: 0,
+      skippedUnhealthySource: 0,
+      skippedManualReenableGrace: 0,
+    });
     expect(queryRawUnsafeMock).not.toHaveBeenCalled();
     expect(modelUpdateManyMock).not.toHaveBeenCalled();
   });
@@ -186,7 +210,12 @@ describe('autoDisableDelistedModels', () => {
     const { autoDisableDelistedModels } = await loadModule();
     const result = await autoDisableDelistedModels();
 
-    expect(result).toEqual({ found: 2, disabled: 1, skippedUnhealthySource: 0 });
+    expect(result).toEqual({
+      found: 2,
+      disabled: 1,
+      skippedUnhealthySource: 0,
+      skippedManualReenableGrace: 0,
+    });
     expect(modelUpdateManyMock).toHaveBeenCalledTimes(2);
   });
 
@@ -213,7 +242,12 @@ describe('autoDisableDelistedModels', () => {
 
     // `found` still reflects the SELECT-time count; `disabled` must NOT
     // count a row whose conditional write didn't actually apply.
-    expect(result).toEqual({ found: 1, disabled: 0, skippedUnhealthySource: 0 });
+    expect(result).toEqual({
+      found: 1,
+      disabled: 0,
+      skippedUnhealthySource: 0,
+      skippedManualReenableGrace: 0,
+    });
     expect(modelUpdateManyMock).toHaveBeenCalledTimes(1);
     const call = modelUpdateManyMock.mock.calls[0][0] as {
       where: { uid: string; status: string; OR: unknown[] };
@@ -253,7 +287,12 @@ describe('autoDisableDelistedModels — unhealthy-discovery-source circuit break
     const { autoDisableDelistedModels } = await loadModule();
     const result = await autoDisableDelistedModels();
 
-    expect(result).toEqual({ found: 1, disabled: 0, skippedUnhealthySource: 1 });
+    expect(result).toEqual({
+      found: 1,
+      disabled: 0,
+      skippedUnhealthySource: 1,
+      skippedManualReenableGrace: 0,
+    });
     expect(modelUpdateManyMock).not.toHaveBeenCalled();
   });
 
@@ -280,7 +319,12 @@ describe('autoDisableDelistedModels — unhealthy-discovery-source circuit break
     const { autoDisableDelistedModels } = await loadModule();
     const result = await autoDisableDelistedModels();
 
-    expect(result).toEqual({ found: 2, disabled: 1, skippedUnhealthySource: 1 });
+    expect(result).toEqual({
+      found: 2,
+      disabled: 1,
+      skippedUnhealthySource: 1,
+      skippedManualReenableGrace: 0,
+    });
     expect(modelUpdateManyMock).toHaveBeenCalledTimes(1);
     const call = modelUpdateManyMock.mock.calls[0][0] as { where: { uid: string } };
     expect(call.where.uid).toBe('uid-other-1');
@@ -302,8 +346,158 @@ describe('autoDisableDelistedModels — unhealthy-discovery-source circuit break
     const { autoDisableDelistedModels } = await loadModule();
     const result = await autoDisableDelistedModels();
 
-    expect(result).toEqual({ found: 1, disabled: 1, skippedUnhealthySource: 0 });
+    expect(result).toEqual({
+      found: 1,
+      disabled: 1,
+      skippedUnhealthySource: 0,
+      skippedManualReenableGrace: 0,
+    });
     expect(modelUpdateManyMock).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('autoDisableDelistedModels — manual-reenable grace period (2026-09-13 incident)', () => {
+  /**
+   * Reproduces the real bug: a bulk data-correction UPDATE flipped `status`
+   * back to 'active' on ~18,470 rows without setting `last_synced_at`, so
+   * this sweep's `last_synced_at IS NULL` branch (no threshold applies to
+   * NULL) re-disabled 13,569 of them — 13,179 `huggingface` — the very next
+   * time its cursor reached them, two days later, even though HF discovery
+   * itself was healthy the whole time. A row-level grace period keyed off
+   * `metadata.manualReEnabledAt` closes this without touching the
+   * provider-level circuit breaker above, which cannot see this failure mode
+   * (the provider is healthy; these specific rows were just never
+   * individually reconfirmed).
+   */
+  it('skips a row manually reactivated recently, even with last_synced_at null', async () => {
+    queryRawMock.mockResolvedValueOnce([{ count: 1n }]);
+    queryRawUnsafeMock.mockResolvedValueOnce([
+      {
+        uid: 'uid-hf-1',
+        id: 'org/model',
+        provider_id: 'huggingface',
+        metadata: { manualReEnabledAt: new Date(Date.now() - 60_000).toISOString() },
+        last_synced_at: null,
+      },
+    ]);
+
+    const { autoDisableDelistedModels } = await loadModule();
+    const result = await autoDisableDelistedModels();
+
+    expect(result).toEqual({
+      found: 1,
+      disabled: 0,
+      skippedUnhealthySource: 0,
+      skippedManualReenableGrace: 1,
+    });
+    expect(modelUpdateManyMock).not.toHaveBeenCalled();
+  });
+
+  it('still disables a row whose manual reactivation is older than the grace period', async () => {
+    process.env.MODEL_MANUAL_REENABLE_GRACE_MS = String(24 * 60 * 60 * 1000); // 1 day
+    queryRawMock.mockResolvedValueOnce([{ count: 1n }]);
+    queryRawUnsafeMock.mockResolvedValueOnce([
+      {
+        uid: 'uid-hf-2',
+        id: 'org/old-model',
+        provider_id: 'huggingface',
+        metadata: {
+          manualReEnabledAt: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString(),
+        },
+        last_synced_at: null,
+      },
+    ]);
+
+    const { autoDisableDelistedModels } = await loadModule();
+    const result = await autoDisableDelistedModels();
+
+    expect(result).toEqual({
+      found: 1,
+      disabled: 1,
+      skippedUnhealthySource: 0,
+      skippedManualReenableGrace: 0,
+    });
+    expect(modelUpdateManyMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('is per-row precise: a row in the SAME batch without manualReEnabledAt is still disabled normally', async () => {
+    queryRawMock.mockResolvedValueOnce([{ count: 2n }]);
+    queryRawUnsafeMock.mockResolvedValueOnce([
+      {
+        uid: 'uid-grace',
+        id: 'org/protected-model',
+        provider_id: 'huggingface',
+        metadata: { manualReEnabledAt: new Date().toISOString() },
+        last_synced_at: null,
+      },
+      {
+        uid: 'uid-genuine',
+        id: 'org/genuinely-stale-model',
+        provider_id: 'huggingface',
+        metadata: {},
+        last_synced_at: null,
+      },
+    ]);
+
+    const { autoDisableDelistedModels } = await loadModule();
+    const result = await autoDisableDelistedModels();
+
+    expect(result).toEqual({
+      found: 2,
+      disabled: 1,
+      skippedUnhealthySource: 0,
+      skippedManualReenableGrace: 1,
+    });
+    expect(modelUpdateManyMock).toHaveBeenCalledTimes(1);
+    const call = modelUpdateManyMock.mock.calls[0][0] as { where: { uid: string } };
+    expect(call.where.uid).toBe('uid-genuine');
+  });
+
+  it('ignores a malformed manualReEnabledAt (non-string / unparseable date) rather than throwing', async () => {
+    queryRawMock.mockResolvedValueOnce([{ count: 1n }]);
+    queryRawUnsafeMock.mockResolvedValueOnce([
+      {
+        uid: 'uid-bad-date',
+        id: 'org/model',
+        provider_id: 'huggingface',
+        metadata: { manualReEnabledAt: 'not-a-real-date' },
+        last_synced_at: null,
+      },
+    ]);
+
+    const { autoDisableDelistedModels } = await loadModule();
+    const result = await autoDisableDelistedModels();
+
+    expect(result).toEqual({
+      found: 1,
+      disabled: 1,
+      skippedUnhealthySource: 0,
+      skippedManualReenableGrace: 0,
+    });
+  });
+});
+
+describe('MODEL_MANUAL_REENABLE_GRACE_MS', () => {
+  it('defaults to 14 days', async () => {
+    const { MODEL_MANUAL_REENABLE_GRACE_MS } = await loadModule();
+    expect(MODEL_MANUAL_REENABLE_GRACE_MS).toBe(14 * 24 * 60 * 60 * 1000);
+  });
+
+  it('is overridable via MODEL_MANUAL_REENABLE_GRACE_MS (ms)', async () => {
+    process.env.MODEL_MANUAL_REENABLE_GRACE_MS = String(3 * 24 * 60 * 60 * 1000); // 3 days
+    const { MODEL_MANUAL_REENABLE_GRACE_MS } = await loadModule();
+    expect(MODEL_MANUAL_REENABLE_GRACE_MS).toBe(3 * 24 * 60 * 60 * 1000);
+  });
+
+  it('falls back to the 14-day default for an invalid or non-positive override', async () => {
+    process.env.MODEL_MANUAL_REENABLE_GRACE_MS = '-5';
+    const mod1 = await loadModule();
+    expect(mod1.MODEL_MANUAL_REENABLE_GRACE_MS).toBe(14 * 24 * 60 * 60 * 1000);
+
+    vi.resetModules();
+    process.env.MODEL_MANUAL_REENABLE_GRACE_MS = 'not-a-number';
+    const mod2 = await loadModule();
+    expect(mod2.MODEL_MANUAL_REENABLE_GRACE_MS).toBe(14 * 24 * 60 * 60 * 1000);
   });
 });
 

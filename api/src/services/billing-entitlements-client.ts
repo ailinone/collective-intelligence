@@ -41,15 +41,19 @@
  *
  * ## Autenticação de saída (client_credentials contra id)
  *
- * Mesmo client_id/secret que id espera em CI_BILLING_CLIENT_OIDC_CLIENT_ID/
- * _SECRET (id/api/controllers/oidc_provider.py::_default_clients --
- * audience=ailin-billing, scope=billing:tenant-context), cacheado via o
- * provider OAuth2 compartilhado já usado pelos adapters de LLM
- * (providers/_shared/oauth2-client-credentials.ts -- cache até perto da
- * expiração, refresh automático, deduplica refreshes concorrentes). Mesma
- * política de cache/refresh que chat/backend/ailin_chat/utils/
- * ci_actor_token.py já prova em produção para o mesmo tipo de fluxo
- * (client_credentials, nunca lança para o caller).
+ * Minting em services/billing-actor-token.ts (extraído de lá porque este
+ * módulo deixou de ser o único caller real -- routes/internal/
+ * internal-wallet-routes.ts's credit-checkout proxy agora usa o mesmo
+ * helper, ver aquele módulo). Mesmo client_id/secret que id espera em
+ * CI_BILLING_CLIENT_OIDC_CLIENT_ID/_SECRET (id/api/controllers/
+ * oidc_provider.py::_default_clients -- audience=ailin-billing,
+ * scope=billing:tenant-context), cacheado via o provider OAuth2
+ * compartilhado já usado pelos adapters de LLM (providers/_shared/
+ * oauth2-client-credentials.ts -- cache até perto da expiração, refresh
+ * automático, deduplica refreshes concorrentes). Mesma política de
+ * cache/refresh que chat/backend/ailin_chat/utils/ci_actor_token.py já prova
+ * em produção para o mesmo tipo de fluxo (client_credentials, nunca lança
+ * para o caller).
  *
  * O token é uma camada ADICIONAL (Fase 4, modo dual do lado de billing):
  * billing aceita a chamada com só o secret estático (BILLING_API_SECRET_KEY,
@@ -68,8 +72,10 @@
 
 import { getGlobalRedisClient } from '@/cache/redis-client';
 import { logger } from '@/utils/logger';
-import { createOAuth2ClientCredentialsProvider } from '@/providers/_shared/oauth2-client-credentials';
-import type { TokenProvider } from '@/providers/_shared/token-provider';
+import {
+  getBillingActorHeaders,
+  __resetBillingActorTokenForTests,
+} from '@/services/billing-actor-token';
 
 const log = logger.child({ component: 'billing-entitlements-client' });
 
@@ -99,83 +105,6 @@ function envInt(name: string, fallback: number): number {
 
 const CACHE_TTL_SECONDS = envInt('BILLING_ENTITLEMENTS_CACHE_TTL_SECONDS', 300);
 const FETCH_TIMEOUT_MS = envInt('BILLING_ENTITLEMENTS_TIMEOUT_MS', 3000);
-
-// Mirrors the exact env var names id's oidc_provider.py::_default_clients
-// reads for THIS SAME client registration (CI_BILLING_CLIENT_OIDC_CLIENT_ID/
-// _SECRET) -- client_id/secret are a shared value between the two
-// deployments, so reusing id's own env var names here (rather than inventing
-// ci-specific ones) is deliberate: one secret, one pair of names, set once
-// per environment on both sides.
-function actorClientConfig() {
-  return {
-    tokenUrl: process.env.CI_BILLING_CLIENT_OIDC_TOKEN_URL?.trim() || 'https://ailin.id/oauth/token',
-    clientId: process.env.CI_BILLING_CLIENT_OIDC_CLIENT_ID?.trim() || 'ailin-ci-billing-client',
-    clientSecret: (process.env.CI_BILLING_CLIENT_OIDC_CLIENT_SECRET ?? '').trim(),
-    // Only the FIRST configured audience/scope is used to request a token —
-    // id's client registration may allow a comma-separated list for other
-    // purposes, but a client_credentials request presents exactly one of each.
-    audience: process.env.CI_BILLING_CLIENT_ALLOWED_AUDIENCES?.split(',')[0]?.trim() || 'ailin-billing',
-    scope: process.env.CI_BILLING_CLIENT_ALLOWED_SCOPES?.split(',')[0]?.trim() || 'billing:tenant-context',
-  };
-}
-
-let tokenProvider: TokenProvider | null | undefined; // undefined = not yet built this process
-
-function getTokenProvider(): TokenProvider | null {
-  if (tokenProvider !== undefined) {
-    return tokenProvider;
-  }
-
-  const cfg = actorClientConfig();
-  if (!cfg.clientSecret) {
-    log.info(
-      'CI_BILLING_CLIENT_OIDC_CLIENT_SECRET is not set -- billing calls will rely on the ' +
-        'static Billing-Api-Secret-Key alone (billing accepts that in dual mode)'
-    );
-    tokenProvider = null;
-    return tokenProvider;
-  }
-
-  try {
-    tokenProvider = createOAuth2ClientCredentialsProvider({
-      authUrl: cfg.tokenUrl,
-      clientId: cfg.clientId,
-      clientSecret: cfg.clientSecret,
-      scope: cfg.scope,
-      authStyle: 'body',
-      extraBodyParams: { audience: cfg.audience },
-    });
-  } catch (error) {
-    log.warn({ error }, 'failed to construct the billing actor token provider');
-    tokenProvider = null;
-  }
-  return tokenProvider;
-}
-
-/**
- * Bearer header for the outbound call, plus X-Acting-Tenant-Id (the
- * `service`-token tenant-assertion channel billing's verify_service_token
- * cross-checks against the route's own tenant_id — see that decorator's
- * docstring on the billing side). Never throws: any failure to mint a token
- * returns `{}`, which still lets the call proceed on the static secret alone
- * (billing's dual mode).
- */
-async function getBillingActorHeaders(organizationId: string): Promise<Record<string, string>> {
-  const provider = getTokenProvider();
-  if (!provider) {
-    return {};
-  }
-  try {
-    const authHeader = await provider.buildAuthHeader();
-    return { ...authHeader, 'X-Acting-Tenant-Id': organizationId };
-  } catch (error) {
-    log.warn(
-      { error },
-      'failed to mint a billing actor token -- falling back to the static secret only for this call'
-    );
-    return {};
-  }
-}
 
 function cacheKey(organizationId: string): string {
   return `${CACHE_KEY_PREFIX}${organizationId}`;
@@ -301,8 +230,9 @@ export async function getTenantEntitlements(organizationId: string): Promise<Bil
   }
 }
 
-/** Test-only: clears the module-level token-provider singleton so a fresh
- * one (or none, if secrets are unset in the test) is built on next use. */
+/** Test-only: clears the shared actor-token provider's module-level
+ * singleton (services/billing-actor-token.ts) so a fresh one (or none, if
+ * secrets are unset in the test) is built on next use. */
 export function __resetBillingEntitlementsClientForTests(): void {
-  tokenProvider = undefined;
+  __resetBillingActorTokenForTests();
 }

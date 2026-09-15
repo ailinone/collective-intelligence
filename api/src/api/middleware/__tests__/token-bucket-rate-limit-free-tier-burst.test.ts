@@ -44,6 +44,22 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { tokenBucketManager } from '@/core/resilience/token-bucket-limiter';
+
+// This file verifies pure burst-capacity MATH against TIER_CONFIGS' real,
+// hardcoded numbers -- it has no interest in the billing-aware resolution
+// path (resolveEffectiveTierConfigForHotPath) that production now uses, so
+// this stubs just that one export back to an immediately-resolved hardcoded
+// lookup (via the REAL getTierConfig/TIER_CONFIGS, kept otherwise unmocked)
+// instead of racing a real Redis/billing round-trip for every request this
+// file fires (up to 20 in a single test).
+vi.mock('@/config/multi-tenancy-config', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/config/multi-tenancy-config')>();
+  return {
+    ...actual,
+    resolveEffectiveTierConfigForHotPath: (tier: string) => Promise.resolve(actual.getTierConfig(tier)),
+  };
+});
+
 import { tokenBucketRateLimitMiddleware } from '../token-bucket-rate-limit';
 
 function uniqueSuffix(): string {

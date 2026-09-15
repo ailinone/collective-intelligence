@@ -208,24 +208,38 @@ export async function checkQuota(
     files: request.operation?.files ?? 0,
   };
 
-  // ── Per-user quota semantics — DOCUMENTED ASSUMPTION, NOT A CONFIRMED
-  // PRODUCT DECISION ──────────────────────────────────────────────────────
+  // ── Per-user quota semantics — CONFIRMED (cross-repo quota/tier follow-up,
+  // item 2a) ──────────────────────────────────────────────────────────────
   // A per-user quota is applied here as an ADDITIVE restriction on top of the
   // organization's limit: BOTH must be respected. A user is blocked once
   // EITHER their own row's limit is exceeded OR the organization aggregate's
   // limit is exceeded, whichever trips first — a per-user row is never a
   // substitute for the org check, and never lets a user bypass the org cap.
-  // This is the fail-closed default (same philosophy as the Phase 1 billing
-  // hardening: fail-closed over fail-open when a v0 doesn't yet say
-  // otherwise), chosen because it is the one reading of "per-user quota"
-  // that cannot silently let an organization exceed a limit it explicitly
-  // configured. It is NOT confirmed with `ci`'s product owner. If the real
-  // intent is "substitutive" (a user's own limit REPLACES the org limit for
-  // that user, e.g. per-seat allocations that partition the org cap instead
-  // of adding a second ceiling on top of it), the change is small and
-  // localized: skip loading/combining the org quota when `userId` is
-  // present and return the user quota's own check unchanged. See the PR
-  // description for the full callout.
+  //
+  // This was shipped as a documented, unconfirmed assumption in Phase 3; it
+  // is now the confirmed design, for two independent reasons:
+  //
+  // 1. Market pattern: `ci` is an organization's OWN internal AI gateway —
+  //    one org's employees sharing one org-level plan/budget — not a public
+  //    multi-org marketplace reselling metered capacity to unrelated
+  //    customers (the shape "partition/allocation" quota models like OpenAI
+  //    Projects or Azure OpenAI capacity carve-outs are built for). The
+  //    dominant pattern for THIS shape — an internal multi-tenant LLM
+  //    gateway/proxy shared by one organization's own users — is the
+  //    dual-cap/additive model (both a per-user AND a per-org/team budget
+  //    enforced together), the same approach LiteLLM/Portkey/Helicone-style
+  //    gateways use for `user_id` + `team_id` budgets: a user's own budget
+  //    is an ADDITIONAL ceiling under their team's, never a replacement for
+  //    it. `ci`'s per-user row is the same relationship to its org row.
+  // 2. No live conflict is even possible today: `POST /v1/enterprise/quotas`
+  //    (routes/enterprise/quotas-routes.ts), the only admin-facing quota
+  //    configuration endpoint, has no `userId` field in its request schema —
+  //    there is no way to configure a REAL per-user limit through any
+  //    exposed API yet. Every per-user row that exists is the auto-created
+  //    unlimited default from `getOrCreateCurrentQuota`, so `combineRemaining`
+  //    always resolves to the org limit in practice regardless of which
+  //    semantics were chosen. Additive is simply the safer default to have
+  //    on record for whenever a per-user configuration endpoint ships.
   const [orgQuota, userQuota] = await Promise.all([
     loadQuota(null),
     userId ? loadQuota(userId) : Promise.resolve(null),

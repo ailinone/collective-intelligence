@@ -10,6 +10,7 @@
 import { getRedisClient } from '@/cache/redis-client';
 import { config } from '@/config';
 import { logger } from '@/utils/logger';
+import type { TierLevel } from '@/domain/value-objects/organization-tier';
 
 type QueueStatus = 'queued' | 'processing' | 'completed' | 'failed';
 
@@ -20,7 +21,7 @@ interface QueueMetadata {
   startedAt?: number;
   finishedAt?: number;
   priority: number;
-  tier: 'enterprise' | 'pro' | 'free';
+  tier: TierLevel;
   queueTimeMs?: number;
   error?: {
     message: string;

@@ -119,23 +119,91 @@ describe('featherless-model-fetcher', () => {
     expect(models.at(-1)?.id).toBe('p3/last');
   });
 
-  it('stops when a page comes back empty', async () => {
-    const fetchSpy = vi
-      .spyOn(globalThis, 'fetch')
-      .mockResolvedValueOnce(
-        page(
-          Array.from({ length: 1000 }, (_, i) => ({ id: `a/m${i}` })),
-          1,
-          3
+  // Deep-pagination-ceiling regression (confirmed live 2026-09-14): a page
+  // coming back empty does NOT reliably mean the catalog is exhausted for
+  // this vendor — featherless-ai returns `data: []` for every page at/after
+  // a deep-pagination offset ceiling while `pagination.total_pages` keeps
+  // reporting the full, unchanged catalog (including at its own real last
+  // page). Stopping on the first empty page used to truncate the catalog to
+  // ~44% of its real size. total_pages is the authoritative stop signal now.
+  describe('empty-page handling (does not trust "empty" over total_pages)', () => {
+    it('does NOT stop on a mid-catalog empty page while total_pages says more data exists, and keeps accumulating models found after it', async () => {
+      const fetchSpy = vi
+        .spyOn(globalThis, 'fetch')
+        .mockResolvedValueOnce(
+          page(
+            Array.from({ length: 1000 }, (_, i) => ({ id: `a/m${i}` })),
+            1,
+            3
+          )
         )
-      )
-      .mockResolvedValueOnce(page([], 2, 3));
+        .mockResolvedValueOnce(page([], 2, 3))
+        .mockResolvedValueOnce(page([{ id: 'p3/last' }], 3, 3));
 
-    const fetcher = new FeatherlessModelFetcher('live-key');
-    const models = await fetcher.getModels();
+      const fetcher = new FeatherlessModelFetcher('live-key');
+      const models = await fetcher.getModels();
 
-    expect(fetchSpy).toHaveBeenCalledTimes(2);
-    expect(models).toHaveLength(1000);
+      // All 3 pages requested, including the one after the empty page.
+      expect(fetchSpy).toHaveBeenCalledTimes(3);
+      expect(models).toHaveLength(1001);
+      expect(models.at(-1)?.id).toBe('p3/last');
+      expect(mockLog.warn).toHaveBeenCalledWith(
+        expect.objectContaining({ page: 2, totalPages: 3, consecutiveEmptyPages: 1 }),
+        expect.stringContaining('came back empty')
+      );
+    });
+
+    it('stops correctly once page exceeds total_pages, even when the last page fetched was empty', async () => {
+      const fetchSpy = vi
+        .spyOn(globalThis, 'fetch')
+        .mockResolvedValueOnce(
+          page(
+            Array.from({ length: 1000 }, (_, i) => ({ id: `a/m${i}` })),
+            1,
+            2
+          )
+        )
+        .mockResolvedValueOnce(page([], 2, 2));
+
+      const fetcher = new FeatherlessModelFetcher('live-key');
+      const models = await fetcher.getModels();
+
+      // page 3 > total_pages (2): the loop stops on its own without a 3rd
+      // request, and without needing the consecutive-empty-pages safety net.
+      expect(fetchSpy).toHaveBeenCalledTimes(2);
+      expect(models).toHaveLength(1000);
+    });
+
+    it('aborts with a clear error log after an unreasonable run of consecutive empty pages (vendor total_pages never converges)', async () => {
+      // total_pages is reported as 1000 on every response and never drops,
+      // simulating a vendor that never signals the real end of the catalog.
+      // With a small maxConsecutiveEmptyPages override (4th ctor arg), the
+      // safety net must trip well before maxPages (or the real total_pages)
+      // is ever reached.
+      const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+        const requestedPage = Number(new URL(String(input)).searchParams.get('page'));
+        if (requestedPage === 1) {
+          return page([{ id: 'a/m0' }], 1, 1000);
+        }
+        return page([], requestedPage, 1000);
+      });
+
+      const fetcher = new FeatherlessModelFetcher('live-key', 15000, 500, 3);
+      const models = await fetcher.getModels();
+
+      // page 1 (data) + pages 2-5 (4 consecutive empty pages, exceeding the
+      // override of 3) = 5 requests, then abort — nowhere near total_pages.
+      expect(fetchSpy).toHaveBeenCalledTimes(5);
+      expect(models).toHaveLength(1);
+      expect(mockLog.error).toHaveBeenCalledWith(
+        expect.objectContaining({ consecutiveEmptyPages: 4, maxConsecutiveEmptyPages: 3 }),
+        expect.stringContaining('too many consecutive empty pages')
+      );
+      expect(mockLog.info).not.toHaveBeenCalledWith(
+        expect.anything(),
+        'Featherless AI discovery completed'
+      );
+    });
   });
 
   it('stops pagination on a non-OK page response instead of throwing', async () => {

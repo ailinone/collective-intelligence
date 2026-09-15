@@ -34,7 +34,7 @@ model Organization {
   id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   name         String
   slug         String?  @unique // URL-friendly identifier for tenant discovery
-  tier         String   @default("free") // free, pro, team, enterprise
+  tier         String   @default("free") // free, starter, pro, enterprise (see domain/value-objects/organization-tier.ts's TierLevel)
   status       String   @default("active") // active, suspended, deleted
   statusReason String?  @map("status_reason")
   settings     Json     @default("{}")

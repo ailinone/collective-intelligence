@@ -1371,11 +1371,28 @@ export class AuthService {
         throw new Error('federated_organization_not_found');
       }
 
+      // SECURITY/BILLING (fail-closed default, cross-repo quota/plan follow-up):
+      // this JIT-provisions an Organization for a `tenant_id` `ci` has never
+      // seen before, sight-unseen -- `id` has no concept of tier/plan/
+      // subscription of its own (confirmed: `id`'s Account.plan defaults to
+      // 'basic' and is never synced to billing/ci), so nothing upstream of
+      // this call ever asserts what tier this organization should actually
+      // be on. This used to hardcode 'enterprise' -- the single MOST
+      // permissive tier in TIER_CONFIGS -- for every brand-new org reaching
+      // `ci` this way, which is the opposite of fail-closed: an org that
+      // exists only because a federated JWT happened to name an unfamiliar
+      // organizationId got the highest rate limits/features by default,
+      // with no billing relationship backing that. Default to 'free' instead
+      // -- same fail-closed posture as `billing`'s own sandbox/free fallback
+      // (services/usage_service.py) for a tenant with no real Subscription.
+      // If this organization does have a real paid plan, that must come from
+      // an actual billing-resolved entitlement (resolveEffectiveTierConfig /
+      // getTenantEntitlements), not be assumed here at first-sight.
       await prisma.organization.create({
         data: {
           id: payload.organizationId,
           name: `Federated Organization ${payload.organizationId.slice(0, 8)}`,
-          tier: 'enterprise',
+          tier: 'free',
           status: 'active',
           settings: {
             identityProvider: 'ailin-accounts',

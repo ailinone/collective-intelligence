@@ -708,6 +708,11 @@ export const config: AppConfig = deepFreeze({
     priority: {
       enterprise: getEnvNumber('QUEUE_PRIORITY_ENTERPRISE', 500),
       pro: getEnvNumber('QUEUE_PRIORITY_PRO', 3000),
+      // Sits strictly between pro (3000) and free (7500), consistent with
+      // OrganizationTier's own ordering (enterprise > pro > starter > free)
+      // and far enough from both defaults that the +/-250 jitter range on
+      // any of the three can never cross into a neighboring tier's band.
+      starter: getEnvNumber('QUEUE_PRIORITY_STARTER', 5000),
       free: getEnvNumber('QUEUE_PRIORITY_FREE', 7500),
       jitter: getEnvNumber('QUEUE_PRIORITY_JITTER', 250),
     },
@@ -1420,6 +1425,7 @@ export function validateConfig(): void {
   if (
     config.queue.priority.enterprise <= 0 ||
     config.queue.priority.pro <= 0 ||
+    config.queue.priority.starter <= 0 ||
     config.queue.priority.free <= 0
   ) {
     errors.push('QUEUE_PRIORITY values must be positive integers');

@@ -20,12 +20,44 @@ import { logger } from '@/utils/logger';
 import type { OrchestrationContext, ChatRequest } from '@/types';
 import { config } from '@/config';
 import type { ExtendedFastifyRequest } from '@/types/fastify-extended';
+import { TierLevel } from '@/domain/value-objects/organization-tier';
 
 export interface QueueContext {
   shouldQueue: boolean;
   load: number;
-  tier: 'enterprise' | 'pro' | 'free';
+  tier: TierLevel;
   reason?: string;
+}
+
+const VALID_QUEUE_TIERS: ReadonlySet<string> = new Set(Object.values(TierLevel));
+
+/**
+ * Resolve the tenant's raw (untyped) `tier` string into a `TierLevel` the
+ * queue's priority table actually has an entry for.
+ *
+ * `tenantContext.tier` is a plain `string` sourced ultimately from the
+ * `Organization.tier` DB column — it is not guaranteed at the type level to
+ * be one of the tiers this service knows how to prioritize. The previous
+ * code did `tenantContext.tier as 'enterprise' | 'pro' | 'free'`, a cast
+ * that (a) didn't even list every real TierLevel ('starter' was missing)
+ * and (b) blindly trusted an arbitrary string, so any tier value the
+ * priority table doesn't recognize flows into
+ * `basePriorities[tier] + jitter` as `undefined + number`, i.e. `NaN` —
+ * corrupting the BullMQ job priority. Validate against the real TierLevel
+ * enum and fail closed to the lowest-priority tier (FREE) for anything
+ * unrecognized, logging so the bad/unexpected value gets noticed.
+ */
+function resolveQueueTier(
+  rawTier: string | undefined,
+  log: { warn: (obj: unknown, msg: string) => void }
+): TierLevel {
+  if (rawTier && VALID_QUEUE_TIERS.has(rawTier)) {
+    return rawTier as TierLevel;
+  }
+  if (rawTier) {
+    log.warn({ tier: rawTier }, 'Unrecognized tenant tier for queue priority — defaulting to free');
+  }
+  return TierLevel.FREE;
 }
 
 /**
@@ -69,7 +101,7 @@ export async function queueManagerMiddleware(
     // Check if request should be queued
     const decision = await requestQueueService.shouldQueue();
 
-    const tier = (tenantContext.tier as 'enterprise' | 'pro' | 'free') ?? 'free';
+    const tier = resolveQueueTier(tenantContext.tier, log);
 
     // Attach to request context
     extendedRequest.queueContext = {

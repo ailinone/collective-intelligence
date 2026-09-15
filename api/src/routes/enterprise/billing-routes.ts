@@ -637,7 +637,14 @@ export async function registerEnterpriseBillingRoutes(server: FastifyInstance): 
           required: ['plan', 'billingCycle'],
           properties: {
             organizationId: { type: 'string' },
-            plan: { type: 'string' },
+            // No fixed enum: `plan` is not drawn from a single closed set in this
+            // system (see the `SubscriptionRequest.plan` doc comment in
+            // types/index.ts for why) — but it was previously unbounded (any
+            // string, including empty), before being persisted and sent to
+            // Stripe subscription metadata. Bound it to a slug-shaped string,
+            // matching real plan identifiers seen across this codebase
+            // (e.g. 'sandbox', 'professional', 'team', 'starter', 'enterprise').
+            plan: { type: 'string', minLength: 1, maxLength: 64, pattern: '^[A-Za-z0-9_-]+$' },
             billingCycle: { type: 'string', enum: ['monthly', 'yearly'] },
             amount: { type: 'number', minimum: 0 },
             currency: { type: 'string' },
