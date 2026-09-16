@@ -57,21 +57,27 @@
  * request hot path, and never runs more than one query at a time (rebuilds
  * are serialized — see `manager.ts`'s scheduler).
  *
- * ── Fetch order: Redis first, Postgres fallback ────────────────────────────
- * Reads the SAME fleet-wide snapshot key (`CATALOG_REDIS_KEY`,
- * `@/services/catalog-hot-path`) the existing `catalog-cache-refresh` BullMQ
- * job already elects ONE process fleet-wide to publish
- * (`model-catalog-service.ts`). This is a deliberate choice over having
- * every replica's SAB worker hit Postgres independently on its own timer,
- * which would reintroduce the exact "N replicas each hit Postgres for the
- * same full-catalog query" multiplication bug that mechanism was built to
- * fix (see that file's own module doc). Falls back to a direct Postgres
- * query (same `CATALOG_HOT_PATH_SELECT` allowlist + `mapPrismaModel`
- * mapping model-catalog-service.ts's own cold path uses, imported from
- * `@/services/catalog-hot-path` specifically so this file's module graph
- * never needs `@/database/client`) only when Redis has nothing published
- * yet or is unreachable — same fail-open posture as
- * `resolveColdCatalog`/`hydrateCatalogCacheFromRedis`.
+ * ── Fetch source (ADR-028, Layer 1 — changed 2026-09-16) ───────────────────
+ * The 2026-09-16 Canary 3 OOM root-caused to THIS worker's Redis-first fetch:
+ * `JSON.parse`-ing the >100MB fleet-wide catalog snapshot as a single
+ * unfragmented string measured a ~521MB worker heapUsed peak even at a
+ * smaller (96k-row) catalog (see ADR-027's "Worker transient heap cost"),
+ * and that peak scales linearly with catalog size — 116,627 rows on the day
+ * of the incident. `SAB_CANDIDATE_WORKER_SOURCE` (default `'postgres-only'`)
+ * now makes this worker use ONLY the already-paginated, already-bounded
+ * Postgres fallback (`fetchCatalogModelsPaged`, hardened in ADR-027's
+ * "Canary 2" with keyset pagination + a per-page `statement_timeout`) for
+ * its OWN rebuild fetch — it never attempts the Redis snapshot at all in the
+ * default mode. This does NOT affect any other consumer of the Redis
+ * snapshot (`model-catalog-service.ts`'s own cold path, etc.) — only this
+ * worker's rebuild fetch changes.
+ *
+ * Set `SAB_CANDIDATE_WORKER_SOURCE=redis-first` to restore the pre-ADR-028
+ * behavior (Redis first, Postgres fallback — `fetchCatalogModelsRedisFirst`
+ * below, preserved verbatim) without a code revert or rebuild, e.g. for a
+ * fast rollback if the paginated Postgres path itself becomes a bottleneck
+ * on some future deployment. This reintroduces the exact OOM risk ADR-028
+ * closes, so it is an explicit opt-in, not a default.
  */
 import { parentPort, workerData } from 'node:worker_threads';
 // Deliberately a RELATIVE import, not `@/generated/prisma/index.js` like
@@ -105,6 +111,7 @@ import { getRedisClient } from '@/cache/redis-client';
 import { CATALOG_HOT_PATH_SELECT, CATALOG_REDIS_KEY } from '@/services/catalog-hot-path';
 import { computeLayout, wrapViews, CONTROL } from './schema';
 import { encodeGeneration, SabEncodeCapacityError } from './encode';
+import { buildCapacityConfig } from './capacity';
 import {
   fetchCatalogModelsPaged,
   DEFAULT_POSTGRES_FETCH_PAGE_SIZE,
@@ -117,6 +124,12 @@ import type {
   WorkerToMainMessage,
 } from './types';
 import { resolveWorkerDatabaseUrl } from './worker-database-url';
+import {
+  checkMemoryThreshold,
+  newRssPeakTracker,
+  resolveMemoryAbortThresholdBytes,
+  SabWorkerMemoryAbortError,
+} from './worker-memory-guard';
 
 const log = logger.child({ component: 'sab-candidate-index-worker' });
 
@@ -155,8 +168,22 @@ const WORKER_REDIS_TIMEOUT_MS = Number(process.env.SAB_CANDIDATE_WORKER_REDIS_TI
  *  even the paged scan (the 2026-09-11 `ci_db` OOM incident): the worker
  *  then reports `rebuild-failed{reason="fetch"}` and waits for the elected
  *  `catalog-cache-refresh` job to republish the Redis snapshot, while the
- *  last-good generation keeps serving. */
+ *  last-good generation keeps serving. NOTE: in the default
+ *  `SAB_CANDIDATE_WORKER_SOURCE=postgres-only` mode below, this is the
+ *  worker's ONLY source — disabling it with no Redis fallback available
+ *  leaves the worker with nothing to fetch from at all (see
+ *  `fetchCatalogModelsPostgresOnly`'s explicit guard for that case). */
 const WORKER_POSTGRES_FALLBACK_ENABLED = process.env.SAB_CANDIDATE_WORKER_POSTGRES_FALLBACK !== 'false';
+
+/** See this file's module doc ("Fetch source (ADR-028, Layer 1)"). Default
+ *  `'postgres-only'`: the worker's rebuild fetch never attempts the Redis
+ *  fleet-wide snapshot, closing the 2026-09-16 Canary 3 OOM's largest single
+ *  contributor (a >100MB unfragmented `JSON.parse`, ~521MB heapUsed peak at
+ *  the 2026-09-10 measurement, scaling linearly with catalog size).
+ *  `'redis-first'` restores the pre-ADR-028 behavior (Redis first, Postgres
+ *  fallback) for a fast, code-free rollback. */
+const WORKER_SOURCE: 'postgres-only' | 'redis-first' =
+  process.env.SAB_CANDIDATE_WORKER_SOURCE === 'redis-first' ? 'redis-first' : 'postgres-only';
 
 /** Distinguishes "could not read the catalog" from encode-side capacity
  *  errors when classifying `rebuild-failed{reason}`. */
@@ -224,14 +251,44 @@ function createPrismaPageQuerier(prisma: PrismaClient): CatalogPageQuerier {
   };
 }
 
-/** Redis-first, Postgres-fallback fetch — see this file's module doc. A
- *  Redis failure falls through to Postgres; a Postgres failure (or a
- *  disabled fallback) throws `SabFetchError`, which `runRebuild` reports as
+/** The worker's ONLY fetch path since ADR-028 (Layer 1) in the default
+ *  `SAB_CANDIDATE_WORKER_SOURCE=postgres-only` mode — see this file's module
+ *  doc. Never touches Redis. Throws `SabFetchError` (never crashes the
+ *  worker) when disabled with no alternative source configured, or when the
+ *  paged fetch itself fails. */
+async function fetchCatalogModelsPostgresOnly(): Promise<{ models: Model[]; source: 'redis' | 'postgres' }> {
+  if (!WORKER_POSTGRES_FALLBACK_ENABLED) {
+    throw new SabFetchError(
+      `SAB_CANDIDATE_WORKER_SOURCE=postgres-only but the Postgres fetch is disabled ` +
+        `(SAB_CANDIDATE_WORKER_POSTGRES_FALLBACK=false) — no catalog source is available for this worker ` +
+        `(set SAB_CANDIDATE_WORKER_SOURCE=redis-first to use the fleet-wide Redis snapshot instead)`
+    );
+  }
+  try {
+    const { models, pages } = await fetchCatalogModelsPaged(
+      createPrismaPageQuerier(getWorkerPrisma()),
+      WORKER_POSTGRES_PAGE_SIZE
+    );
+    log.debug(
+      { rows: models.length, pages, pageSize: WORKER_POSTGRES_PAGE_SIZE },
+      'sab-candidate-index worker: Postgres fetch complete'
+    );
+    return { models, source: 'postgres' };
+  } catch (error) {
+    throw new SabFetchError(`Postgres fetch failed: ${getErrorMessage(error)}`);
+  }
+}
+
+/** The PRE-ADR-028 fetch order (Redis first, Postgres fallback), preserved
+ *  behind `SAB_CANDIDATE_WORKER_SOURCE=redis-first` — see this file's module
+ *  doc for why this is no longer the default. A Redis failure falls through
+ *  to Postgres; a Postgres failure (or a disabled fallback) throws
+ *  `SabFetchError`, which `runRebuild` reports as
  *  `rebuild-failed{reason="fetch"}` rather than crashing the worker (see
- *  Finding 2 of the feasibility investigation: a worker crash does not
- *  take down the main process, but there is no reason to crash the WORKER
- *  either when the existing generation can keep serving reads). */
-async function fetchCatalogModels(): Promise<{ models: Model[]; source: 'redis' | 'postgres' }> {
+ *  Finding 2 of the feasibility investigation: a worker crash does not take
+ *  down the main process, but there is no reason to crash the WORKER either
+ *  when the existing generation can keep serving reads). */
+async function fetchCatalogModelsRedisFirst(): Promise<{ models: Model[]; source: 'redis' | 'postgres' }> {
   let redisFailure: string | null = null;
   try {
     const redis = getRedisClient();
@@ -273,8 +330,21 @@ async function fetchCatalogModels(): Promise<{ models: Model[]; source: 'redis' 
   }
 }
 
-const { layout, totalBytes } = computeLayout();
+/** Dispatches to the fetch strategy selected by `SAB_CANDIDATE_WORKER_SOURCE`
+ *  — see this file's module doc. */
+async function fetchCatalogModels(): Promise<{ models: Model[]; source: 'redis' | 'postgres' }> {
+  return WORKER_SOURCE === 'redis-first' ? fetchCatalogModelsRedisFirst() : fetchCatalogModelsPostgresOnly();
+}
+
 const data = workerData as SabWorkerData;
+// ADR-028 (Layer 1): the manager may allocate a generation at a
+// DYNAMICALLY-resolved MAX_MODELS smaller (or larger) than capacity.ts's
+// fixed default ceiling (see manager.ts's `maybeResizeAfterBuild`). The
+// worker recomputes the SAME layout from the SAME single number
+// (`buildCapacityConfig`, shared with manager.ts) rather than calling
+// `computeLayout()` with no argument, which would only ever match the
+// manager's allocation by coincidence.
+const { layout, totalBytes } = computeLayout(buildCapacityConfig(data.effectiveMaxModels));
 if (data.bufferA.byteLength !== totalBytes || data.bufferB.byteLength !== totalBytes) {
   // The manager allocates buffers sized by the SAME computeLayout() this
   // worker also calls — a mismatch means the worker and manager were built
@@ -282,8 +352,9 @@ if (data.bufferA.byteLength !== totalBytes || data.bufferB.byteLength !== totalB
   // respawned worker after a hot capacity-env change), which would silently
   // corrupt memory if allowed to proceed.
   throw new Error(
-    `sab-candidate-index worker: buffer size mismatch (worker computed ${totalBytes} bytes, ` +
-      `received bufferA=${data.bufferA.byteLength} bufferB=${data.bufferB.byteLength}) — refusing to start`
+    `sab-candidate-index worker: buffer size mismatch (worker computed ${totalBytes} bytes for ` +
+      `effectiveMaxModels=${data.effectiveMaxModels}, received bufferA=${data.bufferA.byteLength} ` +
+      `bufferB=${data.bufferB.byteLength}) — refusing to start`
   );
 }
 const viewsA = wrapViews(data.bufferA, layout);
@@ -307,8 +378,18 @@ async function runRebuild(): Promise<void> {
   }
   rebuildInFlight = true;
   const buildStart = performance.now();
+  // ADR-028 (Layer 3): operational safety net alongside the existing
+  // fail-closed capacity checks. `peak` accumulates the highest RSS observed
+  // at any checkpoint in THIS rebuild attempt, reported to the manager
+  // regardless of outcome (`postToMain`'s `peakRssBytes` field) so the
+  // memory profile of every rebuild — successful or not — is visible in
+  // Prometheus, not only the ones that happen to fail.
+  const memoryAbortThresholdBytes = resolveMemoryAbortThresholdBytes();
+  const peak = newRssPeakTracker(process.memoryUsage().rss);
   try {
+    checkMemoryThreshold('pre-fetch', process.memoryUsage().rss, memoryAbortThresholdBytes, peak);
     const { models, source } = await fetchCatalogModels();
+    checkMemoryThreshold('post-fetch', process.memoryUsage().rss, memoryAbortThresholdBytes, peak);
 
     const activeGen = Atomics.load(controlView, CONTROL.ACTIVE_GEN);
     const targetGen: 0 | 1 = activeGen === 0 ? 1 : 0; // always write into the INACTIVE slot
@@ -316,6 +397,12 @@ async function runRebuild(): Promise<void> {
 
     const targetViews = targetGen === 0 ? viewsA : viewsB;
     const meta = encodeGeneration(models, targetViews);
+    // Checked BEFORE publishing (the Atomics.store block below) — an abort
+    // here discards this generation's work entirely (the inactive slot was
+    // written into, but ACTIVE_GEN never flips to it), exactly the same
+    // "fail before publish, keep serving the last-good generation" contract
+    // `SabEncodeCapacityError` already has.
+    checkMemoryThreshold('post-encode', process.memoryUsage().rss, memoryAbortThresholdBytes, peak);
 
     // Publish: every plain (non-atomic) typed-array write above must become
     // visible to the main thread's reads BEFORE it can observe the new
@@ -327,7 +414,7 @@ async function runRebuild(): Promise<void> {
     Atomics.store(controlView, CONTROL.BUILDING_GEN, -1);
 
     const buildMs = performance.now() - buildStart;
-    postToMain({ type: 'rebuilt', gen: targetGen, meta, buildMs, source });
+    postToMain({ type: 'rebuilt', gen: targetGen, meta, buildMs, source, peakRssBytes: peak.peakBytes });
   } catch (error) {
     Atomics.store(controlView, CONTROL.BUILDING_GEN, -1);
     let reason: RebuildFailureReason = 'other';
@@ -337,9 +424,15 @@ async function runRebuild(): Promise<void> {
       message = `capacity error: ${error.message}`;
     } else if (error instanceof SabFetchError) {
       reason = 'fetch';
+    } else if (error instanceof SabWorkerMemoryAbortError) {
+      reason = 'memory';
+      message = error.message;
     }
-    log.error({ error: message, reason }, 'sab-candidate-index worker: rebuild failed — keeping last-good generation');
-    postToMain({ type: 'rebuild-failed', error: message, reason });
+    log.error(
+      { error: message, reason, peakRssMb: Math.round(peak.peakBytes / (1024 * 1024)) },
+      'sab-candidate-index worker: rebuild failed — keeping last-good generation'
+    );
+    postToMain({ type: 'rebuild-failed', error: message, reason, peakRssBytes: peak.peakBytes });
   } finally {
     rebuildInFlight = false;
   }

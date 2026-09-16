@@ -864,7 +864,7 @@ export const sabCandidateIndexLastBuildSource = createGauge({
 // the next canary is diagnosable from Prometheus alone.
 export const sabCandidateIndexBuildFailuresTotal = createCounter({
   name: 'ci_sab_candidate_index_build_failures_total',
-  help: 'Total failed SAB candidate index rebuilds per process (worker alive, last-good generation kept; ready stays 0 if no generation was ever built). reason: capacity | fetch | other',
+  help: 'Total failed SAB candidate index rebuilds per process (worker alive, last-good generation kept; ready stays 0 if no generation was ever built). reason: capacity | fetch | memory | other',
   labelNames: ['reason'],
   registers: [registry],
 });
@@ -884,6 +884,27 @@ export const sabCandidateIndexMetadataBlobUsedBytes = createGauge({
 export const sabCandidateIndexMetadataBlobCapacityBytes = createGauge({
   name: 'ci_sab_candidate_index_metadata_blob_capacity_bytes',
   help: 'Fixed capacity of the SAB candidate index metadata blob per generation (METADATA_BLOB_BYTES; override via SAB_CANDIDATE_METADATA_BLOB_BYTES)',
+  registers: [registry],
+});
+
+// ADR-028 (2026-09-16 Canary 3 OOM follow-up): the manager now sizes each
+// generation's SharedArrayBuffers dynamically (capacity.ts's
+// `computeEffectiveMaxModels`/`buildCapacityConfig`) instead of always
+// allocating the fixed 200,000-row design ceiling, and the worker
+// instruments its own RSS during every rebuild with a fail-closed abort
+// threshold. These two gauges make both mechanisms observable without
+// requiring a canary's own log line, the same motivation ADR-027's "Canary
+// 2" section gave for the four `_distinct_capabilities`/`_metadata_blob_*`
+// metrics above.
+export const sabCandidateIndexMaxModelsEffective = createGauge({
+  name: 'ci_sab_candidate_index_max_models_effective',
+  help: 'Effective MAX_MODELS the currently-allocated SAB candidate index SharedArrayBuffers are sized for per process (dynamically resolved from the live row count + margin, capped at the MAX_MODELS design ceiling — see capacity.ts computeEffectiveMaxModels)',
+  registers: [registry],
+});
+
+export const sabCandidateIndexWorkerPeakRssBytes = createGauge({
+  name: 'ci_sab_candidate_index_worker_peak_rss_bytes',
+  help: 'Peak process.memoryUsage().rss observed by the SAB candidate index worker during its most recent rebuild attempt (successful or aborted) — see SAB_WORKER_MEMORY_ABORT_THRESHOLD_MB',
   registers: [registry],
 });
 

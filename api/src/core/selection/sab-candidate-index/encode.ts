@@ -25,16 +25,7 @@
  * biggest risk this design's own feasibility investigation surfaced).
  */
 import type { Model } from '@/types';
-import {
-  CURATED_CAP,
-  AGGREGATED_CAP,
-  MAX_PROVIDERS,
-  MAX_CAPABILITIES,
-  ID_BLOB_BYTES,
-  METADATA_BLOB_BYTES,
-  PROVIDER_BLOB_BYTES,
-  MAX_MODELS,
-} from './capacity';
+import { MAX_CAPABILITIES } from './capacity';
 import { clearRow, maskKey, rowWords, setBit } from './capability-mask';
 import type { GenerationViews } from './schema';
 import type { GenerationMeta, ProviderTableEntry } from './types';
@@ -94,25 +85,47 @@ function measureBlobs(models: readonly Model[]): { idBytes: number; metadataByte
 }
 
 export function encodeGeneration(models: readonly Model[], views: GenerationViews): GenerationMeta {
+  // Every bound below is read from the VIEWS themselves (i.e. the real
+  // capacity the SharedArrayBuffer this generation was allocated with can
+  // actually hold), not from capacity.ts's fixed module-level constants —
+  // ADR-028 (Layer 1) made the manager allocate generations at a
+  // dynamically-resolved MAX_MODELS (see `capacity.ts`'s
+  // `computeEffectiveMaxModels`/`buildCapacityConfig`), which can be smaller
+  // OR larger than the default ceiling `capacity.ts` exports. Checking
+  // against the views' own `.length`/`.byteLength` — rather than the fixed
+  // constants — is what keeps this encoder correctly bounded for ANY
+  // generation size it is handed, and is a strictly more correct invariant
+  // than the old fixed-constant checks even for the un-resized default case
+  // (a mismatch there would previously have been a silent out-of-bounds
+  // write instead of a caught capacity error).
+  const maxModels = views.idStrOffset.length;
+  const metadataBlobBytes = views.metadataBlob.length;
+  const idBlobBytes = views.idStringBlob.length;
+  const maxProviders = views.providerIdStrOffset.length;
+  const providerBlobBytes = views.providerStringBlob.length;
+  const curatedCap = views.curatedOrder.length;
+  const aggregatedCap = views.aggregatedOrder.length;
+
   const n = models.length;
-  if (n > MAX_MODELS) {
+  if (n > maxModels) {
     throw new SabEncodeCapacityError(
-      `row count ${n} exceeds MAX_MODELS capacity ${MAX_MODELS} (raise SAB_CANDIDATE_MAX_MODELS)`
+      `row count ${n} exceeds this generation's capacity ${maxModels} (raise SAB_CANDIDATE_MAX_MODELS, or ` +
+        `SAB_CANDIDATE_MAX_MODELS_MARGIN if this is a dynamically-sized generation)`
     );
   }
 
   const needed = measureBlobs(models);
-  if (needed.metadataBytes > METADATA_BLOB_BYTES) {
+  if (needed.metadataBytes > metadataBlobBytes) {
     const avg = n > 0 ? Math.ceil(needed.metadataBytes / n) : 0;
     throw new SabEncodeCapacityError(
       `metadata string blob needs ${needed.metadataBytes} bytes for ${n} rows (avg ${avg} bytes/row) ` +
-        `but capacity is ${METADATA_BLOB_BYTES}; raise SAB_CANDIDATE_METADATA_BYTES_PER_MODEL ` +
+        `but capacity is ${metadataBlobBytes}; raise SAB_CANDIDATE_METADATA_BYTES_PER_MODEL ` +
         `or SAB_CANDIDATE_METADATA_BLOB_BYTES`
     );
   }
-  if (needed.idBytes > ID_BLOB_BYTES) {
+  if (needed.idBytes > idBlobBytes) {
     throw new SabEncodeCapacityError(
-      `id string blob needs ${needed.idBytes} bytes for ${n} rows but capacity is ${ID_BLOB_BYTES} ` +
+      `id string blob needs ${needed.idBytes} bytes for ${n} rows but capacity is ${idBlobBytes} ` +
         `(raise SAB_CANDIDATE_ID_BLOB_BYTES)`
     );
   }
@@ -145,16 +158,16 @@ export function encodeGeneration(models: readonly Model[], views: GenerationView
   for (const m of models) {
     if (providerByIdMap.has(m.providerId)) continue;
     const idx = providerByIdMap.size;
-    if (idx >= MAX_PROVIDERS) {
+    if (idx >= maxProviders) {
       throw new SabEncodeCapacityError(
-        `provider count exceeds MAX_PROVIDERS capacity ${MAX_PROVIDERS} (raise SAB_CANDIDATE_MAX_PROVIDERS)`
+        `provider count exceeds MAX_PROVIDERS capacity ${maxProviders} (raise SAB_CANDIDATE_MAX_PROVIDERS)`
       );
     }
     providerByIdMap.set(m.providerId, { name: m.provider, idx });
 
     const idBytes = enc.encode(m.providerId);
     const nameBytes = enc.encode(m.provider);
-    if (providerBlobPos + idBytes.length + nameBytes.length > PROVIDER_BLOB_BYTES) {
+    if (providerBlobPos + idBytes.length + nameBytes.length > providerBlobBytes) {
       throw new SabEncodeCapacityError(
         `provider string blob overflow (raise SAB_CANDIDATE_PROVIDER_BLOB_BYTES)`
       );
@@ -186,7 +199,7 @@ export function encodeGeneration(models: readonly Model[], views: GenerationView
     const idBytes = enc.encode(m.id);
     // Defense in depth behind the pre-pass above (a mismatch here would mean
     // measureBlobs and this loop disagree on the encoding).
-    if (idBlobPos + idBytes.length > ID_BLOB_BYTES) {
+    if (idBlobPos + idBytes.length > idBlobBytes) {
       throw new SabEncodeCapacityError(`id string blob overflow (raise SAB_CANDIDATE_ID_BLOB_BYTES)`);
     }
     views.idStrOffset[i] = idBlobPos;
@@ -195,7 +208,7 @@ export function encodeGeneration(models: readonly Model[], views: GenerationView
     idBlobPos += idBytes.length;
 
     const metadataBytes = enc.encode(metadataJson(m));
-    if (metadataBlobPos + metadataBytes.length > METADATA_BLOB_BYTES) {
+    if (metadataBlobPos + metadataBytes.length > metadataBlobBytes) {
       throw new SabEncodeCapacityError(
         `metadata string blob overflow (raise SAB_CANDIDATE_METADATA_BLOB_BYTES)`
       );
@@ -272,7 +285,7 @@ export function encodeGeneration(models: readonly Model[], views: GenerationView
     list.sort((a, b) => (a.idStr < b.idStr ? -1 : a.idStr > b.idStr ? 1 : 0));
   }
   const providerIdsSorted = [...curatedByProvider.keys()].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
-  if (providerIdsSorted.length > MAX_PROVIDERS) {
+  if (providerIdsSorted.length > maxProviders) {
     throw new SabEncodeCapacityError('curated provider count exceeds MAX_PROVIDERS');
   }
 
@@ -286,9 +299,9 @@ export function encodeGeneration(models: readonly Model[], views: GenerationView
     views.curatedProviderIdx[p] = providerInfo.idx;
     views.curatedProviderStart[p] = curatedPos;
     views.curatedProviderLen[p] = list.length;
-    if (curatedPos + list.length > CURATED_CAP) {
+    if (curatedPos + list.length > curatedCap) {
       throw new SabEncodeCapacityError(
-        `curatedOrder capacity ${CURATED_CAP} exceeded (raise SAB_CANDIDATE_CURATED_CAP)`
+        `curatedOrder capacity ${curatedCap} exceeded (raise SAB_CANDIDATE_CURATED_CAP)`
       );
     }
     for (const row of list) views.curatedOrder[curatedPos++] = row.slot;
@@ -297,9 +310,9 @@ export function encodeGeneration(models: readonly Model[], views: GenerationView
   // 5. Precompute aggregated ranking: id ascending (matches
   //    aggregatedCandidates.sort in getFullCacheFairCandidateModels).
   aggregatedSlots.sort((a, b) => (a.idStr < b.idStr ? -1 : a.idStr > b.idStr ? 1 : 0));
-  if (aggregatedSlots.length > AGGREGATED_CAP) {
+  if (aggregatedSlots.length > aggregatedCap) {
     throw new SabEncodeCapacityError(
-      `aggregatedOrder capacity ${AGGREGATED_CAP} exceeded (raise SAB_CANDIDATE_AGGREGATED_CAP)`
+      `aggregatedOrder capacity ${aggregatedCap} exceeded (raise SAB_CANDIDATE_AGGREGATED_CAP)`
     );
   }
   for (let i = 0; i < aggregatedSlots.length; i++) views.aggregatedOrder[i] = aggregatedSlots[i].slot;
