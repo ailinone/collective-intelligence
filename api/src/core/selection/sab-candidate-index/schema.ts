@@ -54,59 +54,79 @@ function align(offset: number, bytes: number): number {
   return Math.ceil(offset / bytes) * bytes;
 }
 
+/**
+ * The size-dependent bounds a caller can override per allocation (ADR-028,
+ * Layer 1 — dynamic MAX_MODELS sizing). Any field left unset falls back to
+ * this module's own capacity.ts-derived default, so `computeLayout()` with
+ * no argument at all (every pre-ADR-028 call site, and every existing test)
+ * is byte-for-byte unchanged. `capacity.ts`'s `buildCapacityConfig(maxModels)`
+ * is the sanctioned way to build one of these from a single effective
+ * MAX_MODELS number — see that function's doc for why only these four
+ * fields scale and the rest (MAX_PROVIDERS, ID_BLOB_BYTES,
+ * PROVIDER_BLOB_BYTES, CAPABILITY_MASK_WORDS) stay fixed.
+ */
+export interface CapacityOverride {
+  maxModels?: number;
+  curatedCap?: number;
+  aggregatedCap?: number;
+  metadataBlobBytes?: number;
+}
+
 // Order here is arbitrary (each field is independently offset-aligned to its
 // own element size, per the SharedArrayBuffer/TypedArray spec requirement
 // that a view's byteOffset be a multiple of BYTES_PER_ELEMENT), grouped by
 // purpose for readability.
-const FIELD_SPECS: readonly FieldSpec[] = [
-  // ── per-model SoA, index = model slot ────────────────────────────────
-  { name: 'idStrOffset', ctor: Int32Array, length: MAX_MODELS },
-  { name: 'idStrLen', ctor: Int32Array, length: MAX_MODELS },
-  // Full metadata JSON (see capacity.ts's METADATA_BLOB_BYTES doc for why
-  // this exists — production correctness, not part of the original
-  // prototype).
-  { name: 'metadataStrOffset', ctor: Int32Array, length: MAX_MODELS },
-  { name: 'metadataStrLen', ctor: Int32Array, length: MAX_MODELS },
-  { name: 'providerIdx', ctor: Int32Array, length: MAX_MODELS }, // -> provider table row
-  { name: 'contextWindow', ctor: Int32Array, length: MAX_MODELS },
-  { name: 'maxOutputTokens', ctor: Int32Array, length: MAX_MODELS },
-  { name: 'usageCount', ctor: Int32Array, length: MAX_MODELS },
-  // Row-major, CAPABILITY_MASK_WORDS words per slot — see capability-mask.ts.
-  { name: 'capabilityBitmask', ctor: Uint32Array, length: MAX_MODELS * CAPABILITY_MASK_WORDS },
-  { name: 'inputCostPer1k', ctor: Float64Array, length: MAX_MODELS },
-  { name: 'outputCostPer1k', ctor: Float64Array, length: MAX_MODELS },
-  { name: 'latencyMs', ctor: Float64Array, length: MAX_MODELS },
-  { name: 'throughput', ctor: Float64Array, length: MAX_MODELS },
-  { name: 'quality', ctor: Float64Array, length: MAX_MODELS },
-  { name: 'reliability', ctor: Float64Array, length: MAX_MODELS },
-  { name: 'bucketFlag', ctor: Uint8Array, length: MAX_MODELS }, // 0 curated / 1 aggregated / 2 invisible
-  { name: 'statusFlag', ctor: Uint8Array, length: MAX_MODELS }, // 0 active / 1 disabled
+function buildFieldSpecs(cap: Required<CapacityOverride>): readonly FieldSpec[] {
+  return [
+    // ── per-model SoA, index = model slot ────────────────────────────────
+    { name: 'idStrOffset', ctor: Int32Array, length: cap.maxModels },
+    { name: 'idStrLen', ctor: Int32Array, length: cap.maxModels },
+    // Full metadata JSON (see capacity.ts's METADATA_BLOB_BYTES doc for why
+    // this exists — production correctness, not part of the original
+    // prototype).
+    { name: 'metadataStrOffset', ctor: Int32Array, length: cap.maxModels },
+    { name: 'metadataStrLen', ctor: Int32Array, length: cap.maxModels },
+    { name: 'providerIdx', ctor: Int32Array, length: cap.maxModels }, // -> provider table row
+    { name: 'contextWindow', ctor: Int32Array, length: cap.maxModels },
+    { name: 'maxOutputTokens', ctor: Int32Array, length: cap.maxModels },
+    { name: 'usageCount', ctor: Int32Array, length: cap.maxModels },
+    // Row-major, CAPABILITY_MASK_WORDS words per slot — see capability-mask.ts.
+    { name: 'capabilityBitmask', ctor: Uint32Array, length: cap.maxModels * CAPABILITY_MASK_WORDS },
+    { name: 'inputCostPer1k', ctor: Float64Array, length: cap.maxModels },
+    { name: 'outputCostPer1k', ctor: Float64Array, length: cap.maxModels },
+    { name: 'latencyMs', ctor: Float64Array, length: cap.maxModels },
+    { name: 'throughput', ctor: Float64Array, length: cap.maxModels },
+    { name: 'quality', ctor: Float64Array, length: cap.maxModels },
+    { name: 'reliability', ctor: Float64Array, length: cap.maxModels },
+    { name: 'bucketFlag', ctor: Uint8Array, length: cap.maxModels }, // 0 curated / 1 aggregated / 2 invisible
+    { name: 'statusFlag', ctor: Uint8Array, length: cap.maxModels }, // 0 active / 1 disabled
 
-  // ── model-id string blob (UTF-8) ─────────────────────────────────────
-  { name: 'idStringBlob', ctor: Uint8Array, length: ID_BLOB_BYTES },
-  // ── per-model metadata JSON blob (UTF-8) ─────────────────────────────
-  { name: 'metadataBlob', ctor: Uint8Array, length: METADATA_BLOB_BYTES },
+    // ── model-id string blob (UTF-8) ─────────────────────────────────────
+    { name: 'idStringBlob', ctor: Uint8Array, length: ID_BLOB_BYTES },
+    // ── per-model metadata JSON blob (UTF-8) ─────────────────────────────
+    { name: 'metadataBlob', ctor: Uint8Array, length: cap.metadataBlobBytes },
 
-  // ── provider table (small; cardinality ~95-200 in real prod) ────────
-  { name: 'providerIdStrOffset', ctor: Int32Array, length: MAX_PROVIDERS },
-  { name: 'providerIdStrLen', ctor: Int32Array, length: MAX_PROVIDERS },
-  { name: 'providerNameStrOffset', ctor: Int32Array, length: MAX_PROVIDERS },
-  { name: 'providerNameStrLen', ctor: Int32Array, length: MAX_PROVIDERS },
-  { name: 'providerStringBlob', ctor: Uint8Array, length: PROVIDER_BLOB_BYTES },
+    // ── provider table (small; cardinality ~95-200 in real prod) ────────
+    { name: 'providerIdStrOffset', ctor: Int32Array, length: MAX_PROVIDERS },
+    { name: 'providerIdStrLen', ctor: Int32Array, length: MAX_PROVIDERS },
+    { name: 'providerNameStrOffset', ctor: Int32Array, length: MAX_PROVIDERS },
+    { name: 'providerNameStrLen', ctor: Int32Array, length: MAX_PROVIDERS },
+    { name: 'providerStringBlob', ctor: Uint8Array, length: PROVIDER_BLOB_BYTES },
 
-  // ── curated-bucket precomputed fairness ranking ──────────────────────
-  // Flat array of model slots, grouped by provider (providers ordered
-  // ascending by providerId, matching selectCuratedFairUids' own
-  // `.sort(([a],[b]) => a<b?-1:...)`), each provider's run sorted by
-  // usageCount desc / id asc (matches sortByUsageThenUid's tie-break).
-  { name: 'curatedOrder', ctor: Int32Array, length: CURATED_CAP },
-  { name: 'curatedProviderIdx', ctor: Int32Array, length: MAX_PROVIDERS }, // -> provider table row
-  { name: 'curatedProviderStart', ctor: Int32Array, length: MAX_PROVIDERS }, // offset into curatedOrder
-  { name: 'curatedProviderLen', ctor: Int32Array, length: MAX_PROVIDERS },
+    // ── curated-bucket precomputed fairness ranking ──────────────────────
+    // Flat array of model slots, grouped by provider (providers ordered
+    // ascending by providerId, matching selectCuratedFairUids' own
+    // `.sort(([a],[b]) => a<b?-1:...)`), each provider's run sorted by
+    // usageCount desc / id asc (matches sortByUsageThenUid's tie-break).
+    { name: 'curatedOrder', ctor: Int32Array, length: cap.curatedCap },
+    { name: 'curatedProviderIdx', ctor: Int32Array, length: MAX_PROVIDERS }, // -> provider table row
+    { name: 'curatedProviderStart', ctor: Int32Array, length: MAX_PROVIDERS }, // offset into curatedOrder
+    { name: 'curatedProviderLen', ctor: Int32Array, length: MAX_PROVIDERS },
 
-  // ── aggregated-bucket precomputed ranking (id ascending) ─────────────
-  { name: 'aggregatedOrder', ctor: Int32Array, length: AGGREGATED_CAP },
-] as const;
+    // ── aggregated-bucket precomputed ranking (id ascending) ─────────────
+    { name: 'aggregatedOrder', ctor: Int32Array, length: cap.aggregatedCap },
+  ] as const;
+}
 
 export interface FieldLayout {
   ctor: TypedArrayCtor;
@@ -122,10 +142,25 @@ export interface ComputedLayout {
   totalBytes: number;
 }
 
-export function computeLayout(): ComputedLayout {
+/**
+ * `override` defaults every field to this module's own capacity.ts constants
+ * (unchanged from before ADR-028), so every pre-existing call site
+ * (`computeLayout()`, no argument) is byte-for-byte identical to before.
+ * `manager.ts`/`worker.ts` pass an explicit override (built by
+ * `capacity.ts`'s `buildCapacityConfig(effectiveMaxModels)`) to compute a
+ * generation's layout at its DYNAMICALLY-resolved size instead of the fixed
+ * design ceiling — see ADR-028.
+ */
+export function computeLayout(override: CapacityOverride = {}): ComputedLayout {
+  const cap: Required<CapacityOverride> = {
+    maxModels: override.maxModels ?? MAX_MODELS,
+    curatedCap: override.curatedCap ?? CURATED_CAP,
+    aggregatedCap: override.aggregatedCap ?? AGGREGATED_CAP,
+    metadataBlobBytes: override.metadataBlobBytes ?? METADATA_BLOB_BYTES,
+  };
   let offset = 0;
   const layout: Layout = {};
-  for (const spec of FIELD_SPECS) {
+  for (const spec of buildFieldSpecs(cap)) {
     const bytesPerEl = spec.ctor.BYTES_PER_ELEMENT;
     offset = align(offset, bytesPerEl);
     layout[spec.name] = {

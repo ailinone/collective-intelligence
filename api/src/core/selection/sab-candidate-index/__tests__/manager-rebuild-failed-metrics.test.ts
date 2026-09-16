@@ -83,6 +83,14 @@ beforeEach(() => {
   vi.stubEnv('SAB_CANDIDATE_MAX_PROVIDERS', '4');
   vi.stubEnv('SAB_CANDIDATE_ID_BLOB_BYTES', '1024');
   vi.stubEnv('SAB_CANDIDATE_PROVIDER_BLOB_BYTES', '1024');
+  // ADR-028 (Layer 1) added dynamic buffer resizing based on each build's
+  // real row count. This file's tiny fixed MAX_MODELS=16 combined with the
+  // 3-row `meta` fixture below would otherwise be a huge relative shrink
+  // (well past the resize threshold) and trigger a real reallocation +
+  // worker respawn as a side effect of the SECOND test — unrelated to what
+  // this file actually tests (rebuild-failed metric surfacing). See
+  // manager-dynamic-resize.test.ts for dedicated resize coverage.
+  vi.stubEnv('SAB_CANDIDATE_DYNAMIC_RESIZE', 'false');
   FakeWorker.instances = [];
 });
 
@@ -110,8 +118,14 @@ describe('sab-candidate-index/manager — rebuild-failed surfacing', () => {
       type: 'rebuild-failed',
       reason: 'capacity',
       error: 'capacity error: metadata string blob needs 109000000 bytes for 112140 rows but capacity is 67108864',
+      peakRssBytes: 100 * 1024 * 1024,
     });
-    emit({ type: 'rebuild-failed', reason: 'fetch', error: 'Postgres fallback fetch failed: timeout' });
+    emit({
+      type: 'rebuild-failed',
+      reason: 'fetch',
+      error: 'Postgres fallback fetch failed: timeout',
+      peakRssBytes: 100 * 1024 * 1024,
+    });
 
     expect(await counterValue(metrics.sabCandidateIndexBuildFailuresTotal, { reason: 'capacity' })).toBe(1);
     expect(await counterValue(metrics.sabCandidateIndexBuildFailuresTotal, { reason: 'fetch' })).toBe(1);
@@ -133,7 +147,7 @@ describe('sab-candidate-index/manager — rebuild-failed surfacing', () => {
     const { manager, metrics } = await loadFresh();
     manager.ensureSabCandidateIndexStarted();
     emit({ type: 'ready' });
-    emit({ type: 'rebuild-failed', reason: 'capacity', error: 'capacity error: x' });
+    emit({ type: 'rebuild-failed', reason: 'capacity', error: 'capacity error: x', peakRssBytes: 50 * 1024 * 1024 });
 
     const meta: GenerationMeta = {
       rowCount: 3,
@@ -148,7 +162,7 @@ describe('sab-candidate-index/manager — rebuild-failed surfacing', () => {
       metadataBlobUsedBytes: 4_321,
       idBlobUsedBytes: 12,
     };
-    emit({ type: 'rebuilt', gen: 0, meta, buildMs: 12.5, source: 'redis' });
+    emit({ type: 'rebuilt', gen: 0, meta, buildMs: 12.5, source: 'redis', peakRssBytes: 60 * 1024 * 1024 });
 
     expect(await gaugeValue(metrics.sabCandidateIndexDistinctCapabilities)).toBe(3);
     expect(await gaugeValue(metrics.sabCandidateIndexMetadataBlobUsedBytes)).toBe(4_321);

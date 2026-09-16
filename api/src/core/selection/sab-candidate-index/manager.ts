@@ -53,7 +53,7 @@ import { computeLayout, wrapViews, CONTROL, type GenerationViews } from './schem
 import { buildGenLookup, getCandidatesFromSharedIndex, type GenLookup, type SabCandidateCriteria } from './reader';
 import type { FullCacheFairCandidateResult } from '@/core/selection/dynamic-model-selector';
 import type { RebuildFailureReason, SabWorkerData, WorkerToMainMessage } from './types';
-import { METADATA_BLOB_BYTES } from './capacity';
+import { MAX_MODELS, buildCapacityConfig, computeEffectiveMaxModels } from './capacity';
 import {
   sabCandidateIndexReady,
   sabCandidateIndexActiveGen,
@@ -66,6 +66,8 @@ import {
   sabCandidateIndexDistinctCapabilities,
   sabCandidateIndexMetadataBlobUsedBytes,
   sabCandidateIndexMetadataBlobCapacityBytes,
+  sabCandidateIndexMaxModelsEffective,
+  sabCandidateIndexWorkerPeakRssBytes,
 } from '@/observability/ci-metrics';
 
 const log = logger.child({ component: 'sab-candidate-index-manager' });
@@ -133,6 +135,20 @@ interface ManagerState {
   crashes: number;
   distinctCapabilities: number | null;
   metadataBlobUsedBytes: number | null;
+  /** ADR-028 (Layer 1): the effective MAX_MODELS this state's SharedArrayBuffers
+   *  were actually allocated for — may be smaller (or larger) than
+   *  capacity.ts's fixed MAX_MODELS design ceiling. See
+   *  `maybeResizeAfterBuild`/`scheduleResize` for how this changes over the
+   *  life of a process. */
+  effectiveMaxModels: number;
+  /** The metadata blob capacity THIS state's buffers were built with
+   *  (`buildCapacityConfig(effectiveMaxModels).metadataBlobBytes`) — replaces
+   *  the pre-ADR-028 fixed `METADATA_BLOB_BYTES` constant everywhere this
+   *  module reports capacity, since that capacity is now per-allocation. */
+  metadataBlobCapacityBytes: number;
+  /** ADR-028 (Layer 3): peak `process.memoryUsage().rss` the worker reported
+   *  for its most recent rebuild attempt (successful or aborted). */
+  lastPeakRssBytes: number | null;
 }
 
 let state: ManagerState | null = null;
@@ -243,8 +259,20 @@ function resolveWorkerResourceLimits(): {
   };
 }
 
-function allocateState(): ManagerState {
-  const { layout, totalBytes } = computeLayout();
+/**
+ * Allocates a full generation's SharedArrayBuffers at a specific effective
+ * MAX_MODELS (ADR-028, Layer 1). `maxModels` is normally either `MAX_MODELS`
+ * itself (the very first allocation a process ever makes, since there is no
+ * live row-count signal yet — see `ensureSabCandidateIndexStarted`) or a
+ * value `computeEffectiveMaxModels()` derived from a REAL completed build's
+ * row count (see `maybeResizeAfterBuild`). `buildCapacityConfig` is the
+ * SAME function `worker.ts` calls with the SAME number (passed via
+ * `workerData.effectiveMaxModels`) to independently recompute an identical
+ * layout — see that file's own buffer-size mismatch guard.
+ */
+function allocateState(maxModels: number): ManagerState {
+  const capacityConfig = buildCapacityConfig(maxModels);
+  const { layout, totalBytes } = computeLayout(capacityConfig);
   const bufferA = new SharedArrayBuffer(totalBytes);
   const bufferB = new SharedArrayBuffer(totalBytes);
   const control = new SharedArrayBuffer(64); // CONTROL_BYTES, see schema.ts
@@ -275,11 +303,23 @@ function allocateState(): ManagerState {
     buildFailures: 0,
     crashes: 0,
     distinctCapabilities: null,
+    effectiveMaxModels: maxModels,
+    metadataBlobCapacityBytes: capacityConfig.metadataBlobBytes,
+    lastPeakRssBytes: null,
     metadataBlobUsedBytes: null,
   };
 }
 
 function handleWorkerMessage(s: ManagerState, msg: WorkerToMainMessage): void {
+  // A resize (`scheduleResize`) retires its OLD ManagerState by marking it
+  // `stopped` and replacing the module-level `state` with a fresh one
+  // BEFORE terminating the old worker — `Worker.terminate()` is async, so a
+  // message already in flight from the old worker can still arrive after
+  // that swap. Guarding here (rather than only in the 'exit' handler, which
+  // already does this) keeps a stale message from a retired generation from
+  // mutating a ManagerState nothing reads from anymore, or from triggering a
+  // SECOND resize race on top of the one already in progress.
+  if (s.stopped) return;
   if (msg.type === 'ready') {
     log.info('sab-candidate-index: worker ready — requesting initial build');
     requestRebuild(s);
@@ -294,6 +334,7 @@ function handleWorkerMessage(s: ManagerState, msg: WorkerToMainMessage): void {
     s.builds += 1;
     s.distinctCapabilities = msg.meta.distinctCapabilities;
     s.metadataBlobUsedBytes = msg.meta.metadataBlobUsedBytes;
+    s.lastPeakRssBytes = msg.peakRssBytes;
     s.consecutiveCrashes = 0; // a successful build resets the crash-loop counter
 
     // Observability (out-of-scope-turned-in-scope follow-up to
@@ -308,10 +349,18 @@ function handleWorkerMessage(s: ManagerState, msg: WorkerToMainMessage): void {
     sabCandidateIndexVersion.set(Atomics.load(s.controlView, CONTROL.VERSION));
     sabCandidateIndexDistinctCapabilities.set(msg.meta.distinctCapabilities);
     sabCandidateIndexMetadataBlobUsedBytes.set(msg.meta.metadataBlobUsedBytes);
+    sabCandidateIndexMaxModelsEffective.set(s.effectiveMaxModels);
+    sabCandidateIndexWorkerPeakRssBytes.set(msg.peakRssBytes);
+    // Since ADR-028 (Layer 1), 'postgres' is this worker's EXPECTED source on
+    // every build by default (SAB_CANDIDATE_WORKER_SOURCE=postgres-only) —
+    // no longer a signal that the Redis fleet-wide snapshot is unhealthy, so
+    // this no longer warrants a warn-level log on every single rebuild.
+    // `lastSource` stays 'redis' only when an operator has explicitly opted
+    // back into SAB_CANDIDATE_WORKER_SOURCE=redis-first.
     if (msg.source === 'postgres') {
-      log.warn(
+      log.debug(
         { rowCount: msg.meta.rowCount, buildMs: msg.buildMs },
-        'sab-candidate-index: generation built from the Postgres fallback (Redis fleet-wide snapshot was empty/unreachable) — expected on a cold boot, worth investigating if persistent'
+        'sab-candidate-index: generation built from the Postgres fetch (the default worker source since ADR-028 — see SAB_CANDIDATE_WORKER_SOURCE)'
       );
     }
     log.info(
@@ -322,20 +371,31 @@ function handleWorkerMessage(s: ManagerState, msg: WorkerToMainMessage): void {
         source: msg.source,
         distinctCapabilities: msg.meta.distinctCapabilities,
         metadataBlobUsedBytes: msg.meta.metadataBlobUsedBytes,
-        metadataBlobCapacityBytes: METADATA_BLOB_BYTES,
+        metadataBlobCapacityBytes: s.metadataBlobCapacityBytes,
+        effectiveMaxModels: s.effectiveMaxModels,
+        peakRssMb: Math.round(msg.peakRssBytes / (1024 * 1024)),
       },
       'sab-candidate-index: rebuild complete'
     );
+    maybeResizeAfterBuild(s, msg.meta.rowCount);
     return;
   }
   if (msg.type === 'rebuild-failed') {
     s.lastError = msg.error;
     s.lastFailureReason = msg.reason;
     s.buildFailures += 1;
+    s.lastPeakRssBytes = msg.peakRssBytes;
     sabCandidateIndexBuildFailuresTotal.inc({ reason: msg.reason });
+    sabCandidateIndexWorkerPeakRssBytes.set(msg.peakRssBytes);
     const ready = isSabCandidateIndexReady();
     log.error(
-      { error: msg.error, reason: msg.reason, ready, buildFailures: s.buildFailures },
+      {
+        error: msg.error,
+        reason: msg.reason,
+        ready,
+        buildFailures: s.buildFailures,
+        peakRssMb: Math.round(msg.peakRssBytes / (1024 * 1024)),
+      },
       ready
         ? 'sab-candidate-index: worker reported a failed rebuild — serving last-good generation'
         : 'sab-candidate-index: worker reported a failed rebuild and NO generation has ever been built — selection keeps falling through to the next candidate-retrieval path'
@@ -344,17 +404,28 @@ function handleWorkerMessage(s: ManagerState, msg: WorkerToMainMessage): void {
 }
 
 /** Exported for the worker-database-url test; the databaseUrl default is the
- *  main thread's early-captured runtime URL, never a later process.env read. */
+ *  main thread's early-captured runtime URL, never a later process.env read.
+ *  `effectiveMaxModels` defaults to the fixed MAX_MODELS ceiling (matching
+ *  this function's pre-ADR-028 behavior) when the caller doesn't pass one —
+ *  the worker-database-url test only cares about the buffers/databaseUrl
+ *  fields and doesn't need to pass this. */
 export function buildSabWorkerData(
   buffers: Pick<ManagerState, 'bufferA' | 'bufferB' | 'control'>,
-  databaseUrl: string = getRuntimeDatabaseUrl()
+  databaseUrl: string = getRuntimeDatabaseUrl(),
+  effectiveMaxModels: number = MAX_MODELS
 ): SabWorkerData {
-  return { bufferA: buffers.bufferA, bufferB: buffers.bufferB, control: buffers.control, databaseUrl };
+  return {
+    bufferA: buffers.bufferA,
+    bufferB: buffers.bufferB,
+    control: buffers.control,
+    databaseUrl,
+    effectiveMaxModels,
+  };
 }
 
 function spawnWorker(s: ManagerState): void {
   if (s.stopped) return;
-  const workerData = buildSabWorkerData(s);
+  const workerData = buildSabWorkerData(s, undefined, s.effectiveMaxModels);
   const worker = new Worker(resolveWorkerPath(), {
     workerData,
     execArgv: resolveWorkerExecArgv(),
@@ -400,6 +471,104 @@ function scheduleRespawn(s: ManagerState): void {
   s.respawnTimer.unref();
 }
 
+/** Opt-out for ADR-028's dynamic resize (Layer 1) — read live (not cached),
+ *  same convention as `isSabCandidateIndexEnabled()`. Default enabled.
+ *  Disabling this does NOT disable dynamic sizing of the very FIRST
+ *  allocation a process makes (that always uses the ceiling — see
+ *  `ensureSabCandidateIndexStarted`); it only stops `maybeResizeAfterBuild`
+ *  from ever reallocating buffers for a running process. Exists mainly for
+ *  tests that need a small, fixed-size buffer for the whole test's lifetime
+ *  regardless of what row counts they emit through the (possibly fake)
+ *  worker — see `manager-rebuild-failed-metrics.test.ts`. */
+function isDynamicResizeEnabled(): boolean {
+  return process.env.SAB_CANDIDATE_DYNAMIC_RESIZE !== 'false';
+}
+
+/** Only grow when the current generation is genuinely running low on
+ *  headroom (not merely "not exactly at the freshly-computed ideal size") —
+ *  a build that just succeeded already proves the CURRENT capacity was
+ *  sufficient, so growing is about staying ahead of FUTURE growth, never
+ *  urgent. Only shrink when the current allocation is significantly
+ *  oversized relative to what the catalog now needs — a small, constant
+ *  difference every rebuild would otherwise thrash (reallocate, respawn,
+ *  briefly stop serving) for no real memory benefit. Both are internal
+ *  constants rather than env knobs — the margin
+ *  (`SAB_CANDIDATE_MAX_MODELS_MARGIN`) is this feature's one operator-facing
+ *  tuning lever; these thresholds are an implementation detail of when a
+ *  resize fires, not what size it targets. */
+const RESIZE_GROW_USAGE_RATIO = 0.9;
+const RESIZE_SHRINK_WASTE_RATIO = 0.6;
+
+/**
+ * Decides whether the generation that JUST successfully built (row count
+ * `rowCount`, current capacity `s.effectiveMaxModels`) should be resized
+ * before the NEXT rebuild — ADR-028, Layer 1. A no-op in the overwhelmingly
+ * common case (catalog size is roughly stable between rebuilds).
+ */
+function maybeResizeAfterBuild(s: ManagerState, rowCount: number): void {
+  if (!isDynamicResizeEnabled()) return;
+  if (s !== state) return; // a resize (or stop) already superseded this state
+  const currentCap = s.effectiveMaxModels;
+  const desired = computeEffectiveMaxModels(rowCount);
+
+  const atCeiling = currentCap >= MAX_MODELS;
+  const usageRatio = currentCap > 0 ? rowCount / currentCap : 1;
+  const mustGrow = !atCeiling && desired > currentCap && usageRatio >= RESIZE_GROW_USAGE_RATIO;
+  const worthShrinking = desired < currentCap * RESIZE_SHRINK_WASTE_RATIO;
+
+  if (!mustGrow && !worthShrinking) return;
+  scheduleResize(s, desired, mustGrow ? 'grow' : 'shrink');
+}
+
+/**
+ * Reallocates this process's SAB candidate index at a new effective
+ * MAX_MODELS and starts a fresh worker against the new buffers — ADR-028,
+ * Layer 1. Deliberately a "stop the old, start the new" transition rather
+ * than a live three-generation swap: `SharedArrayBuffer`'s own
+ * `grow()`/`transfer()` can only extend a single contiguous buffer's END
+ * (see capacity.ts's own module doc on why fixed capacity, not a growable
+ * buffer, was chosen in the first place) — it cannot re-lay-out a
+ * struct-of-arrays schema where every field must grow together, so a real
+ * resize needs entirely new buffers, which means a new worker to write into
+ * them. During the gap between retiring the old worker and the new one
+ * completing its first build, `getSabCandidateModels` returns `null` —
+ * exactly the same, already-relied-upon fail-open cold-start contract every
+ * caller already handles (`isSabCandidateIndexReady()` false ->
+ * `dynamic-model-selector.ts` falls through to the next candidate-retrieval
+ * path). This resize path is expected to fire rarely (a handful of times
+ * over a long-running replica's life, driven by real catalog growth/shrink
+ * crossing the thresholds above — not once per rebuild), so this brief
+ * availability gap is an accepted trade-off against the real complexity of
+ * a live swap. The NORMAL rebuild path (every cycle that does NOT resize)
+ * is completely untouched by this function and keeps its existing
+ * zero-downtime double-buffer flip.
+ */
+function scheduleResize(s: ManagerState, newMaxModels: number, direction: 'grow' | 'shrink'): void {
+  if (s.stopped || s !== state) return;
+  log.info(
+    { from: s.effectiveMaxModels, to: newMaxModels, direction, rowCountCeiling: MAX_MODELS },
+    'sab-candidate-index: resizing SharedArrayBuffers for the current catalog size — briefly falls through to the next candidate-retrieval path until the new generation completes its first build'
+  );
+
+  if (s.rebuildTimer) clearInterval(s.rebuildTimer);
+  if (s.respawnTimer) clearTimeout(s.respawnTimer);
+  const oldWorker = s.worker;
+  s.stopped = true; // retires this ManagerState — its own 'exit'/'message' handlers become no-ops
+  s.worker = null;
+  void oldWorker?.terminate();
+
+  const next = allocateState(newMaxModels);
+  state = next;
+  sabCandidateIndexReady.set(0);
+  sabCandidateIndexActiveGen.set(-1);
+  sabCandidateIndexVersion.set(0);
+  sabCandidateIndexMetadataBlobCapacityBytes.set(next.metadataBlobCapacityBytes);
+  sabCandidateIndexMaxModelsEffective.set(next.effectiveMaxModels);
+  spawnWorker(next);
+  next.rebuildTimer = setInterval(() => requestRebuild(next), REBUILD_INTERVAL_MS);
+  next.rebuildTimer.unref();
+}
+
 function requestRebuild(s: ManagerState): void {
   if (s.stopped || !s.worker) return;
   try {
@@ -437,15 +606,30 @@ export function requestSabCandidateIndexRebuild(): void {
  * mirrors the existing lazy-hydration posture already used throughout this
  * codebase (e.g. `getAllCatalogModels()`'s cold-path resolution) rather than
  * requiring a boot-time wiring change to `index.ts`/`workers/queue-runner.ts`
- * — the worker + its SharedArrayBuffers (455.01 MiB virtual per replica with
- * the 2026-09-11 defaults; real, measured — see
- * `__tests__/memory-footprint.test.ts` and ADR-027 "Canary 2") are only
- * ever allocated in a process that actually has the flag on.
+ * — the worker + its SharedArrayBuffers are only ever allocated in a process
+ * that actually has the flag on.
+ *
+ * ADR-028 (Layer 1): the FIRST allocation a process ever makes always uses
+ * the fixed `MAX_MODELS` ceiling — there is no live row-count signal yet to
+ * size it any smaller, and `ensureSabCandidateIndexStarted` must stay fully
+ * SYNCHRONOUS (no `await` before spawning the worker): it's called
+ * fire-and-forget from the request hot path, and several tests
+ * (`manager-rebuild-failed-metrics.test.ts`,
+ * `sab-worker-concurrent-load-benchmark.test.ts`) assert the worker exists
+ * synchronously right after this returns. A separate startup-time
+ * `SELECT count(*)` query to pre-size the FIRST allocation was considered
+ * and deliberately rejected: it would either have to block that synchronous
+ * contract (unacceptable) or race the worker's own first fetch for no real
+ * benefit — the first successful build already produces an exact, real row
+ * count for free (`GenerationMeta.rowCount`), which `maybeResizeAfterBuild`
+ * uses to right-size EVERY subsequent allocation (shrinking away from the
+ * ceiling, or growing back toward it) with zero extra queries and zero
+ * timing races. See ADR-028 for the full reasoning.
  */
 export function ensureSabCandidateIndexStarted(): void {
   if (state && !state.stopped) return;
   if (state?.starting) return;
-  const s = allocateState();
+  const s = allocateState(MAX_MODELS);
   s.starting = true;
   state = s;
   // Explicit initial values (a fresh prom-client Gauge otherwise defaults to
@@ -454,7 +638,8 @@ export function ensureSabCandidateIndexStarted(): void {
   sabCandidateIndexReady.set(0);
   sabCandidateIndexActiveGen.set(-1);
   sabCandidateIndexVersion.set(0);
-  sabCandidateIndexMetadataBlobCapacityBytes.set(METADATA_BLOB_BYTES);
+  sabCandidateIndexMetadataBlobCapacityBytes.set(s.metadataBlobCapacityBytes);
+  sabCandidateIndexMaxModelsEffective.set(s.effectiveMaxModels);
   spawnWorker(s);
   s.rebuildTimer = setInterval(() => requestRebuild(s), REBUILD_INTERVAL_MS);
   s.rebuildTimer.unref();
@@ -510,6 +695,14 @@ export function getSabCandidateIndexStatus(): {
   distinctCapabilities: number | null;
   metadataBlobUsedBytes: number | null;
   metadataBlobCapacityBytes: number;
+  /** ADR-028 (Layer 1): the effective MAX_MODELS the currently-allocated
+   *  buffers are sized for; `MAX_MODELS` (the fixed design ceiling) before
+   *  the index has ever been started. */
+  maxModelsEffective: number;
+  /** ADR-028 (Layer 3): peak RSS the worker reported for its most recent
+   *  rebuild attempt (successful or aborted); `null` before any rebuild has
+   *  completed. */
+  lastPeakRssBytes: number | null;
 } {
   if (!state) {
     return {
@@ -526,7 +719,9 @@ export function getSabCandidateIndexStatus(): {
       lastFailureReason: null,
       distinctCapabilities: null,
       metadataBlobUsedBytes: null,
-      metadataBlobCapacityBytes: METADATA_BLOB_BYTES,
+      metadataBlobCapacityBytes: buildCapacityConfig(MAX_MODELS).metadataBlobBytes,
+      maxModelsEffective: MAX_MODELS,
+      lastPeakRssBytes: null,
     };
   }
   return {
@@ -543,7 +738,9 @@ export function getSabCandidateIndexStatus(): {
     lastFailureReason: state.lastFailureReason,
     distinctCapabilities: state.distinctCapabilities,
     metadataBlobUsedBytes: state.metadataBlobUsedBytes,
-    metadataBlobCapacityBytes: METADATA_BLOB_BYTES,
+    metadataBlobCapacityBytes: state.metadataBlobCapacityBytes,
+    maxModelsEffective: state.effectiveMaxModels,
+    lastPeakRssBytes: state.lastPeakRssBytes,
   };
 }
 

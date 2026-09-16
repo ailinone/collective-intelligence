@@ -60,20 +60,32 @@ export interface WorkerRebuiltMessage {
    *  observability (the manager logs a warning the first time a generation
    *  is built from the Postgres fallback instead of the Redis fleet-wide
    *  snapshot, mirroring `model-catalog-service.ts`'s own fallback-path
-   *  logging convention). */
+   *  logging convention). Since ADR-028 (Layer 1) this is 'postgres' on
+   *  EVERY build by default — see `worker.ts`'s `SAB_CANDIDATE_WORKER_SOURCE`
+   *  doc — so the manager no longer treats it as anomalous by itself. */
   source: 'redis' | 'postgres';
+  /** Peak `process.memoryUsage().rss` observed by the worker during this
+   *  rebuild attempt (ADR-028, Layer 3) — see `worker-memory-guard.ts`. */
+  peakRssBytes: number;
 }
 
 /** Label value for `ci_sab_candidate_index_build_failures_total{reason}`:
  *  `capacity` = a fixed schema bound was exceeded (operator action: raise
  *  the env override or widen the schema), `fetch` = the catalog could not
- *  be read from Redis or Postgres, `other` = anything else. */
-export type RebuildFailureReason = 'capacity' | 'fetch' | 'other';
+ *  be read from Redis or Postgres, `memory` = the worker's own RSS crossed
+ *  `SAB_WORKER_MEMORY_ABORT_THRESHOLD_MB` mid-rebuild and the rebuild was
+ *  aborted before publishing (ADR-028, Layer 3), `other` = anything else. */
+export type RebuildFailureReason = 'capacity' | 'fetch' | 'memory' | 'other';
 
 export interface WorkerRebuildFailedMessage {
   type: 'rebuild-failed';
   error: string;
   reason: RebuildFailureReason;
+  /** Peak RSS observed before the failure — always populated (measured from
+   *  the very start of `runRebuild()`), even for `reason !== 'memory'`, so a
+   *  capacity/fetch failure's memory profile is also visible (ADR-028,
+   *  Layer 3). */
+  peakRssBytes: number;
 }
 
 export type WorkerToMainMessage =
@@ -102,4 +114,14 @@ export interface SabWorkerData {
   /** Runtime DATABASE_URL resolved on the main thread (see
    *  worker-database-url.ts for why the worker must not read process.env). */
   databaseUrl: string;
+  /** The effective MAX_MODELS the manager sized `bufferA`/`bufferB` for
+   *  (ADR-028, Layer 1 — dynamic sizing). The worker recomputes
+   *  `capacity.ts`'s `buildCapacityConfig(effectiveMaxModels)` independently
+   *  and compares the resulting layout's `totalBytes` against the buffers it
+   *  was actually handed (see worker.ts's existing mismatch guard) — passing
+   *  this single number, rather than a full capacity object, makes it
+   *  structurally impossible for the two sides to derive different curated/
+   *  aggregated/metadata-blob sizes from the same effective row-count
+   *  ceiling. */
+  effectiveMaxModels: number;
 }

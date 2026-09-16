@@ -148,3 +148,90 @@ for (const [name, value] of [
     );
   }
 }
+
+/**
+ * ── Dynamic MAX_MODELS sizing (ADR-028, Canary 3 follow-up, Layer 1) ───────
+ *
+ * The 2026-09-16 Canary 3 OOM found that the FIXED `MAX_MODELS` ceiling
+ * (200,000) is always fully allocated regardless of how many rows the real
+ * catalog actually has (116,627 that day) — ~477 MiB of the ~500 MiB
+ * permanent SharedArrayBuffer footprint is pure headroom for a catalog
+ * roughly 1.7x today's size that may not exist for years. `MAX_MODELS`
+ * itself (above) remains the hard, never-exceeded CEILING — operators can
+ * still pin it via `SAB_CANDIDATE_MAX_MODELS` exactly as before (and doing so
+ * is still the right call for e.g. a small staging deployment). What's new
+ * is `computeEffectiveMaxModels()`: given the REAL, live row count (the
+ * `GenerationMeta.rowCount` every successful build already reports for
+ * free — see manager.ts's `maybeResizeAfterBuild`), it derives how much of
+ * that ceiling a generation actually needs, with headroom for organic
+ * growth between rebuilds, so a healthy catalog doesn't pay for 200,000
+ * slots when it only has 116,627 (or 3, in a unit test).
+ *
+ * Deliberately NOT a replacement for the ceiling itself, and deliberately
+ * `Math.min`-clamped against it on every call — this can shrink or grow a
+ * generation's actual allocation, but it can never allocate more than an
+ * operator explicitly capped `SAB_CANDIDATE_MAX_MODELS` at, or more than the
+ * 200,000 design ceiling by default.
+ */
+export const MAX_MODELS_MARGIN = (() => {
+  const raw = process.env.SAB_CANDIDATE_MAX_MODELS_MARGIN;
+  if (!raw) return 0.3; // 30% headroom over the live row count, per this PR's task description
+  const parsed = Number(raw);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : 0.3;
+})();
+
+/**
+ * `liveRowCount <= 0` means "no real signal yet" (a process that has never
+ * completed a build) — returns the full ceiling in that case, exactly
+ * matching this module's pre-dynamic-sizing behavior, rather than guessing a
+ * smaller number with no data to back it.
+ */
+export function computeEffectiveMaxModels(liveRowCount: number): number {
+  if (!Number.isFinite(liveRowCount) || liveRowCount <= 0) return MAX_MODELS;
+  const withMargin = Math.ceil(liveRowCount * (1 + MAX_MODELS_MARGIN));
+  return Math.min(MAX_MODELS, withMargin);
+}
+
+/** The subset of capacity bounds that actually scale with `MAX_MODELS` in a
+ *  meaningful way (large per-row multiplications). `MAX_PROVIDERS`,
+ *  `ID_BLOB_BYTES`, and `PROVIDER_BLOB_BYTES` stay fixed regardless of
+ *  dynamic sizing — all three are already small (≤12 MiB combined at the
+ *  default) and independent of catalog row count (provider cardinality is
+ *  ~95-200 in real prod, not proportional to model count). */
+export interface DynamicCapacityConfig {
+  maxModels: number;
+  curatedCap: number;
+  aggregatedCap: number;
+  metadataBlobBytes: number;
+}
+
+/**
+ * Derives every size-dependent capacity bound from a single `maxModels`
+ * number, used by BOTH `manager.ts` (when allocating a generation's
+ * SharedArrayBuffers) and `worker.ts` (when independently recomputing the
+ * SAME layout to verify against the buffers it was handed via `workerData`)
+ * — keeping this in one shared function is what makes it structurally
+ * impossible for the two sides to derive different layouts from the same
+ * `effectiveMaxModels` number (the exact class of bug `worker.ts`'s own
+ * buffer-size mismatch guard exists to catch defensively).
+ *
+ * `curatedCap`/`aggregatedCap` are clamped to `maxModels` rather than scaled
+ * independently: every row lands in AT MOST one of the two buckets (see
+ * `encode.ts`'s `bucketFlag` assignment), so `curatedCap = aggregatedCap =
+ * maxModels` is always sufficient headroom for either bucket alone, with no
+ * need for its own separate margin. An explicit `SAB_CANDIDATE_CURATED_CAP`/
+ * `SAB_CANDIDATE_AGGREGATED_CAP` override still wins when smaller than
+ * `maxModels` (e.g. a deployment that wants to hard-cap one bucket
+ * independently of overall catalog size).
+ */
+export function buildCapacityConfig(maxModels: number): DynamicCapacityConfig {
+  return {
+    maxModels,
+    curatedCap: Math.min(maxModels, CURATED_CAP),
+    aggregatedCap: Math.min(maxModels, AGGREGATED_CAP),
+    metadataBlobBytes: readIntEnvOverride(
+      'SAB_CANDIDATE_METADATA_BLOB_BYTES',
+      maxModels * METADATA_BYTES_PER_MODEL
+    ),
+  };
+}
