@@ -119,8 +119,30 @@ describe('matrix promotion regression — aws-bedrock dual-auth secrets', () => 
     // have verified the 163KB inventory response that promoted aws-bedrock
     // to live-validation.
     expect(source).toMatch(
-      /envVar:\s*['"]AWS_BEARER_TOKEN_BEDROCK['"][\s\S]*?secretKeys:\s*\[[^\]]*['"]aws-bearer-token['"]/
+      /envVar:\s*['"]AWS_BEARER_TOKEN_BEDROCK['"]\s*[\s\S]*?secretKeys:\s*\[[^\]]*['"]aws-bearer-token['"]/
     );
+  });
+
+  it('lists bedrock-key BEFORE aws-bearer-token (2026-09-16 rotation)', () => {
+    // First-existing-wins resolution: BOTH secrets exist in Secret Manager
+    // as of 2026-09-16, but the March token was rotated out upstream
+    // (re-probe: 403 old / 200 new against /foundation-models). If
+    // aws-bearer-token ever reclaims first position, the loader silently
+    // resolves the dead credential: Bedrock discovery breaks while SigV4
+    // invoke (separate env vars) keeps working — inventory drift with no
+    // error surfaced at boot.
+    const entry = source.match(
+      /envVar:\s*['"]AWS_BEARER_TOKEN_BEDROCK['"]\s*[\s\S]*?secretKeys:\s*\[([^\]]+)\]/
+    );
+    expect(entry).not.toBeNull();
+    const keys = (entry![1].match(/['"]([^'"]+)['"]/g) ?? []).map((s) =>
+      s.slice(1, -1)
+    );
+    expect(keys, 'AWS_BEARER_TOKEN_BEDROCK secretKeys must not be empty').not.toEqual(
+      []
+    );
+    expect(keys[0]).toBe('bedrock-key');
+    expect(keys).toContain('aws-bearer-token');
   });
 });
 

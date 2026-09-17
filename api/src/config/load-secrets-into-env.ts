@@ -123,7 +123,18 @@ export const PROVIDER_SECRETS: readonly ProviderSecretBinding[] = [
   { envVar: 'BAIDU_BASE_URL', secretKeys: ['baidu-base-url'] },
   { envVar: 'AWS_ACCESS_KEY_ID', secretKeys: ['aws-key-id'] },
   { envVar: 'AWS_SECRET_ACCESS_KEY', secretKeys: ['aws-secret'] },
-  { envVar: 'AWS_BEARER_TOKEN_BEDROCK', secretKeys: ['aws-bearer-token'] },
+  // 2026-09-16: the March bearer token (aws-bearer-token) was rotated out
+  // upstream — a live re-probe of GET
+  // bedrock.us-east-1.amazonaws.com/foundation-models returned 403 for the
+  // old token and 200 for the new operator-provisioned API key
+  // ailin-bedrock-key (created 2026-09-16, 136-char `ABSK…` AWS API key).
+  // The provider-secret resolution loop takes the FIRST candidate that
+  // merely EXISTS in Secret Manager (no liveness check), so 'bedrock-key'
+  // MUST be listed first now that both secrets exist — leaving
+  // 'aws-bearer-token' first would keep resolving the dead credential.
+  // The old name stays as a fallback for a future rename back to the
+  // aws-* convention.
+  { envVar: 'AWS_BEARER_TOKEN_BEDROCK', secretKeys: ['bedrock-key', 'aws-bearer-token'] },
   // Batch 7.1: Bedrock region + inference-profile ARN can now be set via
   // GCP Secret Manager. Useful for deploys that route Bedrock to a specific
   // region (e.g. us-west-2) or via cross-region inference profiles without
