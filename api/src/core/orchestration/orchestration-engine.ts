@@ -469,6 +469,68 @@ function isLikelyPortuguese(text: string): boolean {
   return PORTUGUESE_MARKER_RE.test(text);
 }
 
+/**
+ * Overall per-request deadline for the NON-STREAMING execute() path
+ * (2026-09-16, re-applied from the 2026-08-14 design): bounds the combined
+ * wall-clock time of strategy dispatch (feedback loop, confidence-gate
+ * refinement, direct strategy.execute()) + recoverEmptyFinalResponse().
+ * executeStream() already has its own whole-request ceiling via
+ * STREAM_REQUEST_DEADLINE_MS (a real AbortController, see ~line 3413) — but
+ * the non-streaming path had NONE at all: a request that got stuck (every
+ * rung of a cost-cascade timing out, then every dynamic-fallback candidate
+ * in recoverEmptyFinalResponse() also hanging) had no combined budget, and
+ * could hang far past any legitimate latency with zero response delivered.
+ *
+ * 180s mirrors STREAM_REQUEST_DEADLINE_MS's default so both entry points
+ * enforce one coherent ceiling. Like that one, this is a coarse safety net,
+ * not a replacement for the per-call timeouts: a multi-round collective can
+ * legitimately run long, and this WILL sometimes cut off a request that was
+ * still making progress — bounded-but-sometimes-degraded beats the
+ * unbounded hang. Tunable via EXECUTE_REQUEST_DEADLINE_MS so ops can retune
+ * post-deploy without a redeploy.
+ */
+export function executeOverallDeadlineMs(): number {
+  return Number(process.env.EXECUTE_REQUEST_DEADLINE_MS ?? 180_000);
+}
+
+/**
+ * Race `promise` against `timeoutMs`. Resolves to `onTimeout()`'s value if
+ * the deadline wins instead of throwing — callers get a well-formed
+ * degraded/fallback result they can hand to a client, not an unhandled
+ * timeout error.
+ *
+ * The underlying `promise` is left to keep running in the background if the
+ * deadline wins (there is no way to cancel a plain Promise); a `.catch(() =>
+ * {})` is attached up front so a late rejection can never surface as an
+ * unhandled rejection once the race has already resolved via the timeout.
+ *
+ * `timeoutMs <= 0` resolves immediately with `onTimeout()` without starting
+ * a timer — the budget-already-exhausted case for callers chaining several
+ * of these off one shared deadline (execute()'s multi-step pipeline).
+ */
+export async function withOverallDeadline<T>(
+  promise: Promise<T>,
+  timeoutMs: number,
+  onTimeout: () => T
+): Promise<T> {
+  promise.catch(() => {});
+
+  if (timeoutMs <= 0) {
+    return onTimeout();
+  }
+
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeoutPromise = new Promise<T>((resolve) => {
+    timer = setTimeout(() => resolve(onTimeout()), timeoutMs);
+  });
+
+  try {
+    return await Promise.race([promise, timeoutPromise]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
 /** Natural-language label for each file-generation format, per language —
  *  used to build a real sentence instead of the internal format tag. */
 const FILE_FORMAT_SUCCESS_MESSAGES: Record<
@@ -1241,6 +1303,14 @@ export class OrchestrationEngine {
 
     const requestId = nanoid();
     const startTime = Date.now();
+    // Overall deadline for the non-streaming path: ONE wall-clock budget
+    // shared by every strategy-dispatch + recovery await below (feedback
+    // loop, confidence-gate refinement, direct strategy.execute(), and
+    // recoverEmptyFinalResponse) — see executeOverallDeadlineMs()'s doc
+    // comment. Computed once so sequential steps share ONE remaining-time
+    // budget instead of each getting its own full allowance (which would let
+    // their sum blow far past the intended cap).
+    const overallDeadlineAt = startTime + executeOverallDeadlineMs();
     const tracer = trace.getTracer('ci-orchestration');
 
     // Wrap entire orchestration in a span for distributed tracing
@@ -1979,16 +2049,21 @@ export class OrchestrationEngine {
                 ? 1
                 : feedbackMaxIterations;
               try {
-                result = await this.feedbackLoop.executeWithFeedback(
-                  strategy,
-                  memRequest,
-                  context,
-                  {
+                result = await withOverallDeadline(
+                  this.feedbackLoop.executeWithFeedback(strategy, memRequest, context, {
                     qualityThreshold: feedbackQualityThreshold,
                     maxIterations: ablatedFeedbackIterations,
                     allowAutoFix: !context.ablationFlags?.disabled?.has('feedback-loop'),
                     escalationStrategy,
                     escalationReason,
+                  }),
+                  Math.max(0, overallDeadlineAt - Date.now()),
+                  () => {
+                    this.log.warn(
+                      { requestId, strategy: strategy.getMetadata().name },
+                      'Overall request deadline exceeded during feedback-loop execution — returning degraded response'
+                    );
+                    return this.buildDeadlineExceededResult(strategy, executeOverallDeadlineMs());
                   }
                 );
               } catch (execErr) {
@@ -2049,14 +2124,25 @@ export class OrchestrationEngine {
                   'Confidence gate triggered — executing refinement pass(es)'
                 );
 
-                const refinementResult = await this.feedbackLoop.executeWithFeedback(
-                  strategy,
-                  request,
-                  context,
-                  {
+                const refinementResult = await withOverallDeadline(
+                  this.feedbackLoop.executeWithFeedback(strategy, request, context, {
                     qualityThreshold: qualityTarget,
                     maxIterations: maxRefinementRounds,
                     allowAutoFix: true,
+                  }),
+                  Math.max(0, overallDeadlineAt - Date.now()),
+                  () => {
+                    // Best-effort: the refinement pass is optional (it only
+                    // replaces `result` if it scores higher). On timeout, keep
+                    // the primary result unchanged instead of degrading an
+                    // already-good answer — returning `result` itself makes the
+                    // qualityScore comparison below a no-op (equal, not
+                    // greater), so nothing is replaced.
+                    this.log.warn(
+                      { requestId, strategy: strategy.getMetadata().name },
+                      'Overall request deadline exceeded during confidence-gate refinement — keeping original result'
+                    );
+                    return result;
                   }
                 );
 
@@ -2108,7 +2194,17 @@ export class OrchestrationEngine {
               // Leader removed — strategies call executeModel() directly
 
               try {
-                result = await strategy.execute(memoryEnrichedRequest, context);
+                result = await withOverallDeadline(
+                  strategy.execute(memoryEnrichedRequest, context),
+                  Math.max(0, overallDeadlineAt - Date.now()),
+                  () => {
+                    this.log.warn(
+                      { requestId, strategy: strategy.getMetadata().name },
+                      'Overall request deadline exceeded — returning degraded response'
+                    );
+                    return this.buildDeadlineExceededResult(strategy, executeOverallDeadlineMs());
+                  }
+                );
               } catch (execErr) {
                 // See the matching comment in the confidenceGateEnabled
                 // branch above: a pinned model's ContextWindowExceededError
@@ -2178,7 +2274,23 @@ export class OrchestrationEngine {
           // C4 fix: uses request-scoped selectionSource, not shared instance field
           result.metadata = { ...result.metadata, decision_source: selectionSource };
           result.finalResponse = this.ensureResponseUsage(result.finalResponse);
-          result = await this.recoverEmptyFinalResponse(result, request, context, requestId);
+          result = await withOverallDeadline(
+            this.recoverEmptyFinalResponse(result, request, context, requestId),
+            Math.max(0, overallDeadlineAt - Date.now()),
+            () => {
+              // Best-effort: recovery only matters when the result is still
+              // empty at this point. On timeout, fall through with the
+              // pre-recovery result — applyDegradedFallback() right after
+              // this pipeline already converts a still-empty result into an
+              // explicit "[DEGRADED]" response, so there is nothing extra to
+              // synthesize here.
+              this.log.warn(
+                { requestId, strategyUsed: result.strategyUsed },
+                'Overall request deadline exceeded during empty-response recovery — using pre-recovery result'
+              );
+              return result;
+            }
+          );
           result.finalResponse = this.ensureResponseUsage(result.finalResponse);
 
           // ── Response Depth Check (data-driven: <500 tokens → Q=0.196 avg) ──
@@ -6665,6 +6777,33 @@ export class OrchestrationEngine {
    * hard-fail every request whose cascade exhausted its candidates, even when
    * the exact same throw was silently recovered on the non-streaming path.
    */
+  /**
+   * Synthesize the OrchestrationResult for the overall-deadline-exceeded case
+   * (see executeOverallDeadlineMs()) at the call sites that need a brand new
+   * result rather than falling through with an existing one unchanged
+   * (execute()'s feedback-loop and direct-strategy.execute() sites). Reuses
+   * buildStrategyThrewResult()'s shape (so it still flows through the
+   * existing applyDegradedFallback() pipeline unchanged) but adds
+   * `overall_deadline_exceeded: true` — without this, a timeout is
+   * indistinguishable from a genuine strategy throw in persisted
+   * metadata/logs, which would misattribute reliability problems
+   * ("strategy X throws N% of the time") to strategies that were just slow,
+   * not actually failing.
+   */
+  private buildDeadlineExceededResult(
+    strategy: BaseStrategy,
+    timeoutMs: number
+  ): OrchestrationResult {
+    const result = this.buildStrategyThrewResult(
+      strategy,
+      new Error(`Overall request deadline of ${timeoutMs}ms exceeded`)
+    );
+    return {
+      ...result,
+      metadata: { ...result.metadata, overall_deadline_exceeded: true },
+    };
+  }
+
   private buildStrategyThrewResult(strategy: BaseStrategy, err: unknown): OrchestrationResult {
     return {
       strategyUsed: strategy.getMetadata().name,

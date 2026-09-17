@@ -82,6 +82,46 @@ const fakeRedis = {
     }
     return removed;
   },
+
+  // Minimal stand-in for ioredis's ChainableCommander: distributed-bulkhead's
+  // release() now batches ZREM + ZCARD into one pipeline() call. Real Redis
+  // pipelines commands in arrival order (single-threaded server), so running
+  // the queued fake commands sequentially and returning ioredis's
+  // [error, result] tuple shape reproduces the same observable contract.
+  pipeline(this: typeof fakeRedis) {
+    type QueuedCommand = () => Promise<[Error | null, unknown]>;
+    const queued: QueuedCommand[] = [];
+    const chain = {
+      zrem: (key: string, member: string) => {
+        queued.push(async () => {
+          try {
+            return [null, await this.zrem(key, member)];
+          } catch (error) {
+            return [error as Error, undefined];
+          }
+        });
+        return chain;
+      },
+      zcard: (key: string) => {
+        queued.push(async () => {
+          try {
+            return [null, await this.zcard(key)];
+          } catch (error) {
+            return [error as Error, undefined];
+          }
+        });
+        return chain;
+      },
+      exec: async (): Promise<[Error | null, unknown][]> => {
+        const results: [Error | null, unknown][] = [];
+        for (const run of queued) {
+          results.push(await run());
+        }
+        return results;
+      },
+    };
+    return chain;
+  },
 };
 
 let shouldThrowOnGetClient = false;

@@ -248,9 +248,30 @@ export class DistributedBulkhead extends EventEmitter implements BulkheadLike {
   private async release(leaseId: string): Promise<void> {
     try {
       const redis = getRedisClient();
-      await redis.zrem(this.redisKey, leaseId);
-      const active = await redis.zcard(this.redisKey);
-      bulkheadActiveLeases.set({ provider: this.config.name }, active);
+      // ZREM and ZCARD are batched into a single round trip. This is safe
+      // because both target the same key on the same Redis instance:
+      // ioredis pipelines are delivered as one contiguous block and Redis
+      // (single-threaded) executes them in arrival order, so the ZCARD
+      // still observes this ZREM's effect ("read-your-writes" within one
+      // pipeline holds for same-key commands — verified empirically, see
+      // scratchpad/resp-probe.js). `active` only feeds a Prometheus gauge
+      // below, never control flow, so this is a pure round-trip reduction.
+      const results = await redis.pipeline().zrem(this.redisKey, leaseId).zcard(this.redisKey).exec();
+
+      // pipeline().exec() resolves with per-command [error, result] tuples
+      // instead of rejecting on a single command's failure (only a
+      // connection-level failure rejects). Without this explicit check, a
+      // per-command error (e.g. WRONGTYPE) would be silently swallowed
+      // instead of hitting the catch block below like it did when these
+      // were two sequential awaited calls.
+      if (!results) {
+        throw new Error('Redis pipeline returned a null result');
+      }
+      const [[zremErr], [zcardErr, active]] = results;
+      if (zremErr) throw zremErr;
+      if (zcardErr) throw zcardErr;
+
+      bulkheadActiveLeases.set({ provider: this.config.name }, active as number);
     } catch (error) {
       // Releasing is best-effort: if this fails, the lease still expires on
       // its own via leaseTtlMs, so capacity self-heals rather than leaking
