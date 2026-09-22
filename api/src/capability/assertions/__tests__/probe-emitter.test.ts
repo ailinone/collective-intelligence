@@ -89,7 +89,11 @@ describe('recordProbeAssertion', () => {
 
     // supersede + insert
     expect(runner.$executeRawUnsafe).toHaveBeenCalledTimes(2);
-    const [supersedeSql, uids, origin] = runner.$executeRawUnsafe.mock.calls[0] ?? [];
+    // Param order is [sql, origin, modelUids, capabilityUris, sources] —
+    // writer.ts's idempotency fix scopes the supersede UPDATE to specific
+    // (model_uid, capability_uri, source) triples, so origin now comes
+    // before the row-key arrays rather than after a single model_uid array.
+    const [supersedeSql, origin, uids] = runner.$executeRawUnsafe.mock.calls[0] ?? [];
     expect(String(supersedeSql)).toContain('model_capability_assertions');
     expect(uids).toEqual(['resolved-uid']);
     // Per-capability origin, so probing a DIFFERENT capability later does not
@@ -146,9 +150,9 @@ describe('recordProbeAssertion', () => {
       $queryRawUnsafe: vi.fn().mockRejectedValue(new Error('connection terminated')),
       $executeRawUnsafe: vi.fn(),
     };
-    await expect(
-      recordProbeAssertion({ ...input, runner: runner as never })
-    ).resolves.toBe('failed');
+    await expect(recordProbeAssertion({ ...input, runner: runner as never })).resolves.toBe(
+      'failed'
+    );
   });
 });
 
@@ -163,7 +167,9 @@ describe('recordProbeAssertions (multi-capability, Tiered Capability Fingerprint
   it('is enabled by default and respects its own kill switch', async () => {
     process.env.HCRA_PROBE_ASSERTIONS_DISABLED = 'true';
     const runner = runnerWithModel('uid-1');
-    expect(await recordProbeAssertions({ ...multiInput, runner: runner as never })).toBe('disabled');
+    expect(await recordProbeAssertions({ ...multiInput, runner: runner as never })).toBe(
+      'disabled'
+    );
     expect(runner.$queryRawUnsafe).not.toHaveBeenCalled();
   });
 
@@ -171,10 +177,20 @@ describe('recordProbeAssertions (multi-capability, Tiered Capability Fingerprint
     const runner = runnerWithModel('resolved-uid');
     expect(await recordProbeAssertions({ ...multiInput, runner: runner as never })).toBe('written');
 
-    expect(runner.$queryRawUnsafe).toHaveBeenCalledTimes(1); // one uid lookup, not one per capability
+    // One uid lookup (against `models`), not one per capability. writer.ts's
+    // idempotency fix adds its own $queryRawUnsafe call (against
+    // model_capability_assertions, fetching the batch's currently-active
+    // assertions) — a different, necessarily per-batch query, so it's
+    // excluded here rather than folded into this count.
+    const uidLookupCalls = runner.$queryRawUnsafe.mock.calls.filter(
+      (call) => !String(call[0]).includes('model_capability_assertions')
+    );
+    expect(uidLookupCalls).toHaveLength(1);
     expect(runner.$executeRawUnsafe).toHaveBeenCalledTimes(2); // supersede + insert
 
-    const [, , origin] = runner.$executeRawUnsafe.mock.calls[0] ?? [];
+    // Param order is [sql, origin, modelUids, ...] (see comment in the
+    // recordProbeAssertion test above for why origin moved to index 1).
+    const [, origin] = runner.$executeRawUnsafe.mock.calls[0] ?? [];
     // Same origin for the WHOLE batch — a fresh Tier-1 pass supersedes ALL
     // of its own prior capabilities for this model in one shot.
     expect(origin).toBe('tier1-diagnostic-probe@v1');
@@ -227,8 +243,8 @@ describe('recordProbeAssertions (multi-capability, Tiered Capability Fingerprint
       $queryRawUnsafe: vi.fn().mockRejectedValue(new Error('connection terminated')),
       $executeRawUnsafe: vi.fn(),
     };
-    await expect(
-      recordProbeAssertions({ ...multiInput, runner: runner as never })
-    ).resolves.toBe('failed');
+    await expect(recordProbeAssertions({ ...multiInput, runner: runner as never })).resolves.toBe(
+      'failed'
+    );
   });
 });

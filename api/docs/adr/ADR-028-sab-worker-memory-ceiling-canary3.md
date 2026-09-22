@@ -11,7 +11,7 @@ Source: https://github.com/ailinone/collective-intelligence
 
 # ADR-028: SAB Worker Memory Ceiling — Canary 3 OOM (2026-09-16)
 
-**Status**: Accepted (Layer 1 + Layer 3 implemented and shipped this PR, flag default stays OFF; Layer 2 documented as pending/conditional, not implemented)
+**Status**: Accepted (Layer 1 + Layer 3 implemented and shipped, flag default stays OFF; Layer 2 documented as pending/conditional, not implemented). Post-merge canary 2026-09-16 evening ran ~80 min with zero OOM — one graceful Layer-3 abort at 3,425 MB — and was reverted by operator choice, not failure. Third attempt (2026-09-17 03:56–05:03 UTC) ended in a REAL MainThread OOM-kill at 4.1 GB under host memory pressure; Layer 3 fired correctly (aborts at 3,302/3,661 MB) but the ceiling it guards is the WORKER's RSS, not the main thread's. See both outcome sections below.
 **Date**: 2026-09-16
 **Context**: ADR-027 shipped the `SharedArrayBuffer` + `worker_threads` candidate index (`SELECTION_USE_SAB_CANDIDATE_INDEX`, default OFF) and its own "Canary 2" section already found and fixed one production OOM-adjacent incident (capability-mask truncation + an unmultiplied metadata blob default). This ADR documents a THIRD incident — a real container OOM-kill, not just a failed build — found on a canary run today, its full root cause, and the three-layer remediation plan this PR implements the first two layers of.
 **Related**: ADR-027 (`sab-worker-candidate-index.md` — the mechanism this incident occurred in; "Canary 2" section is the direct predecessor of this one), ADR-026 (`full-cache-index-rollout-readiness.md` — the event-loop-blocking problem this whole design exists to solve), `api/src/core/selection/sab-candidate-index/` (worker.ts, manager.ts, capacity.ts, schema.ts, encode.ts, worker-memory-guard.ts — all touched by this PR).
@@ -104,6 +104,43 @@ Everything ADR-027's own Preconditions 1–4 already required still applies (a r
 6. **`ci_sab_candidate_index_build_failures_total{reason="memory"}` staying at 0** is now part of a successful canary's definition, exactly like the existing `reason="capacity"`/`reason="fetch"` bars.
 7. **Do not raise `SAB_WORKER_MEMORY_ABORT_THRESHOLD_MB` above a value that leaves comfortable room under the container's real memory limit** without first re-confirming the main thread's own steady-state RSS on the target deployment (ADR-027's own "Worker transient heap cost" section already flags the main thread's ~1.6–2.8 GiB baseline as a real, separate cost this worker's own budget sits on top of).
 8. **This PR does NOT self-authorize re-enabling `SELECTION_USE_SAB_CANDIDATE_INDEX`** — a new canary, run and evaluated after this PR is reviewed and merged, is required, per the same discipline ADR-027's own Precondition 4 already established for the post-Canary-2 fix.
+
+## Canary 3 second attempt — outcome (2026-09-16 19:25–21:03 UTC)
+
+The first post-merge canary ran the evening the PR shipped. Reconstructed below from durable evidence (swarm task specs/timestamps, container logs of retained dead tasks, kernel journal, GitHub Actions run history) — the operating session's live observations were lost with the pruned tasks (see lesson L3), and its revert decision was not recorded anywhere in the repo at the time.
+
+**Timeline (all UTC):**
+- 19:08–19:12 — PR #608 deploy (the Layers 1+3 image) rolls out clean.
+- 19:25 — `docker service update --env-add SELECTION_USE_SAB_CANDIDATE_INDEX=true --update-parallelism 1 --update-order start-first --update-delay 45m --update-monitor 2m --update-failure-action rollback --detach ci_api`; slot 1 updated.
+- 19:38–20:02 — observed rebuilds (worker history, all `source: postgres`): 19:38, 19:44, 19:50 success (peak RSS 2.2–2.3 GB each); 19:56 **graceful Layer-3 abort** at 3,425 MB peak, "post-fetch" checkpoint, above the 3,200 MB default threshold — container did NOT crash, previous generation kept serving, recovery on the next cycle; 20:02 success again (2,974 MB).
+- ~20:10 — slot 2 graduated automatically per the 45 m delay. **No kernel OOM occurred at any point in the entire window** (kernel journal clean for `ci_api` the whole night; the only memcg kills on the host were unrelated `tail` processes inside CI job containers starting 23:10).
+- 20:32 — manual `ci_db` restart by the operating session (task recreated, spec unchanged).
+- ~20:55–21:03 — manual revert of the flag (tasks from 20:59 onward carry `SELECTION_USE_SAB_CANDIDATE_INDEX=false` explicitly). Confirmed NOT the pipeline (the deploy fast path only passes `--image` and no Actions run exists in that window) and NOT `--rollback` (that would have restored the variable to absent, not `false`). A discretionary revert; the observed evidence was resilience (4/5 cycles success, 1 contained abort, zero OOM), not failure.
+- 21:03:20 — simultaneous manual update of `ci_api` (3 tasks) and `ci_db` caused ~90 s of database unavailability: one api task exited 1 ("Graceful shutdown exceeded SHUTDOWN_TIMEOUT_MS — forcing exit", DB unreachable mid-shutdown), one was SIGKILL'd (137) still mid-boot. Both stabilized immediately; routine pipeline deploys at 23:40 / 00:34 / 01:27 were clean.
+
+**Operational lessons (all confirmed against artifacts of this incident):**
+
+- **L1 — manual `--update-*` flags leak into pipeline deploys.** `docker service update` persists its `UpdateConfig` into the service spec; the deploy fast path (`docker service update --image … --update-order start-first …`) passes no delay of its own, so a canary's `--update-delay 45m` would silently make every subsequent deploy take 45 m per replica until explicitly reset (`docker service update --update-delay 10s …`). The operating session reset it at ~21:03; the three same-night deploys completed in ~5 m each.
+- **L2 — never update `ci_api` and `ci_db` in the same instant.** The combined restart is what produced the 90 s DB-outage turbulence above (P1001 "Can't reach database server" cascading into forced shutdowns).
+- **L3 — pruned swarm tasks lose their logs.** The canary tasks (19:25/20:10) were pruned from task history and their logs went with them; only tasks still retained answer `docker service logs`. Canary observation needs live log capture from the start (e.g. a `nohup docker service logs -f … | grep --line-buffered …` collector on the host) or a raised `--task-history-limit`.
+- **L4 — the durable record of "who changed the service spec" is thin on a busy host.** `docker events` had already rotated past the window; kernel journal + per-task `Spec.ContainerSpec.Env` + Actions run timing were what allowed full reconstruction.
+
+## Canary 3 third attempt — outcome (2026-09-17 03:56–05:03 UTC): REAL OOM, reverted
+
+Same command shape as the second attempt (parallelism 1, start-first, delay 45 m, monitor 2 m, failure-action rollback); live log collector on the host for the whole run (lesson L3), `--update-delay` reset planned per lesson L1.
+
+**Timeline (all UTC):**
+- 03:56 — update fired; swarm rolled slot 2 first. Initial build 03:58:47 (117,675 rows, 36.5 s, `source: postgres`, metadata blob 106.9/204.8 MB). Clean 6-minute rebuild cycles through 04:22 (buildMs 5–7 s), replica RSS ~1.3–2.2 GB.
+- 04:26:38 — an unattributed simultaneous restart of `ci_api` + `ci_db` + `ci_prometheus` (same image, no pipeline run, not the canary rollout — author unidentified) interrupted the soak; the replacement tasks' initial builds hit Postgres "too many clients" (connection storm from everything rebooting at once) and self-healed on the next cycle.
+- 04:45–04:57 — the HOST came under severe memory pressure from CI runner jobs: three GLOBAL (CONSTRAINT_NONE) OOM kills of `node` processes at 4.2–5.9 GB RSS inside the org-pool runner. ci_db briefly hit 91% of its 3 GB limit; SAB buildMs degraded 5 s → 13 s → 42 s.
+- 04:46–04:52 — Layer 3 fired correctly on BOTH replicas' workers: graceful aborts at worker RSS 3,661 MB ("pre-fetch" — the previous generation + buffers + heap already resident) and 3,302 MB ("post-fetch"); last-good generations kept serving.
+- 05:00:08 — **real container OOM-kill**: slot 2's MAIN thread (`MainThread`, uid 1001) killed by the kernel at 4,116 MB RSS inside its own 4 GiB cgroup. The Layer-3 guard measures the WORKER's RSS at three checkpoints per rebuild — it cannot see the main thread, and the main thread's own growth (ADR-027's documented 1.6–2.8 GiB baseline) plus the resident SAB generation plus rebuild transients plus host-level reclaim pressure exceeded the container ceiling between guard checkpoints.
+- 05:03:13 — manual revert: `--env-add SELECTION_USE_SAB_CANDIDATE_INDEX=false` with sane update flags in the same command (delay 10 s, monitor 5 s). Clean rolling convergence afterward. An explicit env-add was used instead of `--rollback` because an intervening manual update at 04:26 had bumped the spec version, and `--rollback` would have restored THAT spec — which already carried `SAB=true`.
+
+**Verdict and implications:**
+- Layer 3 did its job (4 contained aborts across the two attempts at 3.3–3.66 GB, zero of those escalated to a crash) — but it is a WORKER-RSS guard. The 4 GiB container is the binding constraint: main-thread baseline + resident SAB buffers + rebuild transient do not fit when the host itself is reclaiming. Layer 2 (two-pass encode) shrinks the transient but does not move the floor; it is necessary-but-insufficient on a 4 GiB container under host pressure.
+- The paths that actually close this: raise the `ci_api` memory limit (blocked on the shared host's headroom — reinforces the dedicated-host discussion), or Layer 2 + a main-thread memory diet, or both.
+- Monitoring corollary (extends lesson L3): under load, `docker service logs -f` buffering delayed worker lines 12–18 minutes (log entries timestamped 04:46:36 were delivered to the collector at 05:04:12). During an incident, read task logs directly (`docker service logs <task>`) rather than trusting a live `-f` collector for freshness.
 
 ## Verification performed for this PR
 

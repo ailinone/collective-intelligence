@@ -79,12 +79,25 @@ describe('cache-refresh-ahead per-process timer (Track 1 §2.3 fix)', () => {
     else process.env.CACHE_REFRESH_AHEAD_INTERVAL_MS = ORIGINAL_INTERVAL;
   });
 
-  it('hydrates the catalog cache from Redis on each tick and NEVER calls the Postgres-hitting refresh directly', async () => {
+  it('runs an immediate hydrate tick at start, without waiting for the first interval to elapse', async () => {
     const { startCacheRefreshAhead } = await import('@/services/cache-refresh-ahead');
     const engine = makeEngine();
     startCacheRefreshAhead(engine);
 
-    await vi.advanceTimersByTimeAsync(1000);
+    // Flush the microtask queue only — zero timers advanced — so this proves
+    // the first hydrate is NOT gated behind the 1000ms interval.
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(hydrateCatalogCacheAheadMock).toHaveBeenCalledTimes(1);
+    expect(refreshCatalogCacheAheadMock).not.toHaveBeenCalled();
+    expect(engine.initializeTriageAsync).toHaveBeenCalledTimes(1);
+  });
+
+  it('hydrates the catalog cache from Redis on each tick (including the immediate one) and NEVER calls the Postgres-hitting refresh directly', async () => {
+    const { startCacheRefreshAhead } = await import('@/services/cache-refresh-ahead');
+    const engine = makeEngine();
+    startCacheRefreshAhead(engine);
+    await vi.advanceTimersByTimeAsync(0); // flush the immediate tick
 
     expect(hydrateCatalogCacheAheadMock).toHaveBeenCalledTimes(1);
     expect(refreshCatalogCacheAheadMock).not.toHaveBeenCalled();
@@ -93,19 +106,24 @@ describe('cache-refresh-ahead per-process timer (Track 1 §2.3 fix)', () => {
     await vi.advanceTimersByTimeAsync(1000);
     expect(hydrateCatalogCacheAheadMock).toHaveBeenCalledTimes(2);
     expect(refreshCatalogCacheAheadMock).not.toHaveBeenCalled();
+
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(hydrateCatalogCacheAheadMock).toHaveBeenCalledTimes(3);
+    expect(refreshCatalogCacheAheadMock).not.toHaveBeenCalled();
   });
 
   it('runs the selection pre-warm only when the catalog fingerprint changed since the last pre-warm', async () => {
+    // 5 values: the immediate tick, then 4 interval ticks.
     getCatalogFingerprintMock
-      .mockReturnValueOnce('fp-a')
-      .mockReturnValueOnce('fp-a')
-      .mockReturnValueOnce('fp-b')
-      .mockReturnValueOnce('fp-b');
+      .mockReturnValueOnce('fp-a') // immediate tick — new vs. null, prewarms
+      .mockReturnValueOnce('fp-a') // unchanged
+      .mockReturnValueOnce('fp-a') // unchanged
+      .mockReturnValueOnce('fp-b') // changed, prewarms again
+      .mockReturnValueOnce('fp-b'); // unchanged
     const { startCacheRefreshAhead } = await import('@/services/cache-refresh-ahead');
     const engine = makeEngine();
     startCacheRefreshAhead(engine);
-
-    await vi.advanceTimersByTimeAsync(1000);
+    await vi.advanceTimersByTimeAsync(0); // flush the immediate tick
     expect(engine.initializeTriageAsync).toHaveBeenCalledTimes(1);
 
     // Same fingerprint: hydrate still runs (it is the cheap meta read), but
@@ -115,10 +133,14 @@ describe('cache-refresh-ahead per-process timer (Track 1 §2.3 fix)', () => {
     expect(engine.initializeTriageAsync).toHaveBeenCalledTimes(1);
 
     await vi.advanceTimersByTimeAsync(1000);
+    expect(hydrateCatalogCacheAheadMock).toHaveBeenCalledTimes(3);
+    expect(engine.initializeTriageAsync).toHaveBeenCalledTimes(1);
+
+    await vi.advanceTimersByTimeAsync(1000);
     expect(engine.initializeTriageAsync).toHaveBeenCalledTimes(2);
 
     await vi.advanceTimersByTimeAsync(1000);
-    expect(hydrateCatalogCacheAheadMock).toHaveBeenCalledTimes(4);
+    expect(hydrateCatalogCacheAheadMock).toHaveBeenCalledTimes(5);
     expect(engine.initializeTriageAsync).toHaveBeenCalledTimes(2);
     expect(refreshCatalogCacheAheadMock).not.toHaveBeenCalled();
   });
@@ -131,7 +153,8 @@ describe('cache-refresh-ahead per-process timer (Track 1 §2.3 fix)', () => {
 
     await vi.advanceTimersByTimeAsync(3000);
 
-    expect(hydrateCatalogCacheAheadMock).toHaveBeenCalledTimes(3);
+    // 1 immediate + 3 interval ticks.
+    expect(hydrateCatalogCacheAheadMock).toHaveBeenCalledTimes(4);
     expect(engine.initializeTriageAsync).not.toHaveBeenCalled();
   });
 
@@ -148,13 +171,14 @@ describe('cache-refresh-ahead per-process timer (Track 1 §2.3 fix)', () => {
   });
 
   it('a failed hydrate tick does not stop subsequent ticks', async () => {
+    // Rejects the immediate tick itself — the earliest point this can fail.
     hydrateCatalogCacheAheadMock.mockRejectedValueOnce(new Error('redis down'));
     const { startCacheRefreshAhead } = await import('@/services/cache-refresh-ahead');
     const engine = makeEngine();
     startCacheRefreshAhead(engine);
-
-    await vi.advanceTimersByTimeAsync(1000);
+    await vi.advanceTimersByTimeAsync(0); // flush the immediate (failing) tick
     expect(hydrateCatalogCacheAheadMock).toHaveBeenCalledTimes(1);
+
     // The engine prewarm should still be attempted even if the hydrate step
     // itself is caught inside tick()'s try/catch — see cache-refresh-ahead.ts.
     await vi.advanceTimersByTimeAsync(1000);
