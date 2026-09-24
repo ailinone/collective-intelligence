@@ -120,3 +120,6 @@ api/.ailin/
 # OSS-fork audit workspace (manifests, clearance notes — never for VCS)
 audit_workspace/
 api/.env.test
+
+# git worktree checkouts (see using-git-worktrees convention)
+ci-worktrees/
