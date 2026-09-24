@@ -168,13 +168,10 @@ suite('GAP-A12 · discovery assertions against a real Postgres', () => {
   it('writes assertions with real per-capability source attribution', async () => {
     if (!reachable || !pool) return;
     const uid = 'a12itest0000000000000000001';
-    await upsertModel(
-      pool,
-      uid,
-      'itest/vision-declared',
-      ['chat', 'vision', 'reasoning'],
-      { input_modalities: ['text', 'image'], capabilities: ['chat'] }
-    );
+    await upsertModel(pool, uid, 'itest/vision-declared', ['chat', 'vision', 'reasoning'], {
+      input_modalities: ['text', 'image'],
+      capabilities: ['chat'],
+    });
 
     const models: DiscoveryAssertionModel[] = [
       {
@@ -237,8 +234,13 @@ suite('GAP-A12 · discovery assertions against a real Postgres', () => {
     __resetOntologyUriCacheForTests();
     const second = await emitDiscoveryAssertions(models, opts);
 
-    // Second cycle supersedes the first cycle's row before inserting its own.
-    expect(second.rowsSuperseded).toBe(1);
+    // The second cycle emits an IDENTICAL signal — nothing actually changed,
+    // so it must not supersede+reinsert (that's the write-amplification bug:
+    // model-discovery-hourly reasserting an unchanged catalog every 60min
+    // grew model_capability_assertions to 62.8M rows in 13 days). A no-op
+    // cycle should touch the existing row in place instead.
+    expect(second.rowsSuperseded).toBe(0);
+    expect(second.rowsInserted).toBe(0);
 
     const active = await pool.query<{ n: string }>(
       `SELECT count(*)::text AS n FROM model_capability_assertions
@@ -246,6 +248,16 @@ suite('GAP-A12 · discovery assertions against a real Postgres', () => {
       [uid]
     );
     expect(active.rows[0]?.n).toBe('1');
+
+    // The actual "no unbounded row growth" proof: TOTAL rows for this model
+    // (active + superseded) must stay at 1 — a passing check here that only
+    // looked at the active count would miss a dead row silently piling up
+    // underneath it on every cycle.
+    const total = await pool.query<{ n: string }>(
+      `SELECT count(*)::text AS n FROM model_capability_assertions WHERE model_uid = $1`,
+      [uid]
+    );
+    expect(total.rows[0]?.n).toBe('1');
   });
 
   it('keeps a second discovery source as INDEPENDENT evidence rather than clobbering the first', async () => {
@@ -275,10 +287,7 @@ suite('GAP-A12 · discovery assertions against a real Postgres', () => {
        WHERE model_uid = $1 AND superseded_at IS NULL ORDER BY 1`,
       [uid]
     );
-    expect(rows.map((r) => r.fetcher)).toEqual([
-      'discovery:source-a@v1',
-      'discovery:source-b@v1',
-    ]);
+    expect(rows.map((r) => r.fetcher)).toEqual(['discovery:source-a@v1', 'discovery:source-b@v1']);
   });
 
   it('END-TO-END: assertions written by discovery materialise into models.capability_uris', async () => {
@@ -328,9 +337,7 @@ suite('GAP-A12 · discovery assertions against a real Postgres', () => {
     // provider-declared (weight 0.95 × confidence 1.0) must land high, not at
     // the name-regex noise floor.
     expect(row?.capability_confidence?.[LEGACY_CAPABILITY_TO_URI.chat]).toBeGreaterThan(0.5);
-    expect(row?.capability_sources?.[LEGACY_CAPABILITY_TO_URI.chat]).toContain(
-      'provider-declared'
-    );
+    expect(row?.capability_sources?.[LEGACY_CAPABILITY_TO_URI.chat]).toContain('provider-declared');
   });
 
   it('GAP-A13: an empirical probe verdict is promoted into capability_uris', async () => {
@@ -345,9 +352,7 @@ suite('GAP-A12 · discovery assertions against a real Postgres', () => {
       'SELECT capability_uris AS caps FROM models WHERE uid = $1',
       [uid]
     );
-    expect(before.rows[0]?.caps ?? []).not.toContain(
-      LEGACY_CAPABILITY_TO_URI.function_calling
-    );
+    expect(before.rows[0]?.caps ?? []).not.toContain(LEGACY_CAPABILITY_TO_URI.function_calling);
 
     const outcome = await recordProbeAssertion({
       providerId: PROVIDER_ID,
@@ -381,9 +386,7 @@ suite('GAP-A12 · discovery assertions against a real Postgres', () => {
     // This is the promotion: a demonstrated capability now satisfies the
     // ordinary fail-closed hard filter, with no catalog `tools` flag involved.
     expect(after.rows[0]?.caps).toContain(LEGACY_CAPABILITY_TO_URI.function_calling);
-    expect(
-      after.rows[0]?.conf?.[LEGACY_CAPABILITY_TO_URI.function_calling]
-    ).toBeGreaterThan(0.9);
+    expect(after.rows[0]?.conf?.[LEGACY_CAPABILITY_TO_URI.function_calling]).toBeGreaterThan(0.9);
     expect(after.rows[0]?.sources?.[LEGACY_CAPABILITY_TO_URI.function_calling]).toContain(
       'runtime-probe'
     );

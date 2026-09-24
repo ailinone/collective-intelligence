@@ -28,6 +28,22 @@
  * yet (self-referencing cycle); the supersede timestamp alone is enough
  * for the materialiser's `WHERE superseded_at IS NULL` partial index.
  *
+ * Idempotency (2026-09-20 fix)
+ * ----------------------------
+ * The strategy above describes the *intent* but the original implementation
+ * didn't actually check whether anything changed before superseding+
+ * reinserting — every run reasserted the fetcher's entire snapshot
+ * unconditionally. With `model-discovery-hourly` running every 60 minutes,
+ * that grew `model_capability_assertions` from ~0 to 62.8M rows in 13 days
+ * (99.66% superseded dead weight; root-caused to commit e21b464f, "wire
+ * HCRA assertions into live discovery"). Before superseding+inserting, we
+ * now compare each new signal against the currently-active assertion for
+ * the same (model_uid, capability_uri, source): if confidence and
+ * assertedValue are unchanged, we only touch `observed_at` on the existing
+ * row (resets freshness decay, zero table growth) instead of superseding
+ * and inserting a new one. Only a genuine change or a brand-new triple goes
+ * through the supersede+insert path.
+ *
  * Why `source_detail->>'fetcher'` (a JSONB key) instead of a real column:
  * - Avoids a schema migration for what is effectively a versioned origin
  *   discriminator that only the writer/materialiser need.
@@ -87,6 +103,8 @@ export interface WriteAssertionStats {
   modelsTouched: number;
   rowsInserted: number;
   rowsSuperseded: number;
+  /** Rows whose observed_at was refreshed in place because nothing changed. */
+  rowsTouched: number;
   signalsDropped: number;
 }
 
@@ -128,6 +146,7 @@ export async function writeAssertions(
     modelsTouched: 0,
     rowsInserted: 0,
     rowsSuperseded: 0,
+    rowsTouched: 0,
     signalsDropped: 0,
   };
 
@@ -171,16 +190,82 @@ export async function writeAssertions(
   if (rows.length === 0) return stats;
 
   const uniqueModelUids = Array.from(touchedModels);
+  const assertedValue = opts.assertedValue ?? true;
 
-  // Step 1 — supersede prior rows from THIS origin for THESE models.
-  const supersedeResult = await runner.$executeRawUnsafe(
-    `UPDATE model_capability_assertions
-     SET superseded_at = NOW()
+  // Fetch this origin's currently-active contribution for these models so
+  // we can skip rows that haven't actually changed (see idempotency note
+  // in the module docstring above).
+  const activeRows = (await runner.$queryRawUnsafe(
+    `SELECT model_uid, capability_uri, source, confidence, asserted_value
+     FROM model_capability_assertions
      WHERE superseded_at IS NULL
        AND model_uid = ANY($1::varchar[])
        AND source_detail->>'fetcher' = $2`,
     uniqueModelUids,
     opts.origin
+  )) as Array<{
+    model_uid: string;
+    capability_uri: string;
+    source: string;
+    confidence: number;
+    asserted_value: boolean;
+  }>;
+
+  const activeByKey = new Map<string, { confidence: number; assertedValue: boolean }>();
+  for (const row of activeRows) {
+    activeByKey.set(assertionKey(row.model_uid, row.capability_uri, row.source), {
+      confidence: row.confidence,
+      assertedValue: row.asserted_value,
+    });
+  }
+
+  const unchangedRows: typeof rows = [];
+  const changedRows: typeof rows = [];
+  for (const row of rows) {
+    const active = activeByKey.get(assertionKey(row.modelUid, row.uri, row.source));
+    const isUnchanged =
+      active !== undefined &&
+      active.assertedValue === assertedValue &&
+      Math.abs(active.confidence - row.confidence) < CONFIDENCE_EPSILON;
+    (isUnchanged ? unchangedRows : changedRows).push(row);
+  }
+
+  // Unchanged: just refresh observed_at so freshness decay resets without
+  // growing the table (no supersede, no new row).
+  if (unchangedRows.length > 0) {
+    const touchResult = await runner.$executeRawUnsafe(
+      `UPDATE model_capability_assertions
+       SET observed_at = NOW()
+       WHERE superseded_at IS NULL
+         AND source_detail->>'fetcher' = $1
+         AND (model_uid, capability_uri, source) IN (
+           SELECT * FROM UNNEST($2::varchar[], $3::text[], $4::text[])
+         )`,
+      opts.origin,
+      unchangedRows.map((r) => r.modelUid),
+      unchangedRows.map((r) => r.uri),
+      unchangedRows.map((r) => r.source)
+    );
+    stats.rowsTouched = Number(touchResult ?? 0);
+  }
+
+  if (changedRows.length === 0) return stats;
+
+  // Step 1 — supersede prior rows for THESE (model, capability, source)
+  // triples only — scoped, not a blanket supersede of every row this
+  // origin has ever touched (that would also catch the unchanged ones).
+  const supersedeResult = await runner.$executeRawUnsafe(
+    `UPDATE model_capability_assertions
+     SET superseded_at = NOW()
+     WHERE superseded_at IS NULL
+       AND source_detail->>'fetcher' = $1
+       AND (model_uid, capability_uri, source) IN (
+         SELECT * FROM UNNEST($2::varchar[], $3::text[], $4::text[])
+       )`,
+    opts.origin,
+    changedRows.map((r) => r.modelUid),
+    changedRows.map((r) => r.uri),
+    changedRows.map((r) => r.source)
   );
   stats.rowsSuperseded = Number(supersedeResult ?? 0);
 
@@ -196,17 +281,24 @@ export async function writeAssertions(
        $5::real[],
        $6::int[]
      ) AS t(model_uid, capability_uri, source, source_detail, confidence, ttl_days)`,
-    rows.map((r) => r.modelUid),
-    rows.map((r) => r.uri),
-    rows.map((r) => r.source),
-    rows.map((r) => JSON.stringify(r.detail)),
-    rows.map((r) => r.confidence),
-    rows.map((r) => r.ttlDays),
-    opts.assertedValue ?? true
+    changedRows.map((r) => r.modelUid),
+    changedRows.map((r) => r.uri),
+    changedRows.map((r) => r.source),
+    changedRows.map((r) => JSON.stringify(r.detail)),
+    changedRows.map((r) => r.confidence),
+    changedRows.map((r) => r.ttlDays),
+    assertedValue
   );
   stats.rowsInserted = Number(insertResult ?? 0);
 
   return stats;
+}
+
+/** Float confidence round-trips through Postgres `real` (float4); tolerate rounding. */
+const CONFIDENCE_EPSILON = 1e-6;
+
+function assertionKey(modelUid: string, capabilityUri: string, source: string): string {
+  return `${modelUid} ${capabilityUri} ${source}`;
 }
 
 function defaultConfidenceForSource(source: CapabilitySignal['source']): number {

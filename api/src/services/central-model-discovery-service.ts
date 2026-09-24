@@ -2536,11 +2536,18 @@ export class CentralModelDiscoveryService {
     const startTime = Date.now();
     const results: ModelDiscoveryResult[] = [];
 
-    // Fan-out across sources, optionally capped: each source ends in an
+    // Fan-out across sources, capped by default: each source ends in an
     // interactive bulk-upsert transaction (up to 20 s), and api + worker
     // both run discovery at boot, so an unbounded fan-out can pin every
-    // pooled backend and starve chat queries. 0/unset keeps full fan-out.
-    const sourceConcurrency = Number(process.env.MODEL_DISCOVERY_SOURCE_CONCURRENCY || 0);
+    // pooled backend and starve chat queries (observed in production:
+    // ~95 sources racing a 30-connection prod / 5-connection dev pool).
+    // Default of 4 mirrors this codebase's own documented tolerance for
+    // concurrent long-lived background DB workers (see connection-url.ts's
+    // DATABASE_CONNECTION_LIMIT comment: "4+ concurrent background workers").
+    // Set MODEL_DISCOVERY_SOURCE_CONCURRENCY=0 explicitly to restore full
+    // unbounded fan-out.
+    const sourceConcurrencyEnv = process.env.MODEL_DISCOVERY_SOURCE_CONCURRENCY;
+    const sourceConcurrency = sourceConcurrencyEnv === undefined ? 4 : Number(sourceConcurrencyEnv);
     const discoveryResults = await mapWithConcurrency(
       Array.from(this.discoverySources.entries()),
       sourceConcurrency,

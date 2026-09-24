@@ -407,6 +407,7 @@ export async function emitDiscoveryAssertions(
         modelsTouched: stats.modelsTouched,
         rowsInserted: stats.rowsInserted,
         rowsSuperseded: stats.rowsSuperseded,
+        rowsTouched: stats.rowsTouched,
         droppedUnknownUri,
         droppedUnmapped: stats.signalsDropped,
       },

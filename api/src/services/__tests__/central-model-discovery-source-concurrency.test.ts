@@ -121,8 +121,27 @@ describe('runDiscoveryRound — MODEL_DISCOVERY_SOURCE_CONCURRENCY', () => {
     expect(results.every((r) => r.modelsDiscovered === 1 && r.errors.length === 0)).toBe(true);
   });
 
-  it('unset: every source starts immediately (today\'s Promise.all fan-out)', async () => {
+  it('unset: caps fan-out at the default of 4, unlike full Promise.all', async () => {
     delete process.env.MODEL_DISCOVERY_SOURCE_CONCURRENCY;
+    const gates = Array.from({ length: 5 }, deferred);
+    const started: string[] = [];
+    const service = makeService(fakeSources(gates, started));
+
+    const run = service.discoverAllModels();
+    await flush();
+    expect(started).toEqual(['source-0', 'source-1', 'source-2', 'source-3']);
+
+    gates[0].resolve();
+    await flush();
+    expect(started).toHaveLength(5);
+
+    gates.slice(1).forEach((g) => g.resolve());
+    const results = await run;
+    expect(results).toHaveLength(5);
+  });
+
+  it("explicit '0': restores full unbounded fan-out (operator escape hatch)", async () => {
+    process.env.MODEL_DISCOVERY_SOURCE_CONCURRENCY = '0';
     const gates = Array.from({ length: 5 }, deferred);
     const started: string[] = [];
     const service = makeService(fakeSources(gates, started));

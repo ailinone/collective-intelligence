@@ -169,9 +169,9 @@ describe('deriveDiscoverySignals — provenance by ablation', () => {
   });
 
   it('returns nothing for a model with no capabilities', () => {
-    expect(
-      deriveDiscoverySignals({ modelId: 'm', finalCapabilities: [], metadata: {} })
-    ).toEqual([]);
+    expect(deriveDiscoverySignals({ modelId: 'm', finalCapabilities: [], metadata: {} })).toEqual(
+      []
+    );
   });
 
   it('does NOT set an explicit confidence — the writer owns the calibrated defaults', () => {
@@ -311,8 +311,10 @@ describe('emitDiscoveryAssertions — fail-soft contract', () => {
     expect(runner.$executeRawUnsafe).toHaveBeenCalledTimes(2);
     // The supersedence key must be the discovery SOURCE, so two sources that
     // both see a model contribute independent evidence instead of clobbering
-    // each other.
-    expect(runner.$executeRawUnsafe.mock.calls[0]?.[2]).toBe('discovery:catalog-openai@v1');
+    // each other. (Param position 1, not 2 — writer.ts's idempotency fix
+    // reordered the supersede UPDATE to filter on (model_uid, capability_uri,
+    // source) triples, so origin moved ahead of the row-key arrays.)
+    expect(runner.$executeRawUnsafe.mock.calls[0]?.[1]).toBe('discovery:catalog-openai@v1');
   });
 
   it('swallows a database failure — discovery must not fail because assertions did', async () => {
@@ -340,6 +342,15 @@ describe('emitDiscoveryAssertions — fail-soft contract', () => {
     await emitDiscoveryAssertions([model], opts);
     await emitDiscoveryAssertions([model], opts);
 
-    expect(runner.$queryRawUnsafe).toHaveBeenCalledTimes(1);
+    // Scoped to the ontology-allowlist query specifically: writer.ts's
+    // idempotency fix added its own $queryRawUnsafe call (fetching each
+    // batch's currently-active assertions), which is necessarily per-call
+    // and shares the same generic mock method — it's a different query for
+    // a different, non-cacheable reason, so it's excluded here rather than
+    // asserting a single total count across both.
+    const ontologyCalls = runner.$queryRawUnsafe.mock.calls.filter((call) =>
+      String(call[0]).includes('capability_ontology')
+    );
+    expect(ontologyCalls).toHaveLength(1);
   });
 });

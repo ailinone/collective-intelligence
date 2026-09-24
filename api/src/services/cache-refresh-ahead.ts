@@ -124,6 +124,16 @@ export function startCacheRefreshAhead(engine: SelectionPrewarmable): void {
     }
   };
 
+  // Fire the first tick immediately instead of waiting a full intervalMs
+  // (up to 4 min by default): every replica boots with a cold in-process
+  // catalog cache, and a public /v1/models request landing in that window
+  // pays the full Postgres findMany directly in the request path (measured
+  // 2.6-7s, occasionally longer under concurrent discovery — see
+  // model-catalog-service.ts's cold-path comment). Still per-process and
+  // Redis-only (hydrateCatalogCacheAhead never touches Postgres), so this
+  // stays exactly as safe to call from every replica as any later tick —
+  // it only closes the gap before the first one.
+  void tick();
   timer = setInterval(() => {
     void tick();
   }, intervalMs);
