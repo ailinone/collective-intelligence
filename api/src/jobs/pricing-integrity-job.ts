@@ -86,6 +86,44 @@
  *     source, logging loudly (ERROR level) every tick that fires so a
  *     persistently-broken source cannot hide behind the exemption.
  *
+ *     2026-09-24 FOLLOW-UP: that breaker only knows providers a complete
+ *     discovery round covered in the SAME process, and with the fleet-wide
+ *     discovery lease and no boot round on the api the process running this
+ *     tick often has no data at all (empty exemption set). The sweep now
+ *     requires a fresh verdict (local or published by the fleet on redis-lease,
+ *     see discovery-fleet-health.ts) and disables nothing without one.
+ *
+ *     2026-09-25/26 INCIDENT: this sweep STILL mass-disabled 17,311 models in
+ *     one 05:00 UTC tick — 13k+ of them huggingface. Neither breaker fix
+ *     above applied: huggingface-hub's discovery WAS completing successfully
+ *     (99.7% of its active rows were reconfirmed within the prior 24h,
+ *     confirmed by direct query), so it correctly never tripped the "provider
+ *     has no healthy discovery source" exemption. The real cause was one
+ *     level down, in the fetcher itself: the HF Hub API sorts results by
+ *     trendingScore DESC and this fetcher's pagination ALWAYS restarts at
+ *     page 1 of that same order — raising `maxModels` (2026-09-08 fix) only
+ *     removed a hardcoded 60k ceiling, it did not change that every run
+ *     retraces the same head. With ~65 pages to walk and a 120s aggregator
+ *     timeout, a slow window or rate-limiting cuts the walk short at roughly
+ *     the same page on every run, so the low-trending tail below that point
+ *     is structurally never reconfirmed, no matter how many times discovery
+ *     retries — indistinguishable from genuine delisting to this sweep's
+ *     `last_synced_at` check. Fixed in hf-hub-model-fetcher.ts: pagination
+ *     now persists a resume cursor (redis-lease) after every page, so a
+ *     truncated run continues past its own cutoff point next time instead of
+ *     re-covering the same head forever; the aggregator timeout was also
+ *     raised 120s -> 300s to reduce how often truncation happens at all. The
+ *     already-disabled rows self-heal via the existing unconditional
+ *     re-enable-on-upsert path (central-model-discovery-service.ts) once
+ *     discovery actually reaches them again — no separate backfill needed.
+ *     Other affected providers from this same tick (orqai, aiml, aihubmix,
+ *     nanogpt, and ~15 more, all much smaller shares) were NOT root-caused as
+ *     part of this fix — most are `cloud_hub`/native sources with materially
+ *     smaller catalogs and different fetch shapes, so the same trending-order
+ *     pagination-truncation mechanism does not obviously apply; worth a
+ *     separate look if their disabled counts do not shrink after this fix
+ *     ships and discovery has had a few days to run.
+ *
  * Why a cron and not just a one-time backfill: new rows land wrong tomorrow
  * the same way they did on 2026-09-04 unless something keeps checking. See
  * metadata-backfill-job.ts for the identical idempotent-sweep argument.
@@ -100,6 +138,7 @@ import {
   type CrossTierViolation,
 } from '@/services/pricing-integrity/cross-tier-pricing-check';
 import { getCentralModelDiscoveryService } from '@/services/central-model-discovery-service';
+import type { AutoDisableDiscoverySignal } from '@/services/discovery-fleet-health';
 
 const log = logger.child({ component: 'pricing-integrity-job' });
 
@@ -197,6 +236,8 @@ export interface PricingIntegrityStats {
   autoDisableCandidatesFound: number;
   modelsAutoDisabled: number;
   autoDisableSkippedUnhealthySource: number;
+  /** Auto-disable candidates held back because no fresh discovery verdict existed. */
+  autoDisableSkippedNoDiscoverySignal: number;
   elapsedMs: number;
 }
 
@@ -322,12 +363,20 @@ export async function autoDisableDelistedModels(): Promise<{
   disabled: number;
   skippedUnhealthySource: number;
   skippedManualReenableGrace: number;
+  /** Candidates left alone because no fresh discovery verdict existed (fail closed). */
+  skippedNoDiscoverySignal: number;
 }> {
   if (!isModelAutoDisableEnabled()) {
     log.info(
       'MODEL_AUTO_DISABLE_DISABLED=true — skipping delisted-model auto-disable sweep'
     );
-    return { found: 0, disabled: 0, skippedUnhealthySource: 0, skippedManualReenableGrace: 0 };
+    return {
+      found: 0,
+      disabled: 0,
+      skippedUnhealthySource: 0,
+      skippedManualReenableGrace: 0,
+      skippedNoDiscoverySignal: 0,
+    };
   }
 
   const cutoff = new Date(Date.now() - MODEL_AUTO_DISABLE_THRESHOLD_MS);
@@ -341,7 +390,13 @@ export async function autoDisableDelistedModels(): Promise<{
   const found = Number(totalRow[0]?.count ?? 0n);
 
   if (found === 0) {
-    return { found: 0, disabled: 0, skippedUnhealthySource: 0, skippedManualReenableGrace: 0 };
+    return {
+      found: 0,
+      disabled: 0,
+      skippedUnhealthySource: 0,
+      skippedManualReenableGrace: 0,
+      skippedNoDiscoverySignal: 0,
+    };
   }
 
   // Circuit breaker (2026-09-08 incident fix): a provider whose discovery
@@ -350,21 +405,62 @@ export async function autoDisableDelistedModels(): Promise<{
   // stale-candidate catalog silently marched to 'disabled' — that conflates
   // "the provider delisted these" with "our pipeline can't see any of this
   // provider's models right now". See central-model-discovery-service.ts's
-  // getProvidersWithoutHealthyDiscovery() for the full rationale. Failing to
-  // compute this set (discovery service init error, etc.) falls back to
-  // treating no provider as exempt — i.e. the pre-existing 14-day behavior —
-  // rather than silently widening what this sweep protects against.
-  let unhealthyProviders: Set<string> = new Set();
+  // getProvidersWithoutHealthyDiscovery() for the full rationale.
+  //
+  // Fail CLOSED without a fresh verdict (2026-09-24 review fix): the breaker
+  // can only flag providers it has data for, and that data comes from a
+  // complete discovery round. This tick runs on whichever process BullMQ
+  // picked; with the discovery lease (one round fleet-wide) and no boot
+  // round on the api, that process often never ran one, and an empty
+  // exemption set used to mean "disable everything stale". The sweep now
+  // requires a recent complete round, from this process or published by
+  // the fleet (getAutoDisableDiscoverySignal()), and disables NOTHING this
+  // tick otherwise. Failing to compute the verdict at all is the same case.
+  // A skipped tick only delays a disable by a day; the 72h staleness flag
+  // (sweep 1) still applies meanwhile.
+  let signal: AutoDisableDiscoverySignal;
   try {
     const discoveryService = await getCentralModelDiscoveryService();
-    unhealthyProviders = discoveryService.getProvidersWithoutHealthyDiscovery();
+    signal = await discoveryService.getAutoDisableDiscoverySignal();
   } catch (error) {
-    log.error(
-      { error },
-      'Model auto-disable: failed to compute unhealthy-discovery-source exemptions — ' +
-        'proceeding WITHOUT the circuit breaker for this tick (pre-existing behavior)'
-    );
+    signal = {
+      trusted: false,
+      reason: `could not compute the discovery health verdict: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+      newestCompletedAt: null,
+    };
   }
+
+  if (!signal.trusted) {
+    log.error(
+      {
+        found,
+        reason: signal.reason,
+        newestCompleteRoundAt: signal.newestCompletedAt?.toISOString() ?? null,
+      },
+      'Model auto-disable: SKIPPED this tick (fail closed): no recent complete discovery ' +
+        'round vouches for provider health, so stale rows cannot be told apart from a ' +
+        'discovery outage. If this repeats daily, model discovery itself is not completing.'
+    );
+    return {
+      found,
+      disabled: 0,
+      skippedUnhealthySource: 0,
+      skippedManualReenableGrace: 0,
+      skippedNoDiscoverySignal: found,
+    };
+  }
+
+  const unhealthyProviders = signal.unhealthyProviders;
+  log.info(
+    {
+      basis: signal.basis,
+      completeRoundAt: signal.completedAt.toISOString(),
+      ageMinutes: Math.round(signal.ageMs / 60_000),
+    },
+    'Model auto-disable: circuit breaker verdict from a recent complete discovery round'
+  );
 
   if (unhealthyProviders.size > 0) {
     // Loud and ERROR-level on purpose: this exemption existing at all means
@@ -532,7 +628,13 @@ export async function autoDisableDelistedModels(): Promise<{
     'Model auto-disable sweep complete — see central-model-discovery-service.ts for the matching auto-re-enable path'
   );
 
-  return { found, disabled, skippedUnhealthySource, skippedManualReenableGrace };
+  return {
+    found,
+    disabled,
+    skippedUnhealthySource,
+    skippedManualReenableGrace,
+    skippedNoDiscoverySignal: 0,
+  };
 }
 
 /**
@@ -588,6 +690,7 @@ export async function runPricingIntegrityCheckNow(): Promise<PricingIntegritySta
       autoDisableCandidatesFound: 0,
       modelsAutoDisabled: 0,
       autoDisableSkippedUnhealthySource: 0,
+      autoDisableSkippedNoDiscoverySignal: 0,
       elapsedMs: Date.now() - startedAt,
     };
   }
@@ -597,6 +700,7 @@ export async function runPricingIntegrityCheckNow(): Promise<PricingIntegritySta
     found: autoDisableFound,
     disabled: autoDisabled,
     skippedUnhealthySource,
+    skippedNoDiscoverySignal,
   } = await autoDisableDelistedModels();
   const violations = await checkCrossTierPricing();
 
@@ -608,6 +712,7 @@ export async function runPricingIntegrityCheckNow(): Promise<PricingIntegritySta
     autoDisableCandidatesFound: autoDisableFound,
     modelsAutoDisabled: autoDisabled,
     autoDisableSkippedUnhealthySource: skippedUnhealthySource,
+    autoDisableSkippedNoDiscoverySignal: skippedNoDiscoverySignal,
     elapsedMs: Date.now() - startedAt,
   };
 
@@ -619,6 +724,7 @@ export async function runPricingIntegrityCheckNow(): Promise<PricingIntegritySta
       autoDisableCandidatesFound: stats.autoDisableCandidatesFound,
       modelsAutoDisabled: stats.modelsAutoDisabled,
       autoDisableSkippedUnhealthySource: stats.autoDisableSkippedUnhealthySource,
+      autoDisableSkippedNoDiscoverySignal: stats.autoDisableSkippedNoDiscoverySignal,
       elapsedMs: stats.elapsedMs,
     },
     'Pricing integrity tick complete'

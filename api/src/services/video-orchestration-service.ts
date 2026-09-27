@@ -28,7 +28,10 @@ import { isAdapterMethodImplemented } from '@/providers/provider-operability';
 import { ProviderAdapter } from '@/providers/base/provider-adapter';
 import { OpenAICompatibleHubAdapter } from '@/providers/openai-compatible-hub/openai-compatible-hub-adapter';
 import { PROVIDER_CATALOG } from '@/providers/catalog/providers.catalog';
-import type { ProviderCatalogEntry } from '@/providers/catalog/provider-catalog.types';
+import type {
+  ProviderCatalogEntry,
+  VideoCapabilityAttributes,
+} from '@/providers/catalog/provider-catalog.types';
 import {
   canSatisfyVideoAttributes,
   type VideoAttributeRequest,
@@ -428,7 +431,7 @@ export class VideoOrchestrationService {
       (model) =>
         this.hasVideoCapability(model, requiredCapability) &&
         canSatisfyVideoAttributes(
-          this.getCatalogEntry(model.provider)?.videoCapabilityAttributes,
+          this.getCatalogEntry(model.provider)?.capabilityAttributes?.video_generation,
           requestAttrs
         )
     );
@@ -678,7 +681,7 @@ export class VideoOrchestrationService {
     let audioRequirementUnmet: boolean | undefined;
     if (requestAttrs.audioRequested === true) {
       const selectedAttrs = this.getCatalogEntry(result.selectedModel.provider)
-        ?.videoCapabilityAttributes;
+        ?.capabilityAttributes?.video_generation as VideoCapabilityAttributes | undefined;
       const alreadyHasNativeAudio = selectedAttrs?.nativeAudioSupport === true;
       if (!alreadyHasNativeAudio) {
         if (options.soundtrackAudioBase64) {
@@ -727,7 +730,8 @@ export class VideoOrchestrationService {
       // The majority of providers have no declared attributes at all, which
       // is exactly the risk case this fix targets, so they still get the
       // real, fetched check.
-      const attrs = this.getCatalogEntry(result.selectedModel.provider)?.videoCapabilityAttributes;
+      const attrs = this.getCatalogEntry(result.selectedModel.provider)?.capabilityAttributes
+        ?.video_generation as VideoCapabilityAttributes | undefined;
       const durationDeclared =
         attrs?.maxDurationSeconds !== undefined ||
         (attrs?.allowedDurationsSeconds !== undefined && attrs.allowedDurationsSeconds.length > 0);

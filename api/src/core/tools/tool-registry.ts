@@ -127,6 +127,17 @@ const AUTO_RECOMMENDABLE_CATEGORIES: ReadonlySet<ToolRegistration['category']> =
 ]);
 
 /**
+ * Whether a category's effects stay OFF the API server's own filesystem,
+ * codebase and shell (the same `AUTO_RECOMMENDABLE_CATEGORIES` rule, without
+ * the triage-only `autoRecommendable` override). Direct-execution HTTP
+ * surfaces use it to decide which tools an ordinary tenant may run and which
+ * need a platform admin.
+ */
+export function isExternalEffectCategory(category: ToolRegistration['category']): boolean {
+  return AUTO_RECOMMENDABLE_CATEGORIES.has(category);
+}
+
+/**
  * The structural rule. `safeForStrategies` is a hard precondition — a tool
  * the strategies may not run is never a tool triage may attach.
  */
@@ -134,6 +145,112 @@ export function isAutoRecommendable(reg: ToolRegistration): boolean {
   if (!reg.safeForStrategies) return false;
   if (typeof reg.autoRecommendable === 'boolean') return reg.autoRecommendable;
   return AUTO_RECOMMENDABLE_CATEGORIES.has(reg.category);
+}
+
+/**
+ * Tools that must never be auto-executed on the server on behalf of a tenant
+ * request. The SINGLE source of truth for both chat-completions tool-call
+ * layers:
+ *
+ *  - layer 2, `chat-request-processor.ts` (`executeToolCallsAutomatically` /
+ *    `executeRealTool`): the post-orchestration auto-dispatch of the final
+ *    response's `tool_calls`;
+ *  - layer 1, `base-strategy.ts` `executeModelWithTools` (the tool loop ~21
+ *    strategies share) and `strategy-tool-executor.ts`
+ *    `executeToolForStrategy`, via `isBlockedFromStrategyAutoExecution()`
+ *    below.
+ *
+ * Every tenant API key reaches both layers with no role check, unlike the
+ * admin/owner-gated `/v1/tools/*` routes these operations were designed for.
+ *
+ * SECURITY (2026-07-29): the first group is every tool registered
+ * `safeForStrategies: false` (registerToolsInRegistry in
+ * chat-request-processor.ts). Kept as an explicit list, rather than only
+ * relying on `executeForStrategy()`, so the pre-registry-boot switch fallback
+ * in `executeRealTool` is covered too, since it has no registration object to
+ * consult.
+ */
+export const CHAT_AUTO_EXECUTE_BLOCKED_TOOLS: ReadonlySet<string> = new Set([
+  'run_command',
+  'delete_file',
+  'git_commit',
+  'git_push',
+  'git_pull',
+  'git_create_branch',
+  'git_merge',
+  'git_rebase',
+  'git_resolve_conflict',
+  'todo_write',
+  'create_todo',
+  'update_todo',
+  'execute_workflow',
+  'register_workflow',
+
+  // SECURITY (2026-09-23): these ARE registered `safeForStrategies: true`,
+  // but the /v1/tools/* routes that expose them directly gate the entire
+  // surface to admin/owner (tools-routes.ts), and a caller can force the
+  // tool_call deterministically by supplying its own `tools`/`tool_choice` in
+  // the request body. Filesystem-mutation tools and the vision tools (SSRF
+  // risk: they fetch caller-supplied image URLs) must not auto-dispatch on a
+  // tenant request even though the registry considers them strategy-safe.
+  'write_file',
+  'search_replace',
+  'rename_symbol',
+  'extract_function',
+  'extract_variable',
+  'inline_function',
+  'refactor_code',
+  'heal_file',
+  'analyze_image',
+  'compare_images',
+  'extract_code_from_screenshot',
+
+  // SECURITY (2026-09-25, issue #664 finding 1): these READ tools are
+  // registered `safeForStrategies: true` and category `file`/`search`/
+  // `analysis` — none of them auto-recommendable (not in
+  // AUTO_RECOMMENDABLE_CATEGORIES, no explicit opt-in), so adding them here
+  // changes nothing about triage auto-attach and only closes the same
+  // client-forced-tool_choice hole #653 closed for the write/mutate tools.
+  // Without this, any tenant key could force e.g. `read_file`/`grep_search`
+  // via its own `tools`/`tool_choice` and have it auto-execute against the
+  // API container's own working directory, reading the server's source tree
+  // — not the tenant's data. The chat product's Open Terminal feature uses
+  // these SAME names for a client-side tool the CLIENT executes; a call by
+  // that name arriving in `request.tools` must come back unexecuted exactly
+  // like any other client-owned tool_call, not be hijacked and run here.
+  'read_file',
+  'grep_search',
+  'explore_codebase',
+  'list_directory',
+  'file_search',
+  'analyze_codebase',
+]);
+
+/**
+ * Layer-1 gate: whether a strategy's own tool loop must refuse to run this
+ * tool call on the server.
+ *
+ * A strategy sees `request.tools` from exactly two sources: the CLIENT, or
+ * triage's `applyRecommendedTools` (orchestration-engine.ts), which only
+ * ever attaches tools `isAutoRecommendable()` admits and only when the client
+ * sent none. So a blocklisted tool that is auto-recommendable (the vision
+ * tools today) may still be a legitimate triage attachment and keeps
+ * executing, while every other blocklisted name (write_file, the refactoring
+ * tools, heal_file, and all `safeForStrategies:false` tools) can only have
+ * come from the client, and is refused.
+ *
+ * The canonical `reg.name` is checked as well as the called name so an alias
+ * of a blocked tool cannot slip past the name-keyed list.
+ */
+export function isBlockedFromStrategyAutoExecution(
+  toolName: string,
+  reg: ToolRegistration | undefined
+): boolean {
+  const blocked =
+    CHAT_AUTO_EXECUTE_BLOCKED_TOOLS.has(toolName) ||
+    (reg !== undefined && CHAT_AUTO_EXECUTE_BLOCKED_TOOLS.has(reg.name));
+  if (!blocked) return false;
+  return !(reg !== undefined && isAutoRecommendable(reg));
 }
 
 /**

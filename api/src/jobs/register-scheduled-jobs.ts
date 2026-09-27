@@ -81,7 +81,14 @@ async function ensureMetrics() {
 // ── Job Handler Registry ──
 // Each handler is a lazy import to avoid loading all job modules at startup.
 // Handlers are resolved only when the job fires.
-type JobHandler = () => Promise<void>;
+export interface ScheduledJobContext {
+  /**
+   * Aborted when the job's enforced deadline passes or the process shuts
+   * down (only for jobs with `enforceTimeout`; never aborted otherwise).
+   */
+  signal: AbortSignal;
+}
+type JobHandler = (ctx: ScheduledJobContext) => Promise<void>;
 
 const JOB_HANDLERS: Record<string, () => Promise<JobHandler>> = {
   'revoke-expired-keys': async () => {
@@ -268,8 +275,8 @@ const JOB_HANDLERS: Record<string, () => Promise<JobHandler>> = {
   // top-of-file comment) is unaffected.
   'model-discovery-hourly': async () => {
     const m = await import('@/services/model-discovery-runner.js');
-    return async () => {
-      await m.runScheduledModelDiscovery();
+    return async ({ signal }) => {
+      await m.runScheduledModelDiscovery(signal);
     };
   },
   // Tiered Capability Fingerprint (TCF) — empirical, tiered capability
@@ -304,8 +311,20 @@ interface ScheduledJobDef {
   envOverride?: string;
   /** Guard: if this returns false, the job is not registered */
   enabled?: () => boolean;
-  /** Timeout in ms for long-running jobs */
+  /**
+   * Timeout in ms for long-running jobs. BullMQ does not implement a job
+   * timeout (the option is passed through but ignored), so it is only
+   * enforced for jobs that also set `enforceTimeout`.
+   */
   timeout?: number;
+  /**
+   * Enforce `timeout` in the processor and fail the job promptly on graceful
+   * shutdown: the handler's signal is aborted and the job is marked failed
+   * (attempts: 1, so no retry). Without this, a job still active when the
+   * process is SIGKILLed is re-dispatched by BullMQ's stalled-job check to
+   * another process ~30 s later, mid-rollout.
+   */
+  enforceTimeout?: boolean;
 }
 
 const SCHEDULED_JOBS: ScheduledJobDef[] = [
@@ -444,12 +463,15 @@ const SCHEDULED_JOBS: ScheduledJobDef[] = [
   // (MODEL_DISCOVERY_AUTO_SYNC) as the per-process at-boot discovery in
   // model-discovery-runner.ts, so =false disables discovery entirely rather
   // than leaving one half running. Timeout generous: ~95 provider fetchers,
-  // some hitting slow or rate-limited upstream APIs.
+  // some hitting slow or rate-limited upstream APIs. Enforced (2026-09-24):
+  // the job used to stay active for hours behind the equivalence rebuild,
+  // blocking worker shutdown until SIGKILL and then being re-dispatched.
   {
     name: 'model-discovery-hourly',
     pattern: '0 * * * *',
     envOverride: 'MODEL_DISCOVERY_CRON',
     timeout: 1_800_000, // 30 min
+    enforceTimeout: true,
     enabled: () => process.env.MODEL_DISCOVERY_AUTO_SYNC !== 'false',
   },
   // Tiered Capability Fingerprint — curated bucket (full daily sweep).
@@ -501,6 +523,74 @@ interface ScheduledJobData {
 }
 let scheduledQueue: Queue | null = null;
 let scheduledWorker: Worker | null = null;
+/** Aborted by shutdownScheduledTasks() so enforced jobs fail promptly. */
+let shutdownController = new AbortController();
+
+export class ScheduledJobDeadlineError extends Error {
+  readonly jobName: string;
+  readonly kind: 'timeout' | 'shutdown';
+
+  constructor(jobName: string, kind: 'timeout' | 'shutdown', timeoutMs?: number) {
+    super(
+      kind === 'timeout'
+        ? `Scheduled job ${jobName} exceeded its ${timeoutMs ?? '?'} ms timeout`
+        : `Scheduled job ${jobName} stopped by graceful shutdown`
+    );
+    this.name = 'ScheduledJobDeadlineError';
+    this.jobName = jobName;
+    this.kind = kind;
+  }
+}
+
+/**
+ * Runs one scheduled job handler. For a job with `enforceTimeout`, the
+ * handler races its timeout and the shutdown signal: whichever comes first
+ * aborts the handler's signal and rejects, so BullMQ records the job as
+ * failed (attempts: 1, no retry) instead of leaving it active until SIGKILL.
+ * Other jobs run exactly as before (their signal is never aborted).
+ */
+export async function runScheduledJobHandler(
+  jobName: string,
+  handler: JobHandler,
+  options: { timeoutMs?: number; enforceTimeout?: boolean; shutdownSignal: AbortSignal }
+): Promise<void> {
+  const controller = new AbortController();
+  if (!options.enforceTimeout) {
+    await handler({ signal: controller.signal });
+    return;
+  }
+  if (options.shutdownSignal.aborted) {
+    throw new ScheduledJobDeadlineError(jobName, 'shutdown');
+  }
+
+  const { shutdownSignal, timeoutMs } = options;
+  let rejectStopped!: (error: ScheduledJobDeadlineError) => void;
+  const stopped = new Promise<never>((_resolve, reject) => {
+    rejectStopped = reject;
+  });
+  const stop = (error: ScheduledJobDeadlineError): void => {
+    if (controller.signal.aborted) return;
+    controller.abort(error);
+    rejectStopped(error);
+  };
+  const onShutdown = (): void => stop(new ScheduledJobDeadlineError(jobName, 'shutdown'));
+  shutdownSignal.addEventListener('abort', onShutdown, { once: true });
+  const timer =
+    timeoutMs !== undefined && timeoutMs > 0
+      ? setTimeout(
+          () => stop(new ScheduledJobDeadlineError(jobName, 'timeout', timeoutMs)),
+          timeoutMs
+        )
+      : undefined;
+  timer?.unref?.();
+
+  try {
+    await Promise.race([handler({ signal: controller.signal }), stopped]);
+  } finally {
+    if (timer) clearTimeout(timer);
+    shutdownSignal.removeEventListener('abort', onShutdown);
+  }
+}
 
 /**
  * Register all scheduled jobs as BullMQ repeatable job schedulers.
@@ -605,7 +695,12 @@ export async function startScheduledTasksWorker(): Promise<void> {
       try {
         const handlerFactory = JOB_HANDLERS[jobName];
         const handler = await handlerFactory();
-        await handler();
+        const jobDef = SCHEDULED_JOBS.find((def) => def.name === jobName);
+        await runScheduledJobHandler(jobName, handler, {
+          timeoutMs: jobDef?.timeout,
+          enforceTimeout: jobDef?.enforceTimeout,
+          shutdownSignal: shutdownController.signal,
+        });
 
         const durationS = (Date.now() - start) / 1000;
         cronExecutionDuration?.observe({ job_name: jobName }, durationS);
@@ -639,8 +734,21 @@ export async function startScheduledTasksWorker(): Promise<void> {
 
 /**
  * Graceful shutdown for scheduled tasks infrastructure.
+ *
+ * Aborts the shutdown signal FIRST: worker.close() waits for every active
+ * job, and a job with `enforceTimeout` then fails at once instead of holding
+ * the close (and the process) until SIGKILL.
  */
 export async function shutdownScheduledTasks(): Promise<void> {
+  shutdownController.abort();
+  try {
+    await closeScheduledTasks();
+  } finally {
+    shutdownController = new AbortController();
+  }
+}
+
+async function closeScheduledTasks(): Promise<void> {
   if (scheduledWorker) {
     await scheduledWorker.close();
     scheduledWorker = null;

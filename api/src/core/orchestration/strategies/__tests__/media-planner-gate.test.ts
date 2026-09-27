@@ -117,7 +117,7 @@ describe('findNativeCollapseModel', () => {
     expect(findNativeCollapseModel(models, 'video_generation', undefined)).toBeUndefined();
   });
 
-  it('returns undefined when no model exposes capabilityAttributes (LOTE AS not landed — fail open)', () => {
+  it('returns undefined when no model declares capabilityAttributes for this capability (fail closed for collapse, unlike the fail-open matcher)', () => {
     const models = [makeModel({ id: 'v1', capabilities: ['video_generation'] })];
     const match = findNativeCollapseModel(models, 'video_generation', {
       requireAudioTrack: true,
@@ -133,11 +133,17 @@ describe('findNativeCollapseModel', () => {
         id: 'joint-audio-video',
         capabilities: ['video_generation'],
         metadata: {
+          // Real shape (capability-attribute-projection.ts): keyed by
+          // capability, field names/types match VideoCapabilityAttributes
+          // (provider-catalog.types.ts) -- maxDurationSeconds (not
+          // maxDurationSec), maxResolution as a string (resolutionTier()
+          // parses '3840x2160' the same as '4K').
           capabilityAttributes: {
-            nativeAudioSupport: true,
-            supportsJointAudioVideo: true,
-            maxDurationSec: 60,
-            maxResolution: { width: 3840, height: 2160 },
+            video_generation: {
+              nativeAudioSupport: true,
+              maxDurationSeconds: 60,
+              maxResolution: '3840x2160',
+            },
           },
         },
       }),
@@ -156,7 +162,28 @@ describe('findNativeCollapseModel', () => {
         id: 'audio-but-short',
         capabilities: ['video_generation'],
         metadata: {
-          capabilityAttributes: { nativeAudioSupport: true, maxDurationSec: 10 },
+          capabilityAttributes: {
+            video_generation: { nativeAudioSupport: true, maxDurationSeconds: 10 },
+          },
+        },
+      }),
+    ];
+    const match = findNativeCollapseModel(models, 'video_generation', {
+      requireAudioTrack: true,
+      durationSec: { minSec: 30 },
+    });
+    expect(match).toBeUndefined();
+  });
+
+  it('does not match a model whose attributes are declared for a different capability', () => {
+    const models = [
+      makeModel({
+        id: 'image-only-attrs',
+        capabilities: ['video_generation'],
+        metadata: {
+          capabilityAttributes: {
+            image_generation: { maxDimensions: '4096x4096' },
+          },
         },
       }),
     ];

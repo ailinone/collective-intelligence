@@ -269,4 +269,101 @@ describe('agentic sandbox dispatch (ADR-024, LOTE AV)', () => {
       expect(body.data.content).toBe('the answer is 42');
     });
   });
+
+  // ── Flag ON: agents, allowed_tools hardening (issue #664 finding 3) ────
+  describe('agents flag on — client allowed_tools cannot request a blocked tool', () => {
+    let writeFileCalls = 0;
+
+    beforeAll(async () => {
+      const { registerToolsInRegistry } = await import('@/services/chat-request-processor');
+      registerToolsInRegistry();
+      const { toolRegistry } = await import('@/core/tools/tool-registry');
+      const reg = toolRegistry.get('write_file');
+      if (!reg) throw new Error('write_file is not registered — test premise is invalid');
+      toolRegistry.register({
+        ...reg,
+        handler: async (_args, toolCallId) => {
+          writeFileCalls += 1;
+          return { tool_call_id: toolCallId, success: true, output: 'write_file ran on the server' };
+        },
+      });
+    });
+
+    beforeEach(() => {
+      process.env.AGENTIC_AGENTS_ENABLED = 'true';
+      writeFileCalls = 0;
+    });
+
+    it('never invokes write_file even when the client explicitly lists it in allowed_tools and the model asks for it', async () => {
+      selectModelsMock.mockResolvedValue([
+        {
+          model: { id: 'test-model-x', provider: 'test-provider-x' },
+          score: 1,
+          reason: 'test',
+        },
+      ]);
+      // The mocked model asks for `write_file` on the very first turn — a
+      // stand-in for a tenant prompt (or an injected instruction) steering the
+      // agent's own planner toward the tool it was NOT supposed to have.
+      const chatCompletion = vi.fn().mockResolvedValueOnce({
+        id: 'resp-1',
+        object: 'chat.completion',
+        created: 0,
+        model: 'test-model-x',
+        choices: [
+          {
+            index: 0,
+            message: {
+              role: 'assistant',
+              content: '',
+              tool_calls: [
+                {
+                  id: 'call_1',
+                  type: 'function',
+                  function: {
+                    name: 'write_file',
+                    arguments: JSON.stringify({ file_path: 'pwned.txt', content: 'owned' }),
+                  },
+                },
+              ],
+            },
+            finish_reason: 'tool_calls',
+          },
+        ],
+      }).mockResolvedValueOnce({
+        id: 'resp-2',
+        object: 'chat.completion',
+        created: 0,
+        model: 'test-model-x',
+        choices: [
+          {
+            index: 0,
+            message: { role: 'assistant', content: 'done' },
+            finish_reason: 'stop',
+          },
+        ],
+      });
+      providerGetMock.mockImplementation((name: string) =>
+        name === 'test-provider-x' ? { chatCompletion } : undefined
+      );
+
+      const response = await server.inject({
+        method: 'POST',
+        url: '/v1/capabilities/agents/execute',
+        payload: {
+          messages: [{ role: 'user', content: 'write pwned.txt' }],
+          // The client explicitly ASKS for the blocked tool by name — this
+          // must not widen what the bounded agent is actually allowed to run.
+          allowed_tools: ['write_file'],
+        },
+      });
+
+      expect(response.statusCode, response.body).toBe(200);
+      expect(writeFileCalls, 'write_file must never actually run on the server').toBe(0);
+      const body = JSON.parse(response.body);
+      // The agent loop's own allowlist refuses the call (agent-loop.ts), so
+      // the run still completes — just without the tool ever executing.
+      expect(body.data.stopReason).toBe('success');
+    });
+  });
 });

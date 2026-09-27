@@ -682,30 +682,33 @@ export const PROVIDER_CATALOG: readonly ProviderCatalogEntry[] = [
     // video/generate-video today. CogVideoX-3 `size` enum drives resolution
     // AND aspect ratio (no separate ratio field); `duration` is a closed
     // 5|10 enum, not a continuous range.
-    videoCapabilityAttributes: {
-      maxDurationSeconds: 10,
-      allowedDurationsSeconds: [5, 10],
-      maxResolution: '4K', // docs: "Maximum support for 4K resolution"
-      supportedAspectRatios: [
-        '1280x720',
-        '720x1280',
-        '1024x1024',
-        '1920x1080',
-        '1080x1920',
-        '2048x1080',
-        '3840x2160',
-      ],
-      // `with_audio` — "Whether to generate AI sound effects". Real vendor
-      // capability (declared here for selection-time exclusion accuracy),
-      // but NOT YET wired end-to-end in this codebase — LOTE AS Part 1 only
-      // plumbs `generateAudio` through to BytePlus's `generate_audio` and
-      // Google Veo's own `parameters.generateAudio`. A request against zai
-      // with generateAudio:true will not be EXCLUDED here, but will also not
-      // currently receive `with_audio` in the real request body (the generic
-      // OpenAICompatibleHubAdapter has no such passthrough). Wiring this is
-      // a real follow-up, not a regression introduced here: before this
-      // change, no soundtrack option existed for ANY provider.
-      nativeAudioSupport: true,
+    capabilityAttributes: {
+      video_generation: {
+        maxDurationSeconds: 10,
+        allowedDurationsSeconds: [5, 10],
+        maxResolution: '4K', // docs: "Maximum support for 4K resolution"
+        supportedAspectRatios: [
+          '1280x720',
+          '720x1280',
+          '1024x1024',
+          '1920x1080',
+          '1080x1920',
+          '2048x1080',
+          '3840x2160',
+        ],
+        // `with_audio` — "Whether to generate AI sound effects". Real vendor
+        // capability (declared here for selection-time exclusion accuracy),
+        // but NOT YET wired end-to-end in this codebase — LOTE AS Part 1 only
+        // plumbs `generateAudio` through to BytePlus's `generate_audio` and
+        // Google Veo's own `parameters.generateAudio`. A request against zai
+        // with generateAudio:true will not be EXCLUDED here, but will also not
+        // currently receive `with_audio` in the real request body (the generic
+        // OpenAICompatibleHubAdapter has no such passthrough). Wiring this is
+        // a real follow-up, not a regression introduced here: before this
+        // change, no soundtrack option existed for ANY provider.
+        nativeAudioSupport: true,
+        source: 'human',
+      },
     },
     pricingMode: 'none',
     enabledByDefault: true,
@@ -1225,14 +1228,17 @@ export const PROVIDER_CATALOG: readonly ProviderCatalogEntry[] = [
     // /v1/video_upscale post-processing endpoint, not generation.
     // `ratio` accepts the union of image_to_video + text_to_video enums
     // (pixel-dimension strings verbatim, not derived '16:9' labels).
-    videoCapabilityAttributes: {
-      maxDurationSeconds: 10,
-      minDurationSeconds: 2,
-      maxResolution: '1584x672',
-      supportedAspectRatios: ['1280:720', '720:1280', '1104:832', '960:960', '832:1104', '1584:672'],
-      // Audio is a completely separate endpoint (/v1/sound_effect,
-      // /v1/text_to_speech), never returned attached to the generated video.
-      nativeAudioSupport: false,
+    capabilityAttributes: {
+      video_generation: {
+        maxDurationSeconds: 10,
+        minDurationSeconds: 2,
+        maxResolution: '1584x672',
+        supportedAspectRatios: ['1280:720', '720:1280', '1104:832', '960:960', '832:1104', '1584:672'],
+        // Audio is a completely separate endpoint (/v1/sound_effect,
+        // /v1/text_to_speech), never returned attached to the generated video.
+        nativeAudioSupport: false,
+        source: 'human',
+      },
     },
     pricingMode: 'none',
     enabledByDefault: true,
@@ -1299,11 +1305,14 @@ export const PROVIDER_CATALOG: readonly ProviderCatalogEntry[] = [
     // for Gen2, 5 seconds for Gen3" on top of an already-generated clip
     // (not captured here — that's a delta on a follow-up call, not a
     // ceiling on a single generation).
-    videoCapabilityAttributes: {
-      maxDurationSeconds: 10,
-      minDurationSeconds: 5,
-      allowedDurationsSeconds: [5, 10],
-      nativeAudioSupport: false,
+    capabilityAttributes: {
+      video_generation: {
+        maxDurationSeconds: 10,
+        minDurationSeconds: 5,
+        allowedDurationsSeconds: [5, 10],
+        nativeAudioSupport: false,
+        source: 'human',
+      },
     },
     pricingMode: 'none',
     enabledByDefault: true,
@@ -3430,11 +3439,14 @@ export const PROVIDER_CATALOG: readonly ProviderCatalogEntry[] = [
     // today. No `duration` field exists on the endpoint at all (length is
     // fixed per Wan-AI model) — deliberately left unset here rather than
     // fabricated. `image_size` doubles as the resolution/ratio enum.
-    videoCapabilityAttributes: {
-      maxResolution: '720p',
-      supportedAspectRatios: ['16:9', '9:16', '1:1'],
-      // No audio field on the endpoint — verified absence, not "undocumented".
-      nativeAudioSupport: false,
+    capabilityAttributes: {
+      video_generation: {
+        maxResolution: '720p',
+        supportedAspectRatios: ['16:9', '9:16', '1:1'],
+        // No audio field on the endpoint — verified absence, not "undocumented".
+        nativeAudioSupport: false,
+        source: 'human',
+      },
     },
     pricingMode: 'none',
     enabledByDefault: true,
@@ -3502,29 +3514,32 @@ export const PROVIDER_CATALOG: readonly ProviderCatalogEntry[] = [
     // https://docs.venice.ai/api-reference/endpoint/video today (Seedance
     // passthrough). `resolution` varies per underlying model — '2160p'/'4k'
     // is the ceiling across the family.
-    videoCapabilityAttributes: {
-      maxDurationSeconds: 30,
-      maxResolution: '4k',
-      supportedAspectRatios: [
-        '1:1',
-        '2:3',
-        '3:2',
-        '3:4',
-        '4:3',
-        '4:5',
-        '5:4',
-        '9:16',
-        '9:21',
-        '16:9',
-        '21:9',
-        'adaptive',
-        'auto',
-      ],
-      // `audio: boolean` (default true) — "For models which support audio
-      // generation". Same wiring caveat as zai: real vendor capability,
-      // declared for selection-time exclusion accuracy, not yet plumbed
-      // end-to-end (LOTE AS Part 1 wires only BytePlus + Google Veo).
-      nativeAudioSupport: true,
+    capabilityAttributes: {
+      video_generation: {
+        maxDurationSeconds: 30,
+        maxResolution: '4k',
+        supportedAspectRatios: [
+          '1:1',
+          '2:3',
+          '3:2',
+          '3:4',
+          '4:3',
+          '4:5',
+          '5:4',
+          '9:16',
+          '9:21',
+          '16:9',
+          '21:9',
+          'adaptive',
+          'auto',
+        ],
+        // `audio: boolean` (default true) — "For models which support audio
+        // generation". Same wiring caveat as zai: real vendor capability,
+        // declared for selection-time exclusion accuracy, not yet plumbed
+        // end-to-end (LOTE AS Part 1 wires only BytePlus + Google Veo).
+        nativeAudioSupport: true,
+        source: 'human',
+      },
     },
     pricingMode: 'none',
     enabledByDefault: true,
@@ -4313,11 +4328,14 @@ export const PROVIDER_CATALOG: readonly ProviderCatalogEntry[] = [
     // — `frames` (a [29,289] lattice) takes precedence over `duration`
     // upstream and `duration` itself is passed through UNCAPPED by the
     // adapter, so no single "max seconds" figure would be honest.
-    videoCapabilityAttributes: {
-      maxResolution: '4K',
-      supportedAspectRatios: ['16:9', '4:3', '1:1', '3:4', '9:16', '21:9', 'adaptive'],
-      // Seedance `generate_audio` — a real video soundtrack switch, see notes.
-      nativeAudioSupport: true,
+    capabilityAttributes: {
+      video_generation: {
+        maxResolution: '4K',
+        supportedAspectRatios: ['16:9', '4:3', '1:1', '3:4', '9:16', '21:9', 'adaptive'],
+        // Seedance `generate_audio` — a real video soundtrack switch, see notes.
+        nativeAudioSupport: true,
+        source: 'human',
+      },
     },
     pricingMode: 'none',
     enabledByDefault: true,

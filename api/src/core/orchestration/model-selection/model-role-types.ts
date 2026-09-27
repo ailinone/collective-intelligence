@@ -70,6 +70,15 @@ export interface RoleConstraints {
   readonly requiredCapabilities?: readonly (ModelCapability | string)[];
   readonly preferredCapabilities?: readonly (ModelCapability | string)[];
   readonly requireJsonOutput?: boolean;
+  /** Hard filter: excludes any candidate lacking vision/multimodal input
+   *  support. Set by callers (e.g. `MediaJudgeEvaluator`'s wiring) that are
+   *  about to hand the judge base64 image/video frames — a judge that
+   *  can't see the frames must never be silently substituted with a
+   *  text-only model. Reuses the `'vision'` capability tag that
+   *  `inferModelCapabilities` (services/model-capability-inference.ts)
+   *  already derives from real input-modality metadata
+   *  (`extractModelModalities`, populated at catalog-discovery time). */
+  readonly requireVision?: boolean;
   readonly allowLocal?: boolean;
   readonly preferLocal?: boolean;
   readonly requireLocal?: boolean;

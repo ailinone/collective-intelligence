@@ -34,7 +34,7 @@
  * the caller: `@/capability/db/capability-pool.ts`'s `getCapabilityPool()`
  * used to read `process.env.DATABASE_URL` lazily — reassigned mid-boot by
  * `load-secrets-into-env.ts` to a stale GCP secret pointing at the
- * pre-rename Postgres host `old-db-host` — instead of the early-captured, frozen
+ * pre-rename Postgres host, instead of the early-captured, frozen
  * `config.database.url` that `database/client.ts`'s Prisma pool already used
  * safely. That has since been fixed in `capability-pool.ts` (see its own
  * `__tests__/capability-pool.test.ts`, and

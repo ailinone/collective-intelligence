@@ -30,6 +30,7 @@
 import { FastifyInstance } from 'fastify';
 import { container } from 'tsyringe';
 import { authenticate } from '@/middleware/auth-middleware';
+import { config } from '@/config';
 import { createRouteRateLimit } from '@/api/middleware/route-rate-limit';
 import { CreateProjectHandler } from '@/application/handlers/create-project.handler';
 import { ListProjectsHandler } from '@/application/handlers/list-projects.handler';
@@ -52,6 +53,7 @@ import type { ExtendedFastifyRequest } from '@/types/fastify-extended';
 interface AuthContext {
   userId: string;
   organizationId: string;
+  isAdmin: boolean;
 }
 
 function extractAuthContext(request: unknown): AuthContext | null {
@@ -69,7 +71,17 @@ function extractAuthContext(request: unknown): AuthContext | null {
   if (typeof userId !== 'string' || typeof organizationId !== 'string') {
     return null;
   }
-  return { userId, organizationId };
+  // SECURITY: mirrors requireRole()/require-permission-middleware's role
+  // extraction — ONLY the `roles: string[]` array counts, no scalar `role`
+  // fallback (that shape is a non-grant denormalized hint column).
+  const roles =
+    'roles' in r.user && Array.isArray((r.user as { roles?: unknown }).roles)
+      ? (r.user as { roles: unknown[] }).roles.filter(
+          (role): role is string => typeof role === 'string'
+        )
+      : [];
+  const isAdmin = roles.some((role) => config.security.rbac.superRoles.includes(role));
+  return { userId, organizationId, isAdmin };
 }
 
 export async function projectsRoutesClean(server: FastifyInstance): Promise<void> {
@@ -273,7 +285,8 @@ export async function projectsRoutesClean(server: FastifyInstance): Promise<void
           auth.organizationId,
           body.name,
           body.description,
-          body.settings
+          body.settings,
+          auth.isAdmin
         )
       );
       if (!result.success) {
@@ -317,7 +330,7 @@ export async function projectsRoutesClean(server: FastifyInstance): Promise<void
         return reply.status(404).send({ error: 'project not found' });
       }
       const result = await archiveHandler.execute(
-        new ArchiveProjectCommand(found.project.id, auth.userId, auth.organizationId)
+        new ArchiveProjectCommand(found.project.id, auth.userId, auth.organizationId, auth.isAdmin)
       );
       if (!result.success) {
         if (result.errorCode === 'invalid_state') {
@@ -325,6 +338,9 @@ export async function projectsRoutesClean(server: FastifyInstance): Promise<void
         }
         if (result.errorCode === 'not_found') {
           return reply.status(404).send({ error: result.error });
+        }
+        if (result.errorCode === 'forbidden') {
+          return reply.status(403).send({ error: result.error });
         }
         return reply.status(500).send({ error: result.error });
       }
@@ -357,7 +373,7 @@ export async function projectsRoutesClean(server: FastifyInstance): Promise<void
         return reply.status(404).send({ error: 'project not found' });
       }
       const result = await restoreHandler.execute(
-        new RestoreProjectCommand(found.project.id, auth.userId, auth.organizationId)
+        new RestoreProjectCommand(found.project.id, auth.userId, auth.organizationId, auth.isAdmin)
       );
       if (!result.success) {
         if (result.errorCode === 'invalid_state') {
@@ -365,6 +381,9 @@ export async function projectsRoutesClean(server: FastifyInstance): Promise<void
         }
         if (result.errorCode === 'not_found') {
           return reply.status(404).send({ error: result.error });
+        }
+        if (result.errorCode === 'forbidden') {
+          return reply.status(403).send({ error: result.error });
         }
         return reply.status(500).send({ error: result.error });
       }

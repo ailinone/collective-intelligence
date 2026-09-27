@@ -147,4 +147,62 @@ describe('ModelRoleResolver — judge', () => {
     expect(r.selected.length).toBe(0);
     expect(r.trace.notes).toContain('no_candidate_satisfies_constraints');
   });
+
+  it('excludes non-vision models when requireVision=true', async () => {
+    const resolver = new ModelRoleResolver();
+    const r = await resolver.resolve({
+      taskProfile: { taskType: 'analysis' },
+      strategyName: 'media-consensus',
+      role: 'judge',
+      candidatePool: [
+        makeCandidate({
+          id: 'text-only',
+          model: makeModel({
+            id: 'text-only',
+            provider: 'p1',
+            contextWindow: 64000,
+            capabilities: ['chat', 'text_generation'] as ModelCapability[],
+          }),
+        }),
+        makeCandidate({
+          id: 'vision-capable',
+          model: makeModel({
+            id: 'vision-capable',
+            provider: 'p2',
+            contextWindow: 64000,
+            capabilities: ['chat', 'text_generation', 'vision'] as ModelCapability[],
+          }),
+        }),
+      ],
+      constraints: { requireVision: true },
+    });
+    expect(r.selected[0]?.model.id).toBe('vision-capable');
+    expect(
+      r.rejected.some(
+        (rej) => rej.modelId === 'text-only' && rej.reason === 'vision_not_supported'
+      )
+    ).toBe(true);
+  });
+
+  it('does not filter on vision when requireVision is unset (default, unchanged behavior)', async () => {
+    const resolver = new ModelRoleResolver();
+    const r = await resolver.resolve({
+      taskProfile: { taskType: 'analysis' },
+      strategyName: 'media-consensus',
+      role: 'judge',
+      candidatePool: [
+        makeCandidate({
+          id: 'text-only',
+          model: makeModel({
+            id: 'text-only',
+            provider: 'p1',
+            contextWindow: 64000,
+            capabilities: ['chat', 'text_generation'] as ModelCapability[],
+          }),
+        }),
+      ],
+      constraints: {},
+    });
+    expect(r.rejected.some((rej) => rej.reason === 'vision_not_supported')).toBe(false);
+  });
 });

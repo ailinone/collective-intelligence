@@ -107,6 +107,7 @@ import pg from 'pg';
 import type { Model } from '@/types';
 import { logger } from '@/utils/logger';
 import { getErrorMessage } from '@/utils/type-guards';
+import { pgPoolIdentityOptions } from '@/database/pg-pool-identity';
 import { getRedisClient } from '@/cache/redis-client';
 import { CATALOG_HOT_PATH_SELECT, CATALOG_REDIS_KEY } from '@/services/catalog-hot-path';
 import { computeLayout, wrapViews, CONTROL } from './schema';
@@ -210,6 +211,9 @@ function getWorkerPrisma(): PrismaClient {
       min: 0,
       idleTimeoutMillis: 30_000,
       connectionTimeoutMillis: 20_000,
+      // application_name + TCP keepalive, shared with the Prisma and
+      // capability pools (pg-pool-identity.ts is dependency-free, safe here).
+      ...pgPoolIdentityOptions('sab'),
     });
     pool.on('error', (error: unknown) => {
       log.warn({ error: getErrorMessage(error) }, 'sab-candidate-index worker: pg pool error');

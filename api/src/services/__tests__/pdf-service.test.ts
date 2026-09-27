@@ -30,11 +30,37 @@
  */
 import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest';
 import PDFDocument from 'pdfkit';
-import type { OrchestrationContext } from '@/types';
+import type { Model, OrchestrationContext } from '@/types';
 
 const engineExecute = vi.fn();
 vi.mock('@/core/orchestration/orchestration-engine', () => ({
   getOrchestrationEngine: () => ({ execute: engineExecute }),
+}));
+
+// Task 11 (LOTE AZ, 2026-09-23): attribute-aware `pdf_understanding`
+// candidate pre-filter. Mocking pattern mirrors
+// images-orchestration-attribute-filter.test.ts (Task 10) — a mocked
+// `ModelRepository.searchModelsComplete` plus a mocked `PROVIDER_CATALOG`
+// with a couple of fixed provider entries whose declared `maxPages` (or lack
+// thereof) exercises the fail-open/narrows-the-pool contract.
+const searchModelsComplete = vi.fn();
+vi.mock('@/services/model-repository', () => ({
+  ModelRepository: class {
+    searchModelsComplete = searchModelsComplete;
+  },
+}));
+
+vi.mock('@/providers/catalog/providers.catalog', () => ({
+  PROVIDER_CATALOG: [
+    // Both declare a maxPages ceiling too small for the 2-page test PDFs
+    // used below, so a candidate from either is excluded once the document
+    // exceeds it.
+    { providerId: 'provider-a', capabilityAttributes: { pdf_understanding: { maxPages: 1 } } },
+    { providerId: 'provider-a2', capabilityAttributes: { pdf_understanding: { maxPages: 1 } } },
+    // No declared capabilityAttributes at all — fail-open, never excluded.
+    { providerId: 'provider-b' },
+    { providerId: 'provider-c' },
+  ],
 }));
 
 import { PDFService } from '../pdf-service';
@@ -101,9 +127,30 @@ function chatResponse(content: string) {
   };
 }
 
+/** Minimal Model stub — selectPdfAnalysisModel only reads `.id` / `.provider`. */
+function makeModel(id: string, provider: string): Model {
+  return {
+    id,
+    name: id,
+    displayName: id,
+    provider,
+    providerId: provider,
+    capabilities: ['pdf_understanding'],
+    contextWindow: 0,
+    maxOutputTokens: 0,
+    inputCostPer1k: 0.01,
+    outputCostPer1k: 0.02,
+    status: 'active',
+  } as unknown as Model;
+}
+
 describe('PDFService', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // Default: no pdf_understanding candidates found, so the pre-filter is a
+    // no-op and pre-existing tests below keep their original `model: 'auto'`
+    // behavior unless a test overrides this explicitly.
+    searchModelsComplete.mockResolvedValue([]);
   });
 
   describe('native text layer', () => {
@@ -132,6 +179,22 @@ describe('PDFService', () => {
       expect(result.extraction.ocrPages).toBe(0);
       // A readable page must never cost a vision call.
       expect(analyzeImage).not.toHaveBeenCalled();
+    });
+
+    it('stamps a "[page N]" marker before every page — the contract DocumentReviewStrategy relies on', async () => {
+      const pdf = await buildPdf([{ text: LONG_TEXT_A }, { text: LONG_TEXT_B }]);
+      const service = makeService();
+      const result = await service.analyzePDF({
+        pdfBuffer: pdf,
+        filename: 'two-page.pdf',
+        userContext: USER_CONTEXT,
+        requestId: 'req-page-markers',
+      });
+      expect(result.text).toContain('[page 1]');
+      expect(result.text).toContain('[page 2]');
+      // Page 1's marker must precede page 2's — critics rely on reading
+      // markers in document order to anchor an issue to the right page.
+      expect(result.text.indexOf('[page 1]')).toBeLessThan(result.text.indexOf('[page 2]'));
     });
 
     it('answers a promptless request from extraction alone — no provider call', async () => {
@@ -333,6 +396,111 @@ describe('PDFService', () => {
 
       expect(result.answer).toBe('Revenue grew, costs were flat.');
       expect(result.modelUsed).toBe('analysis-model');
+    });
+  });
+
+  describe('attribute-aware analysis model pre-filter (Task 11)', () => {
+    it("pins the analysis model to a surviving pdf_understanding candidate when auto-select and the document exceeds another candidate's declared maxPages", async () => {
+      // 2-page document; provider-a declares maxPages: 1 (excluded), provider-b
+      // declares nothing (fail-open, survives). Filtering narrows 2 -> 1, so
+      // the request must be pinned to provider-b's model id instead of 'auto'.
+      const pdf = await buildPdf([{ text: LONG_TEXT_A }, { text: LONG_TEXT_B }]);
+      searchModelsComplete.mockResolvedValue([
+        makeModel('model-a', 'provider-a'),
+        makeModel('model-b', 'provider-b'),
+      ]);
+      engineExecute.mockResolvedValue(chatResponse('summary'));
+      const service = makeService();
+
+      await service.analyzePDF({
+        pdfBuffer: pdf,
+        filename: 'report.pdf',
+        prompt: 'Summarize this',
+        userContext: USER_CONTEXT,
+        requestId: 'req_attr_1',
+      });
+
+      expect(engineExecute).toHaveBeenCalledTimes(1);
+      const [chatRequest] = engineExecute.mock.calls[0];
+      expect(chatRequest.model).toBe('model-b');
+    });
+
+    it('leaves model as auto when every candidate is excluded (fail-open, never blocks the request)', async () => {
+      // Both provider-a and provider-a2 declare maxPages: 1, which the
+      // 2-page document exceeds — every candidate would be excluded. The
+      // pre-filter must not let an optional narrowing step empty the pool
+      // and block the request; it leaves 'auto' for the engine's own
+      // selection to handle.
+      const pdf = await buildPdf([{ text: LONG_TEXT_A }, { text: LONG_TEXT_B }]);
+      searchModelsComplete.mockResolvedValue([
+        makeModel('model-a', 'provider-a'),
+        makeModel('model-a2', 'provider-a2'),
+      ]);
+      engineExecute.mockResolvedValue(chatResponse('summary'));
+      const service = makeService();
+
+      await service.analyzePDF({
+        pdfBuffer: pdf,
+        filename: 'report.pdf',
+        prompt: 'Summarize this',
+        userContext: USER_CONTEXT,
+        requestId: 'req_attr_2',
+      });
+
+      expect(engineExecute).toHaveBeenCalledTimes(1);
+      const [chatRequest] = engineExecute.mock.calls[0];
+      expect(chatRequest.model).toBe('auto');
+    });
+
+    it('leaves model as auto when no candidate is excluded (no unnecessary pinning)', async () => {
+      // provider-b and provider-c both declare no pdf_understanding
+      // attributes at all — both survive fail-open, so filtering narrows
+      // nothing. Per the plan's own design ("only when filtering actually
+      // narrows the pool"), the request must stay 'auto' rather than being
+      // pinned to whichever candidate happens to be first.
+      const pdf = await buildPdf([{ text: LONG_TEXT_A }, { text: LONG_TEXT_B }]);
+      searchModelsComplete.mockResolvedValue([
+        makeModel('model-b', 'provider-b'),
+        makeModel('model-c', 'provider-c'),
+      ]);
+      engineExecute.mockResolvedValue(chatResponse('summary'));
+      const service = makeService();
+
+      await service.analyzePDF({
+        pdfBuffer: pdf,
+        filename: 'report.pdf',
+        prompt: 'Summarize this',
+        userContext: USER_CONTEXT,
+        requestId: 'req_attr_3',
+      });
+
+      expect(engineExecute).toHaveBeenCalledTimes(1);
+      const [chatRequest] = engineExecute.mock.calls[0];
+      expect(chatRequest.model).toBe('auto');
+    });
+
+    it('honors an explicit non-auto model, bypassing the pre-filter entirely', async () => {
+      const pdf = await buildPdf([{ text: LONG_TEXT_A }, { text: LONG_TEXT_B }]);
+      searchModelsComplete.mockResolvedValue([
+        makeModel('model-a', 'provider-a'),
+        makeModel('model-b', 'provider-b'),
+      ]);
+      engineExecute.mockResolvedValue(chatResponse('summary'));
+      const service = makeService();
+
+      await service.analyzePDF({
+        pdfBuffer: pdf,
+        filename: 'report.pdf',
+        prompt: 'Summarize this',
+        model: 'explicit-model-id',
+        userContext: USER_CONTEXT,
+        requestId: 'req_attr_4',
+      });
+
+      expect(searchModelsComplete).not.toHaveBeenCalled();
+      expect(engineExecute).toHaveBeenCalledTimes(1);
+      const [chatRequest] = engineExecute.mock.calls[0];
+      expect(chatRequest.model).toBe('explicit-model-id');
     });
   });
 

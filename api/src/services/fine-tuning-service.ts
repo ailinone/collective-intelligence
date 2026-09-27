@@ -1132,6 +1132,10 @@ export class FineTuningService {
         where: { id: jobId, organizationId: userContext.organizationId },
       });
 
+      if (!dbJob) {
+        throw new Error(`Fine-tuning job ${jobId} not found`);
+      }
+
       // Google: derive events from the live tuned model's per-step snapshots.
       if (dbJob && dbJob.provider === 'google') {
         const googleClient = this.getGoogleFineTuningClient();
@@ -1233,6 +1237,10 @@ export class FineTuningService {
       const dbJob = await prisma.fineTuningJob.findFirst({
         where: { id: jobId, organizationId: userContext.organizationId },
       });
+
+      if (!dbJob) {
+        throw new Error(`Fine-tuning job ${jobId} not found`);
+      }
 
       // Google: derive checkpoints from the live tuned model's snapshots.
       if (dbJob && dbJob.provider === 'google') {

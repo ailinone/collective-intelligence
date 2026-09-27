@@ -30,9 +30,17 @@ import {
   assertMigrationTargetIsDirect,
   buildPrismaDatabaseUrl,
   describeDatabaseTarget,
+  getRuntimeDatabaseUrl,
   resolveTransactionOptions,
 } from './connection-url';
+import {
+  createPgSelectOneProbe,
+  resolveStartupDbCheckOptions,
+  runStartupDatabaseCheck,
+  type StartupDbCheckResult,
+} from './startup-db-check';
 import { attachPoolMetrics } from './pool-metrics';
+import { pgPoolIdentityOptions } from './pg-pool-identity';
 
 const execAsync = promisify(exec);
 
@@ -108,6 +116,10 @@ let databaseTargetLogged = false;
  * the deprecated-alias fallback that keeps existing `DB_POOL_MAX`
  * deployments working). Exported so tests can assert the pool actually
  * traces back to config without booting the full Prisma client singleton.
+ *
+ * application_name and TCP keepalive come from pg-pool-identity.ts, shared
+ * with the capability and SAB pools, so pg_stat_activity attributes every
+ * connection to a service, pool and container.
  */
 export function buildPgPoolOptions(connectionString: string): pg.PoolConfig {
   return {
@@ -118,6 +130,7 @@ export function buildPgPoolOptions(connectionString: string): pg.PoolConfig {
     // Increase connection timeout to handle slower connections (e.g., Cloud SQL proxy)
     // In production, connections may need more time due to network latency
     connectionTimeoutMillis: parseInt(process.env.DATABASE_CONNECTION_TIMEOUT_MS || '20000', 10), // 20 seconds default
+    ...pgPoolIdentityOptions('prisma'),
   };
 }
 
@@ -206,7 +219,7 @@ function createPrismaClient(): PrismaClient {
   return new PrismaClient({
     adapter,
     log: logConfig,
-    // undefined in direct mode (Prisma defaults); see connection-url.ts.
+    // maxWait sized for a queueing pool in both modes; see connection-url.ts.
     transactionOptions: resolveTransactionOptions(),
   });
 }
@@ -604,6 +617,28 @@ export async function runMigrations(): Promise<void> {
 
     logger.warn('Continuing despite migration warnings (migrations may already be applied)');
   }
+}
+
+/**
+ * Boot-time database gate (see startup-db-check.ts): `SELECT 1` against the
+ * runtime target with bounded retries, over a dedicated short-lived
+ * connection. Throws `DatabaseStartupCheckError` when the budget is spent;
+ * both entrypoints (index.ts, workers/queue-runner.ts) let it reach their
+ * bootstrap catch, which exits non-zero. Runs whether or not
+ * SKIP_DB_MIGRATIONS is set, because the Swarm healthchecks are
+ * liveness-only and no longer test the database.
+ */
+export async function verifyDatabaseReachableAtStartup(
+  env: Record<string, string | undefined> = process.env
+): Promise<StartupDbCheckResult> {
+  const runtimeUrl = getRuntimeDatabaseUrl();
+  const options = resolveStartupDbCheckOptions(env);
+  return runStartupDatabaseCheck({
+    probe: createPgSelectOneProbe(runtimeUrl, options.attemptTimeoutMs),
+    options,
+    logger,
+    target: { ...describeDatabaseTarget(runtimeUrl, env) },
+  });
 }
 
 /**

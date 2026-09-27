@@ -94,6 +94,20 @@ describe('getCapabilityPool — DATABASE_URL source (2026-09-07 incident)', () =
     expect(pool.options.connectionString).not.toContain('old-db-host');
   });
 
+  it('tags connections with a capability application_name and enables TCP keepalive', async () => {
+    const { getCapabilityPool } = await import('../capability-pool');
+    const { pgPoolIdentityOptions } = await import('@/database/pg-pool-identity');
+    const pool = getCapabilityPool();
+    const options = pool.options as typeof pool.options & {
+      application_name?: string;
+      keepAlive?: boolean;
+    };
+
+    expect(options.application_name).toBe(pgPoolIdentityOptions('capability').application_name);
+    expect(options.application_name).toMatch(/-capability(@|$)/);
+    expect(options.keepAlive).toBe(true);
+  });
+
   it('is a singleton — repeated calls return the same pool instance', async () => {
     const { getCapabilityPool } = await import('../capability-pool');
     const first = getCapabilityPool();

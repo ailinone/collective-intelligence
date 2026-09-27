@@ -21,8 +21,12 @@
 #      No host port is published and no named volume is mounted — all state is
 #      discarded when the container is removed.
 #   2. Restores the newest backup into that container with pg_restore.
+#      Before that it reads the whole backup: the gzip stream must be intact
+#      and the archive must end with pg_dump's end-of-data marker, so a dump
+#      cut short never gets this far.
 #   3. Runs sanity SELECT count(*) queries on the key tables
-#      (organizations, api_keys, request_logs, invoices).
+#      (organizations, api_keys, request_logs, invoices); each one must exist
+#      and hold at least one row.
 #   4. Prints a PASS/FAIL summary.
 #   5. Tears the ephemeral container down (always, via trap).
 #
@@ -101,9 +105,18 @@ fi
 log "Using backup:  $BACKUP_FILE"
 log "Backup age:    $(( ( $(date +%s) - $(stat -c %Y "$BACKUP_FILE" 2>/dev/null || echo 0) ) / 60 )) min old"
 
-# Confirm the archive is a valid gzip before spinning anything up.
-log "Verifying gzip integrity"
-gunzip -t "$BACKUP_FILE" || fail "Backup is not a valid gzip archive: $BACKUP_FILE"
+# Confirm the archive is complete before spinning anything up. `gunzip -t`
+# alone is not enough: it passes an empty gzip (the 20-byte file of
+# 2026-09-23) and an archive that pg_dump stopped writing early while gzip
+# still closed its stream cleanly (the 5.4 GB file of 2026-09-23). So read the
+# whole stream (gzip CRC and length) and require the 5 zero bytes every
+# complete pg_dump custom-format archive ends with, the same check
+# api/scripts/backup-database.sh runs before it promotes a dump.
+log "Verifying the archive: full gzip read and pg_dump's end-of-data marker"
+tail_hex="$(gunzip -c -- "$BACKUP_FILE" | tail -c 5 | od -An -tx1 | tr -d ' \n'; exit "${PIPESTATUS[0]}")" \
+  || fail "Backup is not a valid gzip archive (corrupt or truncated): $BACKUP_FILE"
+[ "$tail_hex" = "0000000000" ] \
+  || fail "Backup does not end with pg_dump's end-of-data marker (last bytes: ${tail_hex:-none}), so the archive is truncated: $BACKUP_FILE"
 
 # ---------------------------------------------------------------------------
 # 1. Start the ephemeral Postgres container
@@ -168,8 +181,13 @@ for table in $DRILL_TABLES; do
   # -tA = tuples only, unaligned. Numeric count on success, empty on error.
   count="$(drill_psql -tA -c "SELECT count(*) FROM \"${table}\";" 2>/dev/null || true)"
   count="$(printf '%s' "$count" | tr -d '[:space:]')"
-  if printf '%s' "$count" | grep -Eq '^[0-9]+$'; then
+  if printf '%s' "$count" | grep -Eq '^[0-9]+$' && [ "$count" -gt 0 ]; then
     printf '  %-20s %12s   %s\n' "$table" "$count" "OK"
+  elif printf '%s' "$count" | grep -Eq '^[0-9]+$'; then
+    # A dump cut during table data still creates every table (pre-data), so
+    # an empty key table means a failed restore, not a pass.
+    printf '  %-20s %12s   %s\n' "$table" "$count" "EMPTY"
+    overall_ok=0
   else
     printf '  %-20s %12s   %s\n' "$table" "n/a" "MISSING/ERROR"
     overall_ok=0
@@ -187,6 +205,6 @@ if [ "$overall_ok" -eq 1 ]; then
   printf '[PASS] Restore drill succeeded — all key tables restored with queryable data.\n'
   exit 0
 else
-  printf '[FAIL] Restore drill FAILED — one or more key tables missing or unqueryable.\n' >&2
+  printf '[FAIL] Restore drill FAILED: one or more key tables missing, unqueryable or empty.\n' >&2
   exit 1
 fi

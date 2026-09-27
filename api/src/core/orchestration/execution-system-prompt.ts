@@ -55,11 +55,13 @@ import {
   BEHAVIORAL_GUARDRAILS_ECHO,
 } from './prompts/behavioral-guardrails';
 import { CODE_EXECUTION_HONESTY_DIRECTIVE } from './prompts/code-execution-honesty';
+import { buildCodeExecutionResultDirective } from './prompts/code-execution-result';
 import {
   shouldIncludeSystemCapabilityManifest,
   buildSystemCapabilityManifest,
 } from './prompts/system-capability-manifest';
 import { detectCodeExecutionIntent } from './capability-inference';
+import { isCodeExecutionSandboxEnabled } from '@/core/sandbox/sandbox-policy';
 import { logger } from '@/utils/logger';
 
 /**
@@ -70,7 +72,7 @@ import { logger } from '@/utils/logger';
  * rather than imported to avoid a route-layer dependency from this
  * lower-level orchestration module.
  */
-function extractLastUserTurnText(messages: ChatMessage[]): string {
+export function extractLastUserTurnText(messages: ChatMessage[]): string {
   for (let i = messages.length - 1; i >= 0; i--) {
     const message = messages[i];
     if (message.role !== 'user') continue;
@@ -160,16 +162,31 @@ export function buildExecutionSystemPrompt(
     sections.push(taskGuidance);
   }
 
-  // Code-execution honesty (2026-09 incident fix): the capability-awareness
-  // section above can list `tool_use`/`function_calling` purely because the
-  // request text contains an execute-shaped verb — with no real
-  // code-execution tool actually attached to this request (see
-  // code-execution-honesty.ts's doc comment for the full incident). When the
-  // user's own last turn shows genuine "run this and show me the real
-  // result" intent, make the gap explicit so the model reasons out the
-  // correct answer instead of attempting a fake tool call or emitting a bare
-  // fragment.
-  if (detectCodeExecutionIntent(extractLastUserTurnText(request.messages))) {
+  // Code execution (2026-09 incident fix; ADR-026 extends it with the real
+  // thing behind a flag). Two mutually exclusive outcomes:
+  //
+  //   1. `CODE_EXECUTION_SANDBOX_ENABLED=true` AND
+  //      `code-execution-orchestration.ts` already ran the detected snippet
+  //      for THIS request (`context.codeExecutionResult` populated) — report
+  //      the REAL captured result instead of reasoning about it.
+  //   2. Everything else, INCLUDING the flag being on but no result present
+  //      (unsupported language, extraction failed, execution errored, or the
+  //      call site never invoked the pre-step) — fall back to the exact
+  //      honesty-directive check this project has run since the original
+  //      incident fix. This branch's condition and text are BYTE-FOR-BYTE
+  //      unchanged from before ADR-026, which is what keeps the flag-off
+  //      (default, current production) behaviour identical — see
+  //      `execution-system-prompt-code-execution-honesty.test.ts` and
+  //      `execution-system-prompt-code-execution-result.test.ts`.
+  //
+  // The capability-awareness section above can list `tool_use`/
+  // `function_calling` purely because the request text contains an
+  // execute-shaped verb — with no real code-execution tool actually attached
+  // to this request (see code-execution-honesty.ts's doc comment for the full
+  // incident) unless branch 1 fired.
+  if (isCodeExecutionSandboxEnabled() && context.codeExecutionResult) {
+    sections.push(buildCodeExecutionResultDirective(context.codeExecutionResult));
+  } else if (detectCodeExecutionIntent(extractLastUserTurnText(request.messages))) {
     sections.push(CODE_EXECUTION_HONESTY_DIRECTIVE);
   }
 

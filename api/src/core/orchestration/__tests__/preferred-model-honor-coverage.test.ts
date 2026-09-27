@@ -247,8 +247,19 @@ function usesDirectRead(source: string): boolean {
  *   `CapabilityExecutionService.executeWithCapabilities()` — a recursive
  *   re-entry into the full engine, not a direct `context.models` pool
  *   selection. There is nothing here for `preferredModelIds` to pin.
+ * - `document-review-strategy.ts` (Section C, document/PDF generalization):
+ *   its only model dispatch is the one-shot `synthesize()` call, which uses
+ *   the strategy's own constructor-provided `synthesisModelId` (falling
+ *   back to `'auto'`) — never a selection out of `context.models`. Like
+ *   `media-consensus-strategy.ts`'s per-call `videoOptions.model` /
+ *   `imageOptions.model`, this is a different, already-explicit model
+ *   override mechanism, not the pool `preferredModelIds` pins into.
  */
-const OUT_OF_SCOPE = new Set<string>(['media-consensus-strategy.ts', 'media-planner-strategy.ts']);
+const OUT_OF_SCOPE = new Set<string>([
+  'media-consensus-strategy.ts',
+  'media-planner-strategy.ts',
+  'document-review-strategy.ts',
+]);
 
 // ──────────────────────────────────────────────────────────────────────
 // Test setup: read every strategy file once.

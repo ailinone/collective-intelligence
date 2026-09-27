@@ -736,6 +736,23 @@ export class ModelRoleResolver {
       trace.recordStage('role_specific', pool.length);
     }
 
+    // 10. Role-specific: judge requires vision/multimodal input support
+    //     when the caller is about to hand it base64 image/video frames
+    //     (MediaJudgeEvaluator's visual-media path). Hard filter,
+    //     independent of requireJsonOutput. Deliberately recorded under
+    //     the SAME 'role_specific' trace stage as requireJsonOutput
+    //     (not a new FilterStage) — this is one narrow addition and
+    //     adding a new stage would require updating TraceBuilder.build()'s
+    //     hardcoded stage list for no added clarity.
+    if (input.constraints.requireVision) {
+      trace.addCriterion('requireVision=true');
+      pool = applyFilter({ ...ctx, pool }, 'role_specific', (c) =>
+        modelHasCapability(c.model, 'vision')
+          ? { ok: true }
+          : { ok: false, reason: 'vision_not_supported' }
+      );
+    }
+
     // Rank + pick. 01C.1B-J2: pass optional quality snapshot through to the
     // synthesizer-specific ranker so quality entries override the placeholder.
     // 01C.1B-J2-C-R4 §13: pass taskProfile so quality lookup is task-aware

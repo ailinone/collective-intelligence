@@ -34,6 +34,8 @@ import { getErrorMessage } from '@/utils/type-guards';
 import { safeResponseContent } from '@/core/orchestration/base-strategy';
 import { nanoid } from 'nanoid';
 import { prisma } from '@/database/client';
+import { getToolsBaseDir } from '@/utils/tools-workspace-guard';
+import { CHAT_AUTO_EXECUTE_BLOCKED_TOOLS, isAutoRecommendable, toolRegistry } from '@/core/tools/tool-registry';
 
 const log = logger.child({ component: 'agentic-workflow' });
 
@@ -91,6 +93,131 @@ export interface WorkflowDefinition {
   initialContext?: Record<string, unknown>;
   maxDuration?: number; // Max execution time in ms
   maxSteps?: number; // Max steps to prevent infinite loops
+}
+
+/**
+ * SECURITY (ci#652 follow-up — scoped admin gate for POST /v1/workflows/execute).
+ *
+ * ci#652 fixed a real hole: `tool_call` steps (delete_file, file_search,
+ * heal_file, ...) dispatched through `executeToolStep()` below against
+ * `process.cwd()`, with no gate beyond "authenticated, non-free-tier". The
+ * fix required a platform admin for the ENTIRE route and sandboxed tool
+ * execution under `TOOLS_BASE_DIR` (see `executeToolStep()`).
+ *
+ * But `/v1/workflows/execute` is publicly documented
+ * (docs/reference/endpoints/*.md, openapi-spec.json) as a tenant-facing API
+ * for workflows built only from `llm_call` steps, which never touch the
+ * server's filesystem or shell. Gating the whole route behind platform-admin
+ * broke that documented contract for every tenant who never sends a
+ * `tool_call` at all.
+ *
+ * This function restores that contract with a FINE-GRAINED gate: it walks
+ * the actual workflow definition — recursively, at ANY nesting depth,
+ * including inside `parallel`, `loop`, `sub_workflow`, and any future
+ * composite step type that reuses this same `config.steps` shape — and
+ * returns `true` (platform admin required) only when it finds a `tool_call`
+ * step naming a tool that is:
+ *
+ *   (a) NOT in the triage auto-recommendable set (`isAutoRecommendable()`,
+ *       tool-registry.ts) — i.e. not established as safe to run unattended
+ *       on the server's own filesystem/codebase, OR
+ *   (b) in the dangerous-tools blocklist (`CHAT_AUTO_EXECUTE_BLOCKED_TOOLS`,
+ *       tool-registry.ts, ci#653) — which wins even when (a) would have
+ *       admitted it, the same precedence `isBlockedFromStrategyAutoExecution`
+ *       gives it there (e.g. the vision tools, category `image`, are
+ *       auto-recommendable by category but still blocklisted).
+ *
+ * A workflow made only of `llm_call` (or any other step type that never
+ * reaches `tool_call`) never matches, so an ordinary authenticated,
+ * non-free-tier tenant keeps calling the route exactly as documented. Tool
+ * execution itself stays clamped to `TOOLS_BASE_DIR` regardless (ci#652 —
+ * not touched by this change) for the platform-admin-only path.
+ *
+ * FAILS CLOSED. Anything this function cannot positively prove safe —
+ * a non-object workflow/step, a `tool_call` with a missing/empty/malformed
+ * `tools` array, a tool name that isn't a registered tool, or nesting deep
+ * enough to look pathological/cyclic — returns `true`. It never fails open.
+ *
+ * Deliberately checks EVERY entry of a `tool_call` step's `tools` array, not
+ * only `tools[0]` (the only one `executeToolStep()` currently ever executes)
+ * — so a later change to execute more than the first declared tool can never
+ * silently slip past this gate.
+ *
+ * Applies equally whether the route resolved the workflow from `workflowId`
+ * (a previously registered definition) or from an inline `workflow` body —
+ * callers should run this against the RESOLVED `WorkflowDefinition`, not
+ * just the raw request body, since `/v1/workflows/create` (which registers a
+ * workflow for later execution by id) is not itself platform-admin gated.
+ */
+const MAX_WORKFLOW_GATE_TRAVERSAL_DEPTH = 64;
+
+export function workflowRequiresPlatformAdmin(workflowDef: unknown): boolean {
+  if (workflowDef === null || typeof workflowDef !== 'object') return true; // fail closed
+  const steps = (workflowDef as { steps?: unknown }).steps;
+  return stepListRequiresPlatformAdmin(steps, 0);
+}
+
+function stepListRequiresPlatformAdmin(steps: unknown, depth: number): boolean {
+  // Fail closed: suspiciously deep (or, were it ever possible, cyclic) nesting.
+  if (depth > MAX_WORKFLOW_GATE_TRAVERSAL_DEPTH) return true;
+  // Fail closed: missing/malformed step list — can't prove it's safe.
+  if (!Array.isArray(steps)) return true;
+  for (const step of steps) {
+    if (stepRequiresPlatformAdmin(step, depth)) return true;
+  }
+  return false;
+}
+
+function stepRequiresPlatformAdmin(step: unknown, depth: number): boolean {
+  if (step === null || typeof step !== 'object') return true; // fail closed
+  const type = (step as { type?: unknown }).type;
+  if (typeof type !== 'string' || type.length === 0) return true; // fail closed
+
+  const config = (step as { config?: unknown }).config;
+
+  if (type === 'tool_call' && toolCallStepRequiresPlatformAdmin(config)) {
+    return true;
+  }
+
+  // Composite step types (`parallel`, `loop`, `sub_workflow`, and any future
+  // type that reuses this shape) nest their sub-steps at `config.steps`.
+  // Recurse whenever that shape is present, regardless of `type`, so a new
+  // composite step type added later is covered without this function
+  // needing to know its name.
+  if (config !== null && typeof config === 'object') {
+    const nestedSteps = (config as { steps?: unknown }).steps;
+    if (nestedSteps !== undefined && stepListRequiresPlatformAdmin(nestedSteps, depth + 1)) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+function toolCallStepRequiresPlatformAdmin(config: unknown): boolean {
+  if (config === null || typeof config !== 'object') return true; // fail closed
+  const tools = (config as { tools?: unknown }).tools;
+  // Fail closed: no declared tool means we cannot prove the step is safe.
+  if (!Array.isArray(tools) || tools.length === 0) return true;
+  return tools.some((tool) => !isToolSafeForTenantWorkflow(tool));
+}
+
+function isToolSafeForTenantWorkflow(tool: unknown): boolean {
+  if (tool === null || typeof tool !== 'object') return false; // fail closed
+  const name = (tool as { name?: unknown }).name;
+  if (typeof name !== 'string' || name.length === 0) return false; // fail closed
+
+  // Rule (b): the blocklist wins unconditionally, even over an
+  // auto-recommendable category (mirrors isBlockedFromStrategyAutoExecution).
+  if (CHAT_AUTO_EXECUTE_BLOCKED_TOOLS.has(name)) return false;
+
+  const reg = toolRegistry.get(name);
+  if (!reg) return false; // fail closed: unregistered/unknown tool name
+  if (CHAT_AUTO_EXECUTE_BLOCKED_TOOLS.has(reg.name)) return false; // canonical name, in case `name` was an alias
+
+  // Rule (a): must be established as auto-recommendable (safe to run
+  // unattended on the server's own filesystem/codebase).
+  return isAutoRecommendable(reg);
 }
 
 /**
@@ -1086,7 +1213,11 @@ Output ONLY valid JSON.`,
 
       // Create tool execution context
       const toolContext: ToolExecutionContext = {
-        workingDirectory: process.cwd(), // Default to current working directory
+        // SECURITY: was `process.cwd()` — the SAME clamped, operator-configured
+        // sandbox root the /v1/tools/* direct-call routes already enforce (see
+        // routes/tools/tools-routes.ts's createContext()/getToolsBaseDir()),
+        // not the raw process working directory.
+        workingDirectory: getToolsBaseDir(),
         timeout: step.config.timeout || 30000,
         log: log.child({ toolName: tool.name, toolCallId }),
         organizationId: context.organizationId,

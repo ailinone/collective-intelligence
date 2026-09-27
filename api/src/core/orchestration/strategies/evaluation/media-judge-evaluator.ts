@@ -44,7 +44,7 @@ import type {
 import { LLMJudgeEvaluator } from './llm-judge-evaluator';
 import type { LLMJudgeClient, LLMJudgeRawResult } from './llm-judge-evaluator.types';
 import type { MediaJudgeClient, MediaJudgeEvaluatorConfig } from './media-judge-evaluator.types';
-import type { MessageContent } from '@/types';
+import type { AilinArtifact, MessageContent } from '@/types';
 
 export class MediaJudgeEvaluator implements StrategyOutputEvaluator {
   readonly mode = 'llm_judge' as const;
@@ -204,6 +204,108 @@ export class MediaJudgeEvaluator implements StrategyOutputEvaluator {
     };
   }
 
+  /**
+   * Before/after image-edit verification (Section D). Does NOT implement
+   * `StrategyOutputEvaluator.evaluate()` — a before/after PAIR has no
+   * single-`CandidateArtifact` shape to fit that contract — but reuses the
+   * EXACT same safety-gate order and client/config plumbing as
+   * `evaluateVisualMedia` above, so an edit-verification call degrades
+   * exactly as safely as a normal media-judge call.
+   */
+  async evaluateImageEdit(input: {
+    readonly editInstruction: string;
+    readonly preArtifact: AilinArtifact;
+    readonly postArtifact: AilinArtifact;
+    readonly judgeModelOverride?: string;
+  }): Promise<EvaluationResult> {
+    if (input.preArtifact.error || input.postArtifact.error) {
+      return this.failedGeneration(input.postArtifact.error ?? input.preArtifact.error ?? 'unknown error');
+    }
+    if (!input.preArtifact.b64_json || !input.postArtifact.b64_json) {
+      return this.unavailable('image_edit_missing_bytes');
+    }
+    if (!this.config.enabled) {
+      return this.unavailable('media_judge_disabled');
+    }
+    const effectiveJudgeModelId =
+      input.judgeModelOverride && input.judgeModelOverride.trim().length > 0
+        ? input.judgeModelOverride.trim()
+        : this.config.judgeModelId;
+    if (!effectiveJudgeModelId || effectiveJudgeModelId.trim().length === 0) {
+      return this.unavailable('judge_model_id_missing');
+    }
+    if (!Number.isFinite(this.config.maxCostUsd) || this.config.maxCostUsd <= 0) {
+      return this.unavailable('budget_zero_or_invalid');
+    }
+    if (!this.mediaClient) {
+      return this.unavailable('media_judge_client_unavailable');
+    }
+
+    const content = buildImageEditJudgeContent(
+      input.editInstruction,
+      input.preArtifact,
+      input.postArtifact
+    );
+
+    let raw: LLMJudgeRawResult;
+    try {
+      raw = await withTimeout(
+        this.mediaClient.judgeMedia({
+          judgeModelId: effectiveJudgeModelId,
+          rubricVersion: this.config.rubricVersion,
+          criticRole: this.criticRole ?? 'spec_compliance',
+          task: { taskType: 'image_editing', userMessageExcerpt: input.editInstruction.slice(0, 200) },
+          content,
+          role: 'voter',
+          maxCostUsd: this.config.maxCostUsd,
+          timeoutMs: this.config.timeoutMs,
+        }),
+        this.config.timeoutMs
+      );
+    } catch (err) {
+      return {
+        scoringMode: this.mode,
+        evaluatorId: this.id,
+        score: undefined,
+        verdict: 'uncertain',
+        structural: { nonEmpty: true, meetsMinLength: true, executionError: false },
+        notes: `image-edit judge call failed: ${errorMessage(err)}`,
+        validationStatus: 'unavailable',
+      };
+    }
+
+    if (!isValidRaw(raw)) {
+      return {
+        scoringMode: this.mode,
+        evaluatorId: this.id,
+        score: undefined,
+        verdict: 'uncertain',
+        structural: { nonEmpty: true, meetsMinLength: true, executionError: false },
+        notes: 'image-edit judge returned malformed result',
+        validationStatus: 'unavailable',
+      };
+    }
+
+    return {
+      scoringMode: this.mode,
+      evaluatorId: this.id,
+      score: clamp01(raw.score),
+      verdict: raw.verdict,
+      structural: { nonEmpty: true, meetsMinLength: true, executionError: false },
+      confidence: raw.confidence,
+      judgeCostUsd: raw.costUsd ?? 0,
+      notes: `${raw.shortRationale ?? ''} (image_edit_verification, judgeModel=${effectiveJudgeModelId})`.trim(),
+      validationStatus: 'fully_validated',
+      subScores: raw.subScores
+        ? {
+            taskCorrectness: raw.subScores.correctness,
+            rubricJudge: raw.subScores.reasoningQuality,
+            safetyFormat: raw.subScores.safety,
+          }
+        : undefined,
+    };
+  }
+
   private failedGeneration(error: string): EvaluationResult {
     return {
       scoringMode: this.mode,
@@ -272,6 +374,41 @@ export function buildMediaJudgeContent(
     });
   });
   return parts;
+}
+
+/**
+ * Build the before/after judge prompt for an IMAGE EDIT (Section D). Unlike
+ * `buildMediaJudgeContent` (one candidate, N sampled frames of the SAME
+ * artifact), this presents TWO DIFFERENT images — the pre-edit source and
+ * the post-edit result — and asks the judge to confirm the stated edit
+ * instruction was followed between them. Deliberately reuses plain
+ * `text`/`image_url` parts (not the `video_frame` type, which encodes a
+ * temporal-sequence-of-one-artifact concept that doesn't apply to a
+ * before/after PAIR of distinct artifacts) so no provider-adapter
+ * normalization changes are needed — every adapter already understands
+ * `text`/`image_url`.
+ */
+export function buildImageEditJudgeContent(
+  editInstruction: string,
+  preArtifact: AilinArtifact,
+  postArtifact: AilinArtifact
+): MessageContent[] {
+  const header = [
+    'task_type=image_editing',
+    `You are verifying an IMAGE EDIT. Compare the BEFORE image to the AFTER image and confirm ` +
+      `whether the following edit instruction was followed: "${editInstruction}"`,
+  ].join('\n\n');
+
+  const preMime = preArtifact.mime_type?.startsWith('image/') ? preArtifact.mime_type : 'image/jpeg';
+  const postMime = postArtifact.mime_type?.startsWith('image/') ? postArtifact.mime_type : 'image/jpeg';
+
+  return [
+    { type: 'text', text: header },
+    { type: 'text', text: 'BEFORE (original image):' },
+    { type: 'image_url', image_url: { url: `data:${preMime};base64,${preArtifact.b64_json}`, detail: 'low' } },
+    { type: 'text', text: 'AFTER (edited image):' },
+    { type: 'image_url', image_url: { url: `data:${postMime};base64,${postArtifact.b64_json}`, detail: 'low' } },
+  ];
 }
 
 function joinNotes(existing: string | undefined, addition: string): string {

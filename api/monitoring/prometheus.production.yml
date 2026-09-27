@@ -28,19 +28,17 @@
 #     Docker secret file at scrape time. The token value is NEVER written
 #     into this tracked file — see api/src/routes/metrics/metrics-route.ts
 #     `authorizeScrape()`, which fail-closes (403) these routes in production
-#     when PROMETHEUS_SCRAPE_TOKEN is unset. Token = the `<prefix>-prometheus-
-#     scrape-token` GCP Secret Manager secret, mirrored into the Docker
-#     Swarm secret `ci_prometheus_scrape_token` (see that secret's comment
-#     block in docker-compose.production.yml for the exact operator command).
+#     when PROMETHEUS_SCRAPE_TOKEN is unset. Token = the Docker Swarm secret
+#     `prometheus-scrape-token` (see that secret's comment block in
+#     docker-compose.production.yml for how it reaches api/worker and how to
+#     provision it without CR/LF).
 #   - ci_worker's /metrics (port 9465) is a separate raw node:http server
-#     (api/src/workers/queue-runner.ts) that does NOT check the bearer token
-#     at all today — unlike the api service's Fastify-routed /metrics, it has
-#     no `authorizeScrape` gate. The Authorization header is still sent for
-#     consistency and in case that gap is closed later, but it currently adds
-#     no protection on that specific target. It is scraped only over this
-#     stack's internal-only `default` Swarm overlay network (no published
-#     host port, no external `gateway-net` attachment) — the same trust
-#     boundary the database/cache services already rely on in this compose file.
+#     that enforces the same bearer token (api/src/workers/worker-metrics-
+#     auth.ts); only /health and /health/ready are open there. It is scraped
+#     only over this stack's internal-only `default` Swarm overlay network.
+#   - This file is bind-mounted from the host of the node that runs
+#     ci_prometheus (the dedicated ci node). The pipeline does not copy it
+#     there, so an edit here must also be synced to that node.
 global:
   scrape_interval: 30s
   evaluation_interval: 30s
@@ -74,7 +72,7 @@ scrape_configs:
     scrape_interval: 30s
     authorization:
       type: Bearer
-      credentials_file: /run/secrets/ci_prometheus_scrape_token
+      credentials_file: /run/secrets/prometheus-scrape-token
     static_configs:
       - targets: ['api:3000']
         labels:
@@ -90,22 +88,22 @@ scrape_configs:
     scrape_interval: 30s
     authorization:
       type: Bearer
-      credentials_file: /run/secrets/ci_prometheus_scrape_token
+      credentials_file: /run/secrets/prometheus-scrape-token
     static_configs:
       - targets: ['api:3000']
         labels:
           service: 'ci-api'
 
   # ci-worker — BullMQ job-processing metrics (queue depth, job duration,
-  # etc.) exposed on its own dedicated metrics port. See the security note
-  # above: this endpoint does not enforce the bearer token itself.
+  # etc.) exposed on its own dedicated metrics port, behind the same bearer
+  # token as the api (see the security note above).
   - job_name: 'ci_worker'
     metrics_path: /metrics
     scheme: http
     scrape_interval: 30s
     authorization:
       type: Bearer
-      credentials_file: /run/secrets/ci_prometheus_scrape_token
+      credentials_file: /run/secrets/prometheus-scrape-token
     static_configs:
       - targets: ['worker:9465']
         labels:

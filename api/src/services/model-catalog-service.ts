@@ -17,6 +17,16 @@ import { computeModelUid } from '@/database/model-uid';
 import { toInputJson } from '@/utils/json';
 import { createHash } from 'node:crypto';
 import { getRedisClient } from '@/cache/redis-client';
+import { waitWithTimeout } from '@/utils/wait-with-timeout';
+import { CatalogUnavailableError } from '@/services/catalog-errors';
+import { publishCatalogSnapshotCas } from '@/services/catalog-snapshot-publisher';
+import {
+  createEquivalenceKeyContext,
+  equivalenceKey,
+  withListingEvidence,
+  withoutProviderNamespaces,
+  type EquivalenceKeyContext,
+} from '@/services/model-equivalence-clustering';
 import {
   CATALOG_HOT_PATH_SELECT,
   CATALOG_REDIS_KEY,
@@ -205,11 +215,58 @@ export async function syncModelCatalog(catalog: ProviderCatalogEntry[]): Promise
 // 6min — the catalog only changes when discovery rebuilds it (~5min cycle), and
 // consumers already tolerate that staleness (see above). The old 60s TTL expired
 // ~5×/cycle on sparse traffic, forcing a cold ~69k-row re-load on the chat hot path
-// that contends with the discovery write burst (~32s cold tax). onPoolRebuilt
-// (index.ts) invalidates+re-warms this AFTER each rebuild, so the cache stays fresh
-// AND warm and the heavy load never lands on a request. Env-overridable.
+// that contends with the discovery write burst (~32s cold tax). The per-process
+// refresh-ahead timer (cache-refresh-ahead.ts) re-hydrates this from Redis
+// before it expires. Env-overridable.
+//
+// The operability discovery tick (index.ts onPoolRebuilt) used to call
+// invalidateCatalogCache() + getAllCatalogModels() every ~5 min per replica.
+// That tick only probes providers, it never writes `models`, yet the
+// invalidate DELeted the fleet-wide Redis snapshot and forced a full
+// Postgres read (catalog load audit 2026-09-24, R1). It no longer touches this cache.
 const CATALOG_CACHE_TTL_MS = Number(process.env.CATALOG_CACHE_TTL_MS) || 6 * 60_000;
+
+// ── Stale-while-revalidate / stale-if-error (catalog load audit 2026-09-24, R3) ──
+// Until 2026-09 an expired cache made the calling request wait for the full
+// reload, a failed reload surfaced to every caller as a raw Prisma error, and
+// the next caller immediately retried the same full read (no backoff).
+//
+//   age past expiry <= MAX_STALE        serve the cached copy now, revalidate
+//                                       in the background (single-flight);
+//   beyond MAX_STALE, or no copy        wait for the single-flight load, at
+//                                       most LOAD_TIMEOUT;
+//   that load fails or times out        serve the last-good copy if it is
+//                                       within STALE_IF_ERROR past expiry,
+//                                       else throw CatalogUnavailableError
+//                                       (HTTP 503 + Retry-After);
+//   after a failed load                 no new load until an exponential
+//                                       backoff elapses (BASE, doubling, MAX).
+//
+// Staleness stays bounded on purpose: past STALE_IF_ERROR the caller gets an
+// explicit error instead of an arbitrarily old catalog.
+const CATALOG_CACHE_MAX_STALE_MS =
+  Number(process.env.CATALOG_CACHE_MAX_STALE_MS) || CATALOG_CACHE_TTL_MS * 3;
+const CATALOG_CACHE_STALE_IF_ERROR_MS = Math.max(
+  Number(process.env.CATALOG_CACHE_STALE_IF_ERROR_MS) || CATALOG_CACHE_TTL_MS * 10,
+  CATALOG_CACHE_MAX_STALE_MS
+);
+const CATALOG_LOAD_TIMEOUT_MS = Number(process.env.CATALOG_LOAD_TIMEOUT_MS) || 20_000;
+const CATALOG_LOAD_BACKOFF_BASE_MS = Number(process.env.CATALOG_LOAD_BACKOFF_BASE_MS) || 2_000;
+const CATALOG_LOAD_BACKOFF_MAX_MS = Math.max(
+  Number(process.env.CATALOG_LOAD_BACKOFF_MAX_MS) || 30_000,
+  CATALOG_LOAD_BACKOFF_BASE_MS
+);
+// Bound on each Redis leg of a load (meta GET, snapshot GET, publish). The
+// shared ioredis client never gives up a command while reconnecting
+// (maxRetriesPerRequest: null), so without this a Redis outage would leave
+// the single-flight load pending forever and no retry could ever start.
+const CATALOG_REDIS_TIMEOUT_MS = Number(process.env.CATALOG_REDIS_TIMEOUT_MS) || 15_000;
+
 let catalogCache: { expiresAt: number; models: Model[] } | null = null;
+// Backoff state for the cold/revalidation loader (see the table above).
+let catalogLoadFailures = 0;
+let catalogLoadRetryAt = 0;
+let lastCatalogLoadError: unknown = null;
 // Fingerprint of the snapshot content currently held in catalogCache (null
 // when unknown: never populated, invalidated, or hydrated from a producer
 // that did not publish CATALOG_REDIS_META_KEY). Compared against the meta
@@ -376,6 +433,14 @@ function setCatalogCache(models: Model[], fingerprint: string | null): void {
   catalogCache = { expiresAt: Date.now() + CATALOG_CACHE_TTL_MS, models };
   catalogIndices = buildCatalogIndices(models);
   installedFingerprint = fingerprint;
+  markCatalogLoadHealthy();
+}
+
+/** Any successful install or TTL extension clears the loader backoff. */
+function markCatalogLoadHealthy(): void {
+  catalogLoadFailures = 0;
+  catalogLoadRetryAt = 0;
+  lastCatalogLoadError = null;
 }
 
 /**
@@ -401,8 +466,16 @@ export function getCatalogFingerprint(): string | null {
  * findModelByName and the byProvider index observe, which is out of scope.
  *
  * sha256 is used as a collision-resistant fingerprint, not for security.
+ *
+ * `readStartedAt` becomes meta.generatedAt, the publish version the Redis CAS
+ * compares (catalog-snapshot-publisher.ts). It is the moment the Postgres
+ * read began, not the moment serialization finished: a slow read that
+ * started earlier holds older rows even if it finishes later.
  */
-function serializeCatalogSnapshot(models: Model[]): { json: string; meta: CatalogSnapshotMeta } {
+function serializeCatalogSnapshot(
+  models: Model[],
+  readStartedAt: number
+): { json: string; meta: CatalogSnapshotMeta } {
   const rows = models.map((model) => JSON.stringify(model));
   const json = `[${rows.join(',')}]`;
   const hash = createHash('sha256');
@@ -412,7 +485,7 @@ function serializeCatalogSnapshot(models: Model[]): { json: string; meta: Catalo
   }
   return {
     json,
-    meta: { fingerprint: hash.digest('hex'), rowCount: models.length, generatedAt: Date.now() },
+    meta: { fingerprint: hash.digest('hex'), rowCount: models.length, generatedAt: readStartedAt },
   };
 }
 
@@ -434,22 +507,34 @@ async function publishCatalogSnapshotToRedis(snapshot: {
   meta: CatalogSnapshotMeta;
 }): Promise<void> {
   try {
-    const redis = getRedisClient();
-    // Snapshot first, meta second, as two plain SETs (no MULTI: the fake
-    // clients in this module's tests only expose get/set/del). A reader that
-    // fetches meta and then the snapshot can therefore never pair a NEW
-    // fingerprint with an OLD snapshot; the reverse pairing (old meta, new
-    // snapshot) only costs one redundant parse on the next tick.
-    await redis.set(CATALOG_REDIS_KEY, snapshot.json, 'PX', CATALOG_REDIS_TTL_MS);
-    await redis.set(
-      CATALOG_REDIS_META_KEY,
-      JSON.stringify(snapshot.meta),
-      'PX',
-      CATALOG_REDIS_TTL_MS
+    // Conditional publish: snapshot and meta are swapped in atomically, and
+    // only when no newer snapshot is live (see catalog-snapshot-publisher.ts
+    // for the protocol and why the payload never goes through Lua).
+    const outcome = await waitWithTimeout(
+      publishCatalogSnapshotCas(getRedisClient(), snapshot, CATALOG_REDIS_TTL_MS),
+      CATALOG_REDIS_TIMEOUT_MS,
+      'Catalog snapshot publish'
     );
+    if (outcome === 'published') {
+      log.debug(
+        { fingerprint: snapshot.meta.fingerprint, rowCount: snapshot.meta.rowCount },
+        'Catalog cache: fleet-wide snapshot published'
+      );
+    } else {
+      log.info(
+        {
+          outcome,
+          generatedAt: snapshot.meta.generatedAt,
+          rowCount: snapshot.meta.rowCount,
+        },
+        outcome === 'superseded'
+          ? 'Catalog cache: a newer fleet-wide snapshot is already published, this one was discarded'
+          : 'Catalog cache: staged snapshot was evicted before the swap, nothing published'
+      );
+    }
   } catch (error) {
     log.warn(
-      { error },
+      { error: getErrorMessage(error) },
       'Catalog cache: failed to publish fleet-wide Redis snapshot (other replicas fall back to their own direct Postgres rebuild)'
     );
   }
@@ -475,7 +560,13 @@ async function publishCatalogSnapshotToRedis(snapshot: {
 async function hydrateCatalogCacheFromRedis(): Promise<Model[] | null> {
   try {
     const redis = getRedisClient();
-    const meta = parseCatalogSnapshotMeta(await redis.get(CATALOG_REDIS_META_KEY));
+    const meta = parseCatalogSnapshotMeta(
+      await waitWithTimeout(
+        redis.get(CATALOG_REDIS_META_KEY),
+        CATALOG_REDIS_TIMEOUT_MS,
+        'Catalog snapshot meta read'
+      )
+    );
     if (
       meta &&
       catalogCache &&
@@ -484,13 +575,18 @@ async function hydrateCatalogCacheFromRedis(): Promise<Model[] | null> {
       installedFingerprint === meta.fingerprint
     ) {
       catalogCache.expiresAt = Date.now() + CATALOG_CACHE_TTL_MS;
+      markCatalogLoadHealthy();
       log.debug(
         { fingerprint: meta.fingerprint, rowCount: meta.rowCount },
         'Catalog cache: fleet-wide snapshot unchanged, parse skipped'
       );
       return catalogCache.models;
     }
-    const raw = await redis.get(CATALOG_REDIS_KEY);
+    const raw = await waitWithTimeout(
+      redis.get(CATALOG_REDIS_KEY),
+      CATALOG_REDIS_TIMEOUT_MS,
+      'Catalog snapshot read'
+    );
     if (!raw) return null;
     const parsed = JSON.parse(raw) as unknown;
     if (!Array.isArray(parsed) || parsed.length === 0) return null;
@@ -533,12 +629,17 @@ export function invalidateCatalogCache(): void {
   installedFingerprint = null;
   byProviderCache.clear();
   // Best-effort, fire-and-forget: a caller that explicitly invalidated to
-  // force a fresh reload (e.g. index.ts's post-discovery-rebuild re-warm)
-  // wants THIS replica's next getAllCatalogModels() call to see genuinely
-  // fresh data, not immediately re-hydrate the stale pre-invalidation
-  // snapshot still sitting in Redis. If this delete itself fails (Redis
-  // down), the subsequent getAllCatalogModels() falls through to Postgres
-  // anyway, so correctness never depends on it succeeding.
+  // force a fresh reload wants THIS replica's next getAllCatalogModels() call
+  // to see genuinely fresh data, not immediately re-hydrate the stale
+  // pre-invalidation snapshot still sitting in Redis. If this delete itself
+  // fails (Redis down), the subsequent getAllCatalogModels() falls through
+  // to Postgres anyway, so correctness never depends on it succeeding.
+  //
+  // This is a fleet-wide, expensive operation (every replica's next cold
+  // path then reads Postgres). Call it only when the catalog content is
+  // known to have changed and staleness is unacceptable; to keep a cache
+  // warm, use hydrateCatalogCacheAhead() / refreshCatalogCacheAhead(),
+  // which swap in a new copy without deleting the published one.
   void deleteCatalogRedisSnapshot();
 }
 
@@ -561,19 +662,105 @@ export async function getAllCatalogModels(): Promise<Model[]> {
   // the catalog being complete. Truncation would silently degrade routing
   // quality without raising errors. The CATALOG_CACHE_TTL_MS gate amortizes
   // the cost across all chat requests within the window.
+  //
+  // Freshness policy (stale-while-revalidate, stale-if-error, backoff): see
+  // the table next to CATALOG_CACHE_MAX_STALE_MS above.
   const now = Date.now();
-  if (catalogCache && catalogCache.expiresAt > now) {
-    return catalogCache.models;
+  const cached = catalogCache;
+  if (cached && cached.expiresAt > now) {
+    return cached.models;
   }
-  // Single-flight: dedup concurrent cold-cache misses onto ONE resolution.
+  if (cached && now - cached.expiresAt <= CATALOG_CACHE_MAX_STALE_MS) {
+    revalidateCatalogInBackground(now);
+    return cached.models;
+  }
+  return loadCatalogForCaller(now);
+}
+
+/**
+ * Single-flight load: concurrent cold misses and background revalidations
+ * all share ONE resolution (Redis hydrate, else Postgres rebuild). The
+ * promise settles on its own even if every waiter gave up (each Redis leg is
+ * bounded, and Postgres by statement_timeout), so a later caller can retry.
+ */
+function startCatalogLoad(): Promise<Model[]> {
   if (catalogInFlight) {
     return catalogInFlight;
   }
-  const promise = resolveColdCatalog().finally(() => {
-    if (catalogInFlight === promise) catalogInFlight = null;
-  });
+  const promise = resolveColdCatalog()
+    .then(
+      (models) => {
+        markCatalogLoadHealthy();
+        return models;
+      },
+      (error: unknown) => {
+        recordCatalogLoadFailure(error);
+        throw error;
+      }
+    )
+    .finally(() => {
+      if (catalogInFlight === promise) catalogInFlight = null;
+    });
   catalogInFlight = promise;
   return promise;
+}
+
+function recordCatalogLoadFailure(error: unknown): void {
+  catalogLoadFailures += 1;
+  const exponent = Math.min(catalogLoadFailures - 1, 20);
+  const backoffMs = Math.min(
+    CATALOG_LOAD_BACKOFF_BASE_MS * 2 ** exponent,
+    CATALOG_LOAD_BACKOFF_MAX_MS
+  );
+  catalogLoadRetryAt = Date.now() + backoffMs;
+  lastCatalogLoadError = error;
+  log.warn(
+    {
+      error: getErrorMessage(error),
+      consecutiveFailures: catalogLoadFailures,
+      backoffMs,
+      lastGoodAvailable: catalogCache !== null,
+    },
+    'Catalog cache: load failed, backing off before the next attempt'
+  );
+}
+
+/** Stale hit: refresh in the background unless a load is already running
+ *  or the loader is backing off after a failure. Never throws. */
+function revalidateCatalogInBackground(now: number): void {
+  if (catalogInFlight || now < catalogLoadRetryAt) {
+    return;
+  }
+  // The failure is recorded (and logged) inside startCatalogLoad.
+  startCatalogLoad().catch(() => undefined);
+}
+
+/** No servable copy: wait (bounded) for the single-flight load, then fall
+ *  back to last-good within STALE_IF_ERROR, else CatalogUnavailableError. */
+async function loadCatalogForCaller(now: number): Promise<Model[]> {
+  if (!catalogInFlight && now < catalogLoadRetryAt) {
+    return serveLastGoodOrThrow(now, catalogLoadRetryAt - now, lastCatalogLoadError);
+  }
+  try {
+    return await waitWithTimeout(startCatalogLoad(), CATALOG_LOAD_TIMEOUT_MS, 'Catalog load');
+  } catch (error) {
+    const at = Date.now();
+    // A timed-out waiter leaves the load running: suggest the base backoff.
+    const retryInMs = Math.max(catalogLoadRetryAt - at, CATALOG_LOAD_BACKOFF_BASE_MS);
+    return serveLastGoodOrThrow(at, retryInMs, error);
+  }
+}
+
+function serveLastGoodOrThrow(now: number, retryInMs: number, cause: unknown): Model[] {
+  const cached = catalogCache;
+  if (cached && now - cached.expiresAt <= CATALOG_CACHE_STALE_IF_ERROR_MS) {
+    log.debug(
+      { staleForMs: now - cached.expiresAt, rowCount: cached.models.length },
+      'Catalog cache: load unavailable, serving last-good copy (stale-if-error)'
+    );
+    return cached.models;
+  }
+  throw new CatalogUnavailableError(retryInMs, { cause });
 }
 
 /**
@@ -600,12 +787,13 @@ async function resolveColdCatalog(): Promise<Model[]> {
  * replicas can hydrate from it instead of repeating this query themselves.
  */
 async function rebuildCatalogCacheFromPostgres(): Promise<Model[]> {
+  const readStartedAt = Date.now();
   const records = await prisma.model.findMany({
     where: { status: { not: 'disabled' } },
     select: CATALOG_HOT_PATH_SELECT,
   });
   const mapped = records.map((record) => mapPrismaModel(record));
-  const snapshot = serializeCatalogSnapshot(mapped);
+  const snapshot = serializeCatalogSnapshot(mapped, readStartedAt);
   setCatalogCache(mapped, snapshot.meta.fingerprint);
   await publishCatalogSnapshotToRedis(snapshot);
   return mapped;
@@ -929,26 +1117,74 @@ export async function getChatEligibleModels(options?: {
 }
 
 /**
- * Get ALL entries for a model across all providers, including variant IDs.
+ * A trailing snapshot date or -latest alias, removed to build candidate
+ * spellings only; equivalenceKey() decides which rows are the same model.
+ */
+const UNDATED_SPELLING = /(?:-20\d{2}-?\d{2}-?\d{2}|@20\d{6}|-latest)$/i;
+
+/** Provider ids (Model.providerId) of the in-process catalog, per catalog build. */
+const catalogProviderIdsMemo = new WeakMap<CatalogIndices, readonly string[]>();
+
+function catalogProviderIds(): readonly string[] {
+  const indices = getCatalogIndices();
+  if (!indices) return [];
+  let ids = catalogProviderIdsMemo.get(indices);
+  if (!ids) {
+    const set = new Set<string>();
+    for (const model of indices.byId.values()) set.add(model.providerId);
+    ids = [...set];
+    catalogProviderIdsMemo.set(indices, ids);
+  }
+  return ids;
+}
+
+/** sourceType of a catalog row's metadata JSON, as the equivalence build reads it. */
+function listingSourceType(metadata: unknown): string {
+  if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) return 'unknown';
+  const sourceType = (metadata as { sourceType?: unknown }).sourceType;
+  return typeof sourceType === 'string' ? sourceType : 'unknown';
+}
+
+/**
+ * Get ALL entries for a model across all providers: the requested model itself
+ * on every provider that lists it, in any spelling of its id.
  *
  * Models exist under different IDs across providers:
- *   gpt-5.4-pro (native) vs openai/gpt-5.4-pro (OpenRouter) vs openai/gpt-5.4 (EdenAI)
+ *   claude-sonnet-4-6 (anthropic) vs anthropic/claude-sonnet-4.6 (openrouter)
+ *   vs deepinfra/anthropic/claude-sonnet-4-6 (a route prefix)
  *
- * This function searches for:
- * 1. Exact ID match
- * 2. Provider-prefixed variants (e.g., "openai/gpt-5.4-pro" for "gpt-5.4-pro")
- * 3. Base name from prefixed ID (e.g., "gpt-5.4-pro" from "openai/gpt-5.4-pro")
+ * Every entry returned is the requested model itself (callers retry the SAME
+ * model on another provider): both strategies keep only rows whose
+ * equivalence key (model-equivalence-clustering.ts) equals the requested id's
+ * key, so never another version, size, variant or repository owner.
+ *
+ * 1. The equivalence index (L2): the group of the requested id's key, native
+ *    providers first.
+ * 2. When the index has no group for that key (no build yet in this process,
+ *    or a model listed after the last build): one query for the likely
+ *    spellings (the id, the id without its provider namespaces, that name
+ *    under every catalog provider id, the name without a snapshot date, and
+ *    dated snapshots of it), filtered by key equality. The key context is the
+ *    published one (or catalog provider ids only, before the first build) plus
+ *    the evidence of the returned rows themselves (which provider serves the
+ *    name, which snapshots exist), so a namespace or a dated snapshot is only
+ *    accepted with the same evidence the index requires.
  */
 export async function getAllEntriesForModel(modelId: string): Promise<Model[]> {
-  // Strategy 1: Equivalence service (L2) — finds cross-provider matches via embedding similarity
+  let keyContext: EquivalenceKeyContext | null = null;
+  // Strategy 1: the equivalence index (L2).
   try {
     const { getModelEquivalenceService } = await import('@/services/model-equivalence-service');
     const equivalenceService = getModelEquivalenceService();
     const group = equivalenceService.getEquivalentModels(modelId);
+    // Defense in depth: a group only ever holds rows with the requested id's
+    // key; this re-checks it before the rows are used as "the same model".
+    const members = group ? equivalenceService.sameModelMembers(modelId, group) : [];
+    keyContext = equivalenceService.getKeyContext();
 
-    if (group && group.members.length > 0) {
-      // Fetch full model records for all members in the equivalence group
-      const uids = group.members.map((m) => m.uid);
+    if (members.length > 0) {
+      // Fetch full model records for the same-model members of the group
+      const uids = members.map((m) => m.uid);
       const records = await prisma.model.findMany({
         where: { uid: { in: uids }, status: 'active' },
         // Phase 6 Fix 2: catalog hot-path allowlist. We additionally need
@@ -956,68 +1192,53 @@ export async function getAllEntriesForModel(modelId: string): Promise<Model[]> {
         select: { ...CATALOG_HOT_PATH_SELECT, uid: true },
       });
       if (records.length > 0) {
-        // Sort by source type (native first) — already done by equivalence service
+        // Keep the group's member order (native providers first)
         const uidOrder = new Map(uids.map((uid, i) => [uid, i]));
         records.sort((a, b) => (uidOrder.get(a.uid) ?? 99) - (uidOrder.get(b.uid) ?? 99));
         return records.map(mapPrismaModel);
       }
     }
   } catch {
-    // Equivalence service not initialized or failed — fall through to prefix matching
+    // Equivalence service not initialized or failed: fall through to the spelling query
   }
 
-  // Strategy 2: Prefix-based variant matching (fallback)
-  const variants: string[] = [modelId];
-
-  if (!modelId.includes('/')) {
-    const familyPrefixes: Record<string, string[]> = {
-      gpt: ['openai'],
-      o1: ['openai'],
-      o3: ['openai'],
-      o4: ['openai'],
-      chatgpt: ['openai'],
-      claude: ['anthropic'],
-      gemini: ['google'],
-      gemma: ['google'],
-      grok: ['xai', 'x-ai'],
-      deepseek: ['deepseek'],
-      mistral: ['mistralai', 'mistral'],
-    };
-    for (const [prefix, families] of Object.entries(familyPrefixes)) {
-      if (modelId.toLowerCase().startsWith(prefix)) {
-        for (const fam of families) variants.push(`${fam}/${modelId}`);
-      }
-    }
-  } else {
-    const base = modelId.split('/').slice(1).join('/');
-    if (base) variants.push(base);
+  // Strategy 2: likely spellings, kept only when they have the requested key.
+  // Before the first index build the context has the provider ids of the
+  // in-process catalog cache, when it is loaded, and no publishers, so an
+  // owner-prefixed id only matches its own owner's spellings.
+  const baseContext = keyContext ?? createEquivalenceKeyContext(catalogProviderIds());
+  const name = withoutProviderNamespaces(modelId, baseContext);
+  const undatedName = name.replace(UNDATED_SPELLING, '');
+  const spellings = new Set<string>([modelId, name, undatedName]);
+  for (const providerId of baseContext.providerIds) {
+    spellings.add(`${providerId}/${name}`);
+    spellings.add(`${providerId}/${undatedName}`);
   }
-
-  // Strategy 3: Also search for date-stripped variants (e.g., gpt-5.4-pro-2026-03-05 → gpt-5.4-pro)
-  const dateStripped = modelId.replace(/-\d{4}-\d{2}-\d{2}$/, '');
-  if (dateStripped !== modelId) variants.push(dateStripped);
-  // And reverse: if searching for gpt-5.4-pro, also find gpt-5.4-pro-2026-*
-  const baseName = modelId.replace(/-\d{4}-\d{2}-\d{2}$/, '');
 
   const records = await prisma.model.findMany({
     where: {
       OR: [
-        { id: { in: [...new Set(variants)] }, status: 'active' },
-        // LIKE query for date-versioned variants (e.g., baseName-YYYY-MM-DD)
-        { id: { startsWith: baseName + '-' }, status: 'active' },
+        { id: { in: [...spellings] }, status: 'active' },
+        // Dated snapshots of the name (name-YYYY-MM-DD, name-YYYYMMDD, name@YYYYMMDD)
+        { id: { startsWith: `${undatedName}-20` }, status: 'active' },
+        { id: { startsWith: `${undatedName}@20` }, status: 'active' },
       ],
     },
     select: CATALOG_HOT_PATH_SELECT,
     orderBy: { usageCount: 'desc' },
   });
-  // Filter Strategy 3 LIKE results to only date-versioned variants (baseName-YYYY-MM-DD)
-  const variantSet = new Set(variants);
-  const filtered = records.filter((r) => {
-    if (variantSet.has(r.id)) return true; // Strategy 2 exact match — keep
-    const suffix = r.id.slice(baseName.length);
-    return /^-\d{4}-\d{2}-\d{2}/.test(suffix);
-  });
-  return filtered.map(mapPrismaModel);
+  const context = withListingEvidence(
+    baseContext,
+    records.map((record) => ({
+      modelId: record.id,
+      providerId: record.providerId,
+      sourceType: listingSourceType(record.metadata),
+    }))
+  );
+  const requestedKey = equivalenceKey(modelId, context);
+  return records
+    .filter((record) => equivalenceKey(record.id, context) === requestedKey)
+    .map(mapPrismaModel);
 }
 
 export async function removeDisabledCatalogEntries(

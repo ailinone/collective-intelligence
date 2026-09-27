@@ -71,19 +71,25 @@ const CACHE_MAX_ENTRIES = 1024;
 const cache = new Map<string, CacheEntry>();
 
 /**
- * Evict the oldest entries when the cache exceeds the size cap. Map's
- * insertion-order iteration gives us a cheap approximate-LRU without
- * pulling in a dedicated LRU dependency.
+ * Evict the oldest entries from ANY Map-shaped TTL cache once it exceeds
+ * `maxEntries`. Map's insertion-order iteration gives a cheap
+ * approximate-LRU without a dedicated LRU dependency. Generic so the
+ * MediaPlanner canary cache (Section E) can reuse this loop instead of
+ * duplicating it for a differently-shaped cache value.
  */
-function evictIfNeeded(): void {
-  if (cache.size <= CACHE_MAX_ENTRIES) return;
-  const overflow = cache.size - CACHE_MAX_ENTRIES;
+export function evictOldestIfOverCap<T>(map: Map<string, T>, maxEntries: number): void {
+  if (map.size <= maxEntries) return;
+  const overflow = map.size - maxEntries;
   let evicted = 0;
-  for (const key of cache.keys()) {
-    cache.delete(key);
+  for (const key of map.keys()) {
+    map.delete(key);
     evicted++;
     if (evicted >= overflow) break;
   }
+}
+
+function evictIfNeeded(): void {
+  evictOldestIfOverCap(cache, CACHE_MAX_ENTRIES);
 }
 
 /**
@@ -293,4 +299,113 @@ export async function getCollectiveConfigForOrg(
   evictIfNeeded();
 
   return merged;
+}
+
+// ─── MediaPlanner canary (Section E: chat/triage pipeline integration) ────
+
+/**
+ * Per-tenant MediaPlanner canary allowlist. Lives in a SIBLING top-level
+ * key of `Organization.settings` — `settings.mediaPlannerConfig` — and is
+ * deliberately NOT merged into `CoordinationConfig`/`settings.collectiveConfig`
+ * above: `CoordinationConfig` is specifically the collective-coordination
+ * (multi-model consensus) feature's config; MediaPlanner is an unrelated
+ * feature that only wants the same tenant-override plumbing (TTL cache,
+ * DB-failure-safe fallback, `Organization.settings` JSON storage). See the
+ * 2026-09-23 MediaPlanner completion design spec, section E, for the full
+ * rationale, and `resolveEffectiveMediaPlannerEnabled` in
+ * `media-planner-gate.ts` for where this is combined with the global
+ * `MEDIA_PLANNER_ENABLED` env flag.
+ *
+ * Example settings.mediaPlannerConfig payload: `{ "enabled": true }`
+ */
+export interface OrgMediaPlannerSettings {
+  enabled?: boolean;
+}
+
+interface MediaPlannerCacheEntry {
+  value: boolean;
+  expiresAt: number;
+}
+
+const MEDIA_PLANNER_CACHE_MAX_ENTRIES = 1024;
+const mediaPlannerCache = new Map<string, MediaPlannerCacheEntry>();
+
+/** Force-clear the MediaPlanner canary cache. Exported for admin tooling and tests. */
+export function clearMediaPlannerConfigCache(): void {
+  mediaPlannerCache.clear();
+}
+
+/**
+ * Extract `{ enabled }` from an arbitrary JSON value. Anything else is
+ * dropped silently — same tolerant-parsing posture as
+ * `parseOrganizationCollectiveSettings` — so a corrupt settings blob can
+ * never crash the orchestration hot path.
+ */
+export function parseOrgMediaPlannerSettings(raw: unknown): OrgMediaPlannerSettings {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {};
+  const obj = raw as Record<string, unknown>;
+  const out: OrgMediaPlannerSettings = {};
+  if (typeof obj.enabled === 'boolean') out.enabled = obj.enabled;
+  return out;
+}
+
+/**
+ * Read `Organization.settings.mediaPlannerConfig` and parse it. Returns
+ * `{}` when the org has no override, doesn't exist, or the DB read fails —
+ * NEVER throws (mirrors `readOrgCollectiveSettings`'s fail-safe posture).
+ */
+async function readOrgMediaPlannerSettings(
+  organizationId: string
+): Promise<OrgMediaPlannerSettings> {
+  try {
+    const org: Pick<Organization, 'settings'> | null = await prisma.organization.findUnique({
+      where: { id: organizationId },
+      select: { settings: true },
+    });
+    if (!org) return {};
+
+    const settings = org.settings;
+    if (!settings || typeof settings !== 'object' || Array.isArray(settings)) return {};
+
+    const raw = (settings as Record<string, unknown>).mediaPlannerConfig;
+    return parseOrgMediaPlannerSettings(raw);
+  } catch (err) {
+    log.warn(
+      {
+        organizationId,
+        error: err instanceof Error ? err.message : String(err),
+      },
+      'readOrgMediaPlannerSettings failed — falling back to disabled'
+    );
+    return {};
+  }
+}
+
+/**
+ * Resolve the MediaPlanner canary allowlist entry for one organization.
+ * `enabled` defaults to `false` when unset, unparseable, or on DB failure —
+ * the safe default for a feature that stays off everywhere until an org is
+ * explicitly named (see the design spec's "Production rollout" steps).
+ * Cached for 60s using the same TTL as `getCollectiveConfigForOrg`.
+ *
+ * NEVER throws; falls back to `{ enabled: false }` on any DB error.
+ */
+export async function getMediaPlannerConfigForOrg(
+  organizationId: string
+): Promise<{ enabled: boolean }> {
+  if (!organizationId) return { enabled: false };
+
+  const cached = mediaPlannerCache.get(organizationId);
+  const now = Date.now();
+  if (cached && cached.expiresAt > now) {
+    return { enabled: cached.value };
+  }
+
+  const overrides = await readOrgMediaPlannerSettings(organizationId);
+  const enabled = overrides.enabled === true;
+
+  mediaPlannerCache.set(organizationId, { value: enabled, expiresAt: now + CACHE_TTL_MS });
+  evictOldestIfOverCap(mediaPlannerCache, MEDIA_PLANNER_CACHE_MAX_ENTRIES);
+
+  return { enabled };
 }

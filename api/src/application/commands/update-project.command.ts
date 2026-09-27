@@ -21,6 +21,8 @@ export class UpdateProjectCommand {
     public readonly requesterOrganizationId: string,
     public readonly name?: string,
     public readonly description?: string | null,
-    public readonly settings?: Record<string, unknown>
+    public readonly settings?: Record<string, unknown>,
+    /** Admin/owner role check result, resolved upstream by the route. */
+    public readonly requesterIsAdmin: boolean = false
   ) {}
 }

@@ -46,6 +46,13 @@ import { PersonaExplorationStrategy } from './strategies/persona-exploration-str
 import { AgenticStrategy } from './strategies/agentic-strategy';
 import { SensitivityConsensusStrategy } from './strategies/sensitivity-consensus-strategy';
 import { TriRoleCollectiveStrategy } from './strategies/tri-role-collective-strategy';
+import { MediaPlannerStrategy } from './strategies/media-planner-strategy';
+import { MediaConsensusStrategy } from './strategies/media-consensus-strategy';
+import {
+  evaluateMediaPlannerGate,
+  resolveEffectiveMediaPlannerEnabled,
+} from './strategies/media-planner-gate';
+import { MEDIA_GENERATION_CAPABILITIES } from './strategies/media-planner-types';
 import { resolveAilinAlias, applyAliasToRequest } from './ailin-alias-resolver';
 import { getROIEstimator } from '@/core/validation/c3/roi-estimator';
 import {
@@ -57,6 +64,8 @@ import {
 import { buildImmediateOpeningNarration } from './observer/observer-templates';
 import type { ObserverFeed } from './observer/observer-types';
 import { ProviderRegistry } from '@/providers/provider-registry';
+import { VideoOrchestrationService } from '@/services/video-orchestration-service';
+import { ImagesOrchestrationService } from '@/services/images-orchestration-service';
 import { getErrorMessage } from '@/utils/type-guards';
 import { ContextWindowExceededError } from '@/utils/custom-errors';
 import { toolRegistry } from '@/core/tools/tool-registry';
@@ -149,6 +158,7 @@ import {
   loadFrontiersFromOutcomes,
 } from '@/core/learning/pareto-champion-challenger';
 import { buildExecutionSystemPrompt } from './execution-system-prompt';
+import { maybeExecuteDetectedCode } from './code-execution-orchestration';
 import {
   explicitlyLacksFunctionCalling,
   hasDeclaredFunctionCalling,
@@ -828,6 +838,7 @@ export class OrchestrationEngine {
   private config: OrchestrationEngineConfig;
   private log = logger.child({ component: 'orchestration-engine' });
   private triageService?: TriagingService;
+  private mediaPlannerStrategy?: MediaPlannerStrategy;
   private feedbackLoop: RealtimeFeedbackLoop;
   private qualityScorer = getQualityScorer();
   private reasoningTransparency = getReasoningTransparency();
@@ -1043,6 +1054,145 @@ export class OrchestrationEngine {
         this.log.warn({ error }, 'Async triage model selection failed, using default');
       });
     }
+  }
+
+  /**
+   * Lazily construct the MediaPlanner "safety net" strategy used by
+   * `maybeRouteToMediaPlannerSafetyNet()` (Section E, 2026-09-23 MediaPlanner
+   * completion design). Built once per engine instance and reused.
+   * `VideoOrchestrationService`/`ImagesOrchestrationService` are stateless,
+   * no-arg-constructible services — the same ones `capabilities-routes.ts`
+   * constructs once at route-registration time for the dedicated route.
+   *
+   * Deliberately wires ONLY `mediaConsensusExecutor` (video/image
+   * generation) and leaves `capabilityDispatcher` unset:
+   * `evaluateMediaPlannerGate` only ever routes when a
+   * `video_generation`/`image_generation` capability is involved, so a
+   * `generate` action is the only action kind this safety-net path can
+   * ever need. `capabilityDispatcher` requires a live `FastifyRequest`
+   * bound by the HTTP route layer (see `media-planner-strategy.ts`'s doc
+   * comment on `CapabilityDispatcher`), which this engine's `execute()`
+   * does not have and should not be given just for this. A `capability_call`
+   * action the planner emits anyway degrades to a documented "capability
+   * dispatcher not wired" unmet-constraint entry rather than throwing —
+   * the same fallback the dedicated route would hit for the same missing
+   * dependency, so this is not a new gap.
+   */
+  private getMediaPlannerStrategy(): MediaPlannerStrategy {
+    if (!this.mediaPlannerStrategy) {
+      const videoService = new VideoOrchestrationService();
+      const imagesService = new ImagesOrchestrationService();
+      this.mediaPlannerStrategy = new MediaPlannerStrategy({
+        mediaConsensusExecutor: new MediaConsensusStrategy({ videoService, imagesService }),
+      });
+    }
+    return this.mediaPlannerStrategy;
+  }
+
+  /**
+   * Section E safety net: after triage has fully resolved (successfully or
+   * via the non-LLM heuristic fallback) and `context.requiredCapabilities` /
+   * `context.triage` reflect the final decision, decide whether this
+   * request should be handed to `MediaPlannerStrategy` instead of finishing
+   * as an ordinary chat completion.
+   *
+   * Only ever does ANY work — including the cheap `evaluateMediaPlannerGate`
+   * text scan and the `resolveEffectiveMediaPlannerEnabled` cache/DB lookup
+   * — when the resolved plan already touches a media-generation capability,
+   * or triage fell back to the heuristic (non-LLM) path
+   * (`TriageDecision.source === 'heuristic'`). A normally-triaged, non-media
+   * chat request returns `undefined` immediately without any of that —
+   * zero added cost on the common path.
+   *
+   * Returns `undefined` when the caller should continue with the existing
+   * chat pipeline unchanged; returns a terminal `OrchestrationResult` when
+   * this safety net already produced (or degraded-failed) the response.
+   */
+  private async maybeRouteToMediaPlannerSafetyNet(
+    request: ChatRequest,
+    context: OrchestrationContext,
+    requestId: string
+  ): Promise<OrchestrationResult | undefined> {
+    const planTouchesMediaGeneration = (context.requiredCapabilities ?? []).some((cap) =>
+      MEDIA_GENERATION_CAPABILITIES.has(cap)
+    );
+    const triageFellBackToHeuristics = context.triage?.source === 'heuristic';
+
+    if (!planTouchesMediaGeneration && !triageFellBackToHeuristics) {
+      return undefined;
+    }
+
+    const mediaPlannerEnabled = await resolveEffectiveMediaPlannerEnabled(context.organizationId);
+    if (!mediaPlannerEnabled) {
+      return undefined;
+    }
+
+    const gate = evaluateMediaPlannerGate(request, context);
+    if (gate.route) {
+      this.log.info(
+        { requestId, reason: gate.reason, detectedCapabilities: gate.detectedCapabilities },
+        'Routing request into MediaPlannerStrategy safety net'
+      );
+      return await this.getMediaPlannerStrategy().execute(request, context);
+    }
+
+    const gateDetectedMediaGeneration = gate.detectedCapabilities.some((cap) =>
+      MEDIA_GENERATION_CAPABILITIES.has(cap as ModelCapability)
+    );
+    if (triageFellBackToHeuristics && !planTouchesMediaGeneration && gateDetectedMediaGeneration) {
+      return this.buildMediaPlannerDegradedResponse(requestId, gate.reason);
+    }
+
+    return undefined;
+  }
+
+  /**
+   * Structured degraded-response for the Section E explicit-failure path:
+   * triage fell back to heuristics AND could not confidently resolve
+   * required capabilities for a request whose text independently matches
+   * `evaluateMediaPlannerGate`'s own media-generation keyword scan. Mirrors
+   * `applyDegradedFallback()`'s shape (explicit `[DEGRADED]` content +
+   * `metadata.degraded=true`, see line ~6877) rather than silently letting
+   * the request fall through to a chat model that would just describe the
+   * requested media in prose instead of generating it.
+   */
+  private buildMediaPlannerDegradedResponse(
+    requestId: string,
+    reason: string
+  ): OrchestrationResult {
+    const degradedResponse: ChatResponse = {
+      id: `degraded-media-${Date.now()}`,
+      object: 'chat.completion',
+      created: Math.floor(Date.now() / 1000),
+      model: 'auto',
+      choices: [
+        {
+          index: 0,
+          message: {
+            role: 'assistant',
+            content:
+              '[DEGRADED] This request appears to ask for media generation, but the required capabilities could not be confidently determined.',
+          },
+          finish_reason: 'stop',
+          logprobs: null,
+        },
+      ],
+      usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 },
+    };
+    this.log.warn({ requestId, reason }, 'MediaPlanner safety net returning degraded response');
+    return {
+      strategyUsed: 'single',
+      modelsUsed: [],
+      finalResponse: degradedResponse,
+      totalCost: 0,
+      totalDuration: 0,
+      qualityScore: 0,
+      metadata: {
+        degraded: true,
+        degraded_reason: 'media_shaped_request_capabilities_unresolved',
+        media_planner_gate_reason: reason,
+      },
+    };
   }
 
   /**
@@ -1708,6 +1858,46 @@ export class OrchestrationEngine {
           );
         }
 
+        // ── Section E (2026-09-23 MediaPlanner completion design): chat/
+        // triage pipeline safety net into MediaPlannerStrategy, for callers
+        // that never hit the dedicated `/v1/capabilities/media-plan/execute`
+        // route. Runs AFTER triage has fully resolved above (context.triage /
+        // context.requiredCapabilities reflect the final decision, including
+        // the heuristic-fallback case) and BEFORE the existing chat-only
+        // multi-stage/single-stage execution below. Returns undefined
+        // (no-op) for the common non-media, successfully-triaged path —
+        // see maybeRouteToMediaPlannerSafetyNet's own doc comment for the
+        // zero-added-cost guarantee.
+        //
+        // Wrapped in try/catch deliberately (NOT present in the original
+        // plan text — added after code review of Task 6 found that
+        // MediaPlannerStrategy.execute() can throw uncaught: its `generate`
+        // action branch calls `mediaConsensusExecutor.execute(...)` with no
+        // try/catch of its own, unlike its sibling `capability_call` branch
+        // which IS wrapped. A media-generation backend outage must degrade
+        // this ONE safety-net check, not take down what would otherwise be
+        // a normal chat completion for the request — that would make the
+        // safety net itself a new single point of failure, which defeats
+        // its purpose. On failure, log and fall through to the existing
+        // chat pipeline exactly as if the safety net had returned
+        // undefined (not routed).
+        let mediaPlannerSafetyNetResult: OrchestrationResult | undefined;
+        try {
+          mediaPlannerSafetyNetResult = await this.maybeRouteToMediaPlannerSafetyNet(
+            request,
+            context,
+            requestId
+          );
+        } catch (error) {
+          this.log.error(
+            { error, requestId },
+            'MediaPlanner safety net threw; continuing with normal chat pipeline'
+          );
+        }
+        if (mediaPlannerSafetyNetResult) {
+          return mediaPlannerSafetyNetResult;
+        }
+
         try {
           // ── Multi-stage execution: if triage produced a multi-stage plan, execute stages sequentially ──
           const plan = context.executionPlan;
@@ -1947,6 +2137,14 @@ export class OrchestrationEngine {
             // down. A second system message (persona, then any memory-context
             // note already on enrichedRequest) is fine — normalizeSystemMessages()
             // downstream already collapses multiple system messages into one.
+            //
+            // ADR-026: a no-op unless CODE_EXECUTION_SANDBOX_ENABLED=true AND
+            // this turn shows genuine code-execution intent with an
+            // extractable snippet — see code-execution-orchestration.ts's doc
+            // comment for the full fail-closed contract. Must run BEFORE
+            // buildExecutionSystemPrompt so a real result can be read from
+            // context.codeExecutionResult while the prompt is built.
+            await maybeExecuteDetectedCode(request, context);
             const executionSystemPrompt = buildExecutionSystemPrompt(request, context);
             if (executionSystemPrompt) {
               const requestBeforePersonaPrompt = request;
@@ -3726,6 +3924,9 @@ export class OrchestrationEngine {
       const streamStrategyMetadata = strategy.getMetadata();
       enrichedContext.isCollectiveStrategy =
         (streamStrategyMetadata.minModels ?? 1) > 1 && !streamStrategyMetadata.isCascading;
+      // ADR-026: same pre-step as execute() above — a no-op unless the flag
+      // is on and this turn shows genuine, extractable code-execution intent.
+      await maybeExecuteDetectedCode(request, enrichedContext);
       const streamExecutionSystemPrompt = buildExecutionSystemPrompt(request, enrichedContext);
       if (streamExecutionSystemPrompt) {
         const requestBeforePersonaPrompt = request;

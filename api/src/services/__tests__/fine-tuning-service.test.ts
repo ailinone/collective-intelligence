@@ -578,6 +578,38 @@ describe('FineTuningService — Google lifecycle (real Gemini tuning API)', () =
   });
 });
 
+// ---- Org-scoped access control (BOLA) ---------------------------------------
+
+describe('FineTuningService — org-scoped access control', () => {
+  it('rejects listEvents for a job not owned by the caller organization', async () => {
+    // Org-scoped lookup (id + organizationId) finds nothing — either the job
+    // doesn't exist or it belongs to a different org.
+    mocks.prisma.fineTuningJob.findFirst.mockResolvedValue(null);
+
+    const service = new FineTuningService();
+    await expect(
+      service.listEvents({
+        jobId: 'ftjob-foreign-org',
+        userContext,
+        requestId: 'req-1',
+      })
+    ).rejects.toThrow('Fine-tuning job ftjob-foreign-org not found');
+  });
+
+  it('rejects listCheckpoints for a job not owned by the caller organization', async () => {
+    mocks.prisma.fineTuningJob.findFirst.mockResolvedValue(null);
+
+    const service = new FineTuningService();
+    await expect(
+      service.listCheckpoints({
+        jobId: 'ftjob-foreign-org',
+        userContext,
+        requestId: 'req-1',
+      })
+    ).rejects.toThrow('Fine-tuning job ftjob-foreign-org not found');
+  });
+});
+
 // ---- Missing credential (503) ----------------------------------------------
 
 describe('FineTuningService — missing Google credential', () => {

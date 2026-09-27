@@ -19,7 +19,12 @@ import http from 'node:http';
 import { register } from 'prom-client';
 import { config, validateConfig } from '@/config';
 import { logger } from '@/utils/logger';
-import { checkDatabaseHealth, connectDatabase, disconnectDatabase } from '@/database/client';
+import {
+  checkDatabaseHealth,
+  connectDatabase,
+  disconnectDatabase,
+  verifyDatabaseReachableAtStartup,
+} from '@/database/client';
 import { markSecretAuditPersistenceReady } from '@/services/secret-audit-service';
 import { initializeCacheRuntime, isCacheEnabled } from '@/cache/cache-runtime-state';
 import { serializeError } from '@/utils/type-guards';
@@ -83,6 +88,16 @@ async function bootstrapWorker(): Promise<void> {
       );
       return;
     }
+
+    // Boot-time database gate, deliberately BEFORE the http server below
+    // starts listening: the Swarm healthcheck probes the liveness-only
+    // /health on that server, and a healthcheck that passes during
+    // start_period promotes the task at once. Running SELECT 1 (bounded
+    // retries) first means a worker that cannot reach Postgres exits 1
+    // before it can ever look healthy, so a start-first rollout rolls back
+    // instead of replacing the old worker with a broken one.
+    logger.info('Checking database reachability (SELECT 1)...');
+    await verifyDatabaseReachableAtStartup();
 
     // Initialize metrics (optional for worker-side Prometheus scraping)
     let metricsServer: http.Server | null = null;
@@ -239,6 +254,17 @@ async function bootstrapWorker(): Promise<void> {
         /* non-fatal */
       }
       try {
+        // Abort an in-progress model equivalence rebuild (it stops at its
+        // next yield) so it neither burns CPU nor queries the DB during teardown.
+        const { shutdownModelEquivalenceIndex } =
+          await import('@/services/model-equivalence-service.js');
+        shutdownModelEquivalenceIndex();
+      } catch {
+        /* non-fatal */
+      }
+      try {
+        // Fails an active model-discovery-hourly job at once (enforceTimeout)
+        // instead of waiting for it until SIGKILL.
         const { shutdownScheduledTasks } = await import('@/jobs/register-scheduled-jobs.js');
         await shutdownScheduledTasks();
       } catch {

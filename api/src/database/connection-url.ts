@@ -180,26 +180,47 @@ export function describeDatabaseTarget(
 }
 
 /**
- * Prisma interactive-transaction defaults.
+ * Prisma interactive-transaction defaults. Covers EVERY `$transaction` call
+ * that passes no options, not only the prepaid wallet and auth-service
+ * writes (also billing, API key rotation, the outbox, organization and
+ * collective-run repositories, among others); per-call options still win
+ * field by field. Read paths built to fail open fast pass their own shorter
+ * `maxWait` (dynamic-model-selector.ts BUCKET_FAIR_TX_MAX_WAIT_MS, 2 s).
  *
- * Direct mode: `undefined`, so Prisma keeps its own defaults (maxWait 2 s,
- * timeout 5 s) and nothing changes.
+ * Direct mode: `maxWait` 8 s, `timeout` 5 s (Prisma's own default, kept).
+ * With the adapter, `maxWait` bounds how long BEGIN may wait for a free
+ * `pg.Pool` connection. Prisma's default of 2 s was harmless with 100
+ * connections per process, but the fleet connection budget (Phase 1f,
+ * docker-compose.production.yml `DATABASE_POOL_MAX`) caps the pool at 23,
+ * and bursts above that were measured in production on 2026-09-24 (24-28
+ * in the minutes after a boot; 53-100 from discovery rounds, the worker's
+ * boot pre-warm and a searchModels cache stampede, the first and last now
+ * removed by Phase 1d and the searchModels single-flight). Queueing is then
+ * expected for a moment, and a 2 s `maxWait`
+ * would turn a short queue into P2028 on those writes. 8 s stays below the
+ * pool's own `connectionTimeoutMillis` (20 s), so a truly saturated pool
+ * still fails as a retryable P2028 first. `timeout` starts after BEGIN,
+ * once the transaction owns its connection, so the pool size does not
+ * affect it and it keeps Prisma's value.
  *
  * Pooler mode: the BEGIN of an interactive transaction may wait in the
  * pooler queue for a backend. `maxWait` stays BELOW pgbouncer's
  * `QUERY_WAIT_TIMEOUT` (10 s in compose) so a saturated pool surfaces as a
  * retryable P2028 from Prisma with the client connection intact, instead of
- * the pooler killing the connection first. Covers every `$transaction`
- * call that passes no options (prepaid wallet, auth-service).
+ * the pooler killing the connection first.
  */
+export const DIRECT_TRANSACTION_MAX_WAIT_MS = 8000;
+/** Prisma's built-in interactive-transaction timeout, pinned explicitly. */
+export const DIRECT_TRANSACTION_TIMEOUT_MS = 5000;
 export const POOLER_TRANSACTION_MAX_WAIT_MS = 8000;
 export const POOLER_TRANSACTION_TIMEOUT_MS = 15000;
 
-export function resolveTransactionOptions(
-  env: DatabaseEnv = process.env
-): { maxWait: number; timeout: number } | undefined {
+export function resolveTransactionOptions(env: DatabaseEnv = process.env): {
+  maxWait: number;
+  timeout: number;
+} {
   if (!isDatabaseViaPooler(env)) {
-    return undefined;
+    return { maxWait: DIRECT_TRANSACTION_MAX_WAIT_MS, timeout: DIRECT_TRANSACTION_TIMEOUT_MS };
   }
   return { maxWait: POOLER_TRANSACTION_MAX_WAIT_MS, timeout: POOLER_TRANSACTION_TIMEOUT_MS };
 }

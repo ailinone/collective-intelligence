@@ -54,6 +54,18 @@ vi.mock('@/core/orchestration/strategies/media-consensus-strategy', () => {
   return { MediaConsensusStrategy: MockMediaConsensusStrategy };
 });
 
+// This suite never sets MEDIA_PLANNER_JUDGE_ENABLED, so it always exercises
+// the flag-off default — `buildMediaCritics` must never be reached. Still
+// mocked here so that IF chat-request-processor.ts's generate_media handler
+// dynamically imports '@/core/orchestration/strategies/media-critics-factory'
+// (matching its existing dynamic-import convention for MediaConsensusStrategy
+// / VideoOrchestrationService / ImagesOrchestrationService), it resolves to
+// this mock rather than the real module in this test run.
+const buildMediaCriticsMock = vi.fn();
+vi.mock('@/core/orchestration/strategies/media-critics-factory', () => ({
+  buildMediaCritics: (...args: unknown[]) => buildMediaCriticsMock(...args),
+}));
+
 // Real service classes (constructor-only, no network calls) — genuinely
 // injected into MediaConsensusStrategy, exactly like capabilities-routes.ts
 // does. Not mocked: the point of the test is that the HANDLER never calls
@@ -88,6 +100,7 @@ describe('generate_media tool handler', () => {
   beforeEach(() => {
     mockExecute.mockReset();
     mockConstructorCalls.length = 0;
+    buildMediaCriticsMock.mockReset();
   });
 
   afterEach(() => {
@@ -147,6 +160,12 @@ describe('generate_media tool handler', () => {
         degraded: false,
       },
     });
+
+    // Regression guard (Section A, 2026-09-23): MEDIA_PLANNER_JUDGE_ENABLED
+    // defaults false, and this test suite never sets it — critics must stay
+    // empty and buildMediaCritics must never be called.
+    expect(buildMediaCriticsMock).not.toHaveBeenCalled();
+    expect((mockConstructorCalls[0] as { critics: unknown[] }).critics).toEqual([]);
   });
 
   it('routes video generation through MediaConsensusStrategy.execute() with capability:"video_generation"', async () => {

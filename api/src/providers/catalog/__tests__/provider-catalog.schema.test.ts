@@ -23,7 +23,11 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { ProviderCatalogEntrySchema, ProviderCatalogSchema } from '../provider-catalog.schema';
+import {
+  CapabilityAttributesEntrySchema,
+  ProviderCatalogEntrySchema,
+  ProviderCatalogSchema,
+} from '../provider-catalog.schema';
 import { PROVIDER_CATALOG } from '../providers.catalog';
 import type { ProviderCatalogEntry } from '../provider-catalog.types';
 
@@ -202,6 +206,51 @@ describe('ProviderCatalogEntrySchema', () => {
     const entry = validEntry() as Record<string, unknown>;
     entry.bogusField = 'should fail';
     const result = ProviderCatalogEntrySchema.safeParse(entry);
+    expect(result.success).toBe(false);
+  });
+});
+
+describe('CapabilityAttributesEntrySchema (generic map)', () => {
+  it('accepts a video_generation entry with source and attributesVerifiedAt', () => {
+    const result = CapabilityAttributesEntrySchema.safeParse({
+      video_generation: {
+        maxDurationSeconds: 10,
+        source: 'human',
+        attributesVerifiedAt: '2026-08-01',
+      },
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('accepts an image_generation entry with dimensions/formats/source', () => {
+    const result = CapabilityAttributesEntrySchema.safeParse({
+      image_generation: {
+        maxDimensions: '2048x2048',
+        supportedFormats: ['png', 'jpeg'],
+        source: 'schema',
+      },
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('accepts a pdf_understanding entry with maxPages/source', () => {
+    const result = CapabilityAttributesEntrySchema.safeParse({
+      pdf_understanding: { maxPages: 200, source: 'probed' },
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('rejects an unknown key inside a per-capability attribute object', () => {
+    const result = CapabilityAttributesEntrySchema.safeParse({
+      video_generation: { maxDurationSeconds: 10, bogusField: 'x' },
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects source values outside the closed 4-value union', () => {
+    const result = CapabilityAttributesEntrySchema.safeParse({
+      video_generation: { maxDurationSeconds: 10, source: 'guessed' },
+    });
     expect(result.success).toBe(false);
   });
 });

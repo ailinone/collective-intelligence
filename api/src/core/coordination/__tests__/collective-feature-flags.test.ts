@@ -25,6 +25,8 @@ import { describe, it, expect } from 'vitest';
 import {
   mergeOrgSettingsIntoConfig,
   parseOrganizationCollectiveSettings,
+  evictOldestIfOverCap,
+  parseOrgMediaPlannerSettings,
 } from '../collective-feature-flags';
 import { DEFAULT_COORDINATION_CONFIG } from '../coordination-types';
 
@@ -224,5 +226,48 @@ describe('end-to-end: parse + merge applies a realistic per-tenant override', ()
     // Untouched fields preserve env defaults
     expect(effective.minConvergenceScore).toBe(DEFAULT_COORDINATION_CONFIG.minConvergenceScore);
     expect(effective.maxDissent).toBe(DEFAULT_COORDINATION_CONFIG.maxDissent);
+  });
+});
+
+describe('evictOldestIfOverCap', () => {
+  it('does nothing when the map is at or under the cap', () => {
+    const map = new Map([['a', 1], ['b', 2]]);
+    evictOldestIfOverCap(map, 2);
+    expect(map.size).toBe(2);
+  });
+
+  it('evicts the oldest (insertion-order-first) entries down to the cap', () => {
+    const map = new Map([['a', 1], ['b', 2], ['c', 3], ['d', 4]]);
+    evictOldestIfOverCap(map, 2);
+    expect(map.size).toBe(2);
+    expect(map.has('a')).toBe(false);
+    expect(map.has('b')).toBe(false);
+    expect(map.has('c')).toBe(true);
+    expect(map.has('d')).toBe(true);
+  });
+});
+
+describe('parseOrgMediaPlannerSettings', () => {
+  it('returns empty for non-object inputs', () => {
+    expect(parseOrgMediaPlannerSettings(null)).toEqual({});
+    expect(parseOrgMediaPlannerSettings(undefined)).toEqual({});
+    expect(parseOrgMediaPlannerSettings('nope')).toEqual({});
+    expect(parseOrgMediaPlannerSettings([])).toEqual({});
+  });
+
+  it('extracts enabled when it is a real boolean', () => {
+    expect(parseOrgMediaPlannerSettings({ enabled: true })).toEqual({ enabled: true });
+    expect(parseOrgMediaPlannerSettings({ enabled: false })).toEqual({ enabled: false });
+  });
+
+  it('drops enabled when it is not a boolean', () => {
+    expect(parseOrgMediaPlannerSettings({ enabled: 'yes' })).toEqual({});
+    expect(parseOrgMediaPlannerSettings({ enabled: 1 })).toEqual({});
+  });
+
+  it('ignores unrelated keys', () => {
+    expect(parseOrgMediaPlannerSettings({ enabled: true, extra: 'ignored' })).toEqual({
+      enabled: true,
+    });
   });
 });

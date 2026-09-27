@@ -30,9 +30,12 @@
  *  - the 2026-09-08 incident fix: a provider whose discovery is CURRENTLY
  *    fully broken (getProvidersWithoutHealthyDiscovery() circuit breaker)
  *    is exempted from this sweep row-by-row, while an unrelated provider in
- *    the SAME batch whose discovery is healthy is still disabled normally —
- *    and a failure computing the exemption itself fails OPEN (preserves the
- *    pre-existing disable behavior) rather than silently disabling nothing.
+ *    the SAME batch whose discovery is healthy is still disabled normally;
+ *  - the 2026-09-24 review fix: the breaker is only as good as the discovery
+ *    round behind it, so without a fresh verdict (this process never ran a
+ *    complete round and the fleet published none recently), or when the
+ *    verdict cannot be computed at all, the sweep fails CLOSED: it disables
+ *    nothing that tick and says so at ERROR level.
  *
  * The matching re-enable half of the round trip (a disabled model
  * reappearing in a fresh discovery batch) is covered in
@@ -54,12 +57,34 @@ vi.mock('@/database/client', () => ({
   },
 }));
 
-// Circuit-breaker dependency (2026-09-08 incident fix). Defaults to "every
-// provider has healthy discovery" (empty set) so the pre-existing tests
-// below are unaffected unless a test explicitly configures otherwise.
+// Circuit-breaker dependency (2026-09-08 incident fix). Defaults to "a
+// recent complete discovery round vouches for every provider" (trusted
+// verdict, empty exemption set) so the pre-existing tests below are
+// unaffected unless a test explicitly configures otherwise. The exemption
+// set still comes from getProvidersWithoutHealthyDiscoveryMock so those
+// tests keep configuring it the same way.
 const getProvidersWithoutHealthyDiscoveryMock = vi.fn(() => new Set<string>());
+type SignalMockResult =
+  | {
+      trusted: true;
+      basis: 'local' | 'fleet';
+      completedAt: Date;
+      ageMs: number;
+      unhealthyProviders: Set<string>;
+    }
+  | { trusted: false; reason: string; newestCompletedAt: Date | null };
+const trustedSignal = (): SignalMockResult => ({
+  trusted: true,
+  basis: 'fleet',
+  completedAt: new Date(Date.now() - 20 * 60 * 1000),
+  ageMs: 20 * 60 * 1000,
+  unhealthyProviders: getProvidersWithoutHealthyDiscoveryMock(),
+});
+const getAutoDisableDiscoverySignalMock = vi.fn(
+  async (): Promise<SignalMockResult> => trustedSignal()
+);
 const getCentralModelDiscoveryServiceMock = vi.fn(async () => ({
-  getProvidersWithoutHealthyDiscovery: getProvidersWithoutHealthyDiscoveryMock,
+  getAutoDisableDiscoverySignal: getAutoDisableDiscoverySignalMock,
 }));
 
 vi.mock('@/services/central-model-discovery-service', () => ({
@@ -81,8 +106,9 @@ beforeEach(() => {
   queryRawUnsafeMock.mockReset();
   modelUpdateManyMock.mockReset().mockResolvedValue({ count: 1 });
   getProvidersWithoutHealthyDiscoveryMock.mockReset().mockReturnValue(new Set());
+  getAutoDisableDiscoverySignalMock.mockReset().mockImplementation(async () => trustedSignal());
   getCentralModelDiscoveryServiceMock.mockReset().mockImplementation(async () => ({
-    getProvidersWithoutHealthyDiscovery: getProvidersWithoutHealthyDiscoveryMock,
+    getAutoDisableDiscoverySignal: getAutoDisableDiscoverySignalMock,
   }));
   delete process.env.MODEL_AUTO_DISABLE_DISABLED;
   delete process.env.MODEL_AUTO_DISABLE_THRESHOLD_MS;
@@ -119,6 +145,7 @@ describe('autoDisableDelistedModels', () => {
       disabled: 1,
       skippedUnhealthySource: 0,
       skippedManualReenableGrace: 0,
+      skippedNoDiscoverySignal: 0,
     });
     expect(modelUpdateManyMock).toHaveBeenCalledTimes(1);
     const call = modelUpdateManyMock.mock.calls[0][0] as {
@@ -147,6 +174,7 @@ describe('autoDisableDelistedModels', () => {
       disabled: 0,
       skippedUnhealthySource: 0,
       skippedManualReenableGrace: 0,
+      skippedNoDiscoverySignal: 0,
     });
     expect(queryRawMock).not.toHaveBeenCalled();
     expect(queryRawUnsafeMock).not.toHaveBeenCalled();
@@ -166,6 +194,7 @@ describe('autoDisableDelistedModels', () => {
       disabled: 0,
       skippedUnhealthySource: 0,
       skippedManualReenableGrace: 0,
+      skippedNoDiscoverySignal: 0,
     });
   });
 
@@ -180,6 +209,7 @@ describe('autoDisableDelistedModels', () => {
       disabled: 0,
       skippedUnhealthySource: 0,
       skippedManualReenableGrace: 0,
+      skippedNoDiscoverySignal: 0,
     });
     expect(queryRawUnsafeMock).not.toHaveBeenCalled();
     expect(modelUpdateManyMock).not.toHaveBeenCalled();
@@ -215,6 +245,7 @@ describe('autoDisableDelistedModels', () => {
       disabled: 1,
       skippedUnhealthySource: 0,
       skippedManualReenableGrace: 0,
+      skippedNoDiscoverySignal: 0,
     });
     expect(modelUpdateManyMock).toHaveBeenCalledTimes(2);
   });
@@ -247,6 +278,7 @@ describe('autoDisableDelistedModels', () => {
       disabled: 0,
       skippedUnhealthySource: 0,
       skippedManualReenableGrace: 0,
+      skippedNoDiscoverySignal: 0,
     });
     expect(modelUpdateManyMock).toHaveBeenCalledTimes(1);
     const call = modelUpdateManyMock.mock.calls[0][0] as {
@@ -292,6 +324,7 @@ describe('autoDisableDelistedModels — unhealthy-discovery-source circuit break
       disabled: 0,
       skippedUnhealthySource: 1,
       skippedManualReenableGrace: 0,
+      skippedNoDiscoverySignal: 0,
     });
     expect(modelUpdateManyMock).not.toHaveBeenCalled();
   });
@@ -324,13 +357,41 @@ describe('autoDisableDelistedModels — unhealthy-discovery-source circuit break
       disabled: 1,
       skippedUnhealthySource: 1,
       skippedManualReenableGrace: 0,
+      skippedNoDiscoverySignal: 0,
     });
     expect(modelUpdateManyMock).toHaveBeenCalledTimes(1);
     const call = modelUpdateManyMock.mock.calls[0][0] as { where: { uid: string } };
     expect(call.where.uid).toBe('uid-other-1');
   });
 
-  it('fails OPEN when computing the exemption itself throws — proceeds with the pre-existing disable behavior instead of silently disabling nothing', async () => {
+  it('fails CLOSED when no recent complete discovery round vouches for provider health (blind process): disables nothing', async () => {
+    // The 2026-09-24 review scenario: the tick lands on a process that never
+    // ran a discovery round (no boot round on the api, one round fleet-wide
+    // under the lease) and no fleet verdict is fresh. Its own exemption set
+    // would be EMPTY for lack of data, which used to mean "disable it all".
+    getAutoDisableDiscoverySignalMock.mockResolvedValueOnce({
+      trusted: false,
+      reason: 'no complete discovery round has been recorded by this process or the fleet',
+      newestCompletedAt: null,
+    });
+    queryRawMock.mockResolvedValueOnce([{ count: 692n }]);
+
+    const { autoDisableDelistedModels } = await loadModule();
+    const result = await autoDisableDelistedModels();
+
+    expect(result).toEqual({
+      found: 692,
+      disabled: 0,
+      skippedUnhealthySource: 0,
+      skippedManualReenableGrace: 0,
+      skippedNoDiscoverySignal: 692,
+    });
+    // No candidate scan and no write at all this tick.
+    expect(queryRawUnsafeMock).not.toHaveBeenCalled();
+    expect(modelUpdateManyMock).not.toHaveBeenCalled();
+  });
+
+  it('fails CLOSED when computing the verdict itself throws (no signal is the same as a blind process)', async () => {
     getCentralModelDiscoveryServiceMock.mockRejectedValueOnce(new Error('discovery service init failed'));
     queryRawMock.mockResolvedValueOnce([{ count: 1n }]);
     queryRawUnsafeMock.mockResolvedValueOnce([
@@ -348,11 +409,22 @@ describe('autoDisableDelistedModels — unhealthy-discovery-source circuit break
 
     expect(result).toEqual({
       found: 1,
-      disabled: 1,
+      disabled: 0,
       skippedUnhealthySource: 0,
       skippedManualReenableGrace: 0,
+      skippedNoDiscoverySignal: 1,
     });
-    expect(modelUpdateManyMock).toHaveBeenCalledTimes(1);
+    expect(queryRawUnsafeMock).not.toHaveBeenCalled();
+    expect(modelUpdateManyMock).not.toHaveBeenCalled();
+  });
+
+  it('does not even ask for a verdict when nothing is past the threshold', async () => {
+    queryRawMock.mockResolvedValueOnce([{ count: 0n }]);
+
+    const { autoDisableDelistedModels } = await loadModule();
+    await autoDisableDelistedModels();
+
+    expect(getAutoDisableDiscoverySignalMock).not.toHaveBeenCalled();
   });
 });
 
@@ -389,6 +461,7 @@ describe('autoDisableDelistedModels — manual-reenable grace period (2026-09-13
       disabled: 0,
       skippedUnhealthySource: 0,
       skippedManualReenableGrace: 1,
+      skippedNoDiscoverySignal: 0,
     });
     expect(modelUpdateManyMock).not.toHaveBeenCalled();
   });
@@ -416,6 +489,7 @@ describe('autoDisableDelistedModels — manual-reenable grace period (2026-09-13
       disabled: 1,
       skippedUnhealthySource: 0,
       skippedManualReenableGrace: 0,
+      skippedNoDiscoverySignal: 0,
     });
     expect(modelUpdateManyMock).toHaveBeenCalledTimes(1);
   });
@@ -447,6 +521,7 @@ describe('autoDisableDelistedModels — manual-reenable grace period (2026-09-13
       disabled: 1,
       skippedUnhealthySource: 0,
       skippedManualReenableGrace: 1,
+      skippedNoDiscoverySignal: 0,
     });
     expect(modelUpdateManyMock).toHaveBeenCalledTimes(1);
     const call = modelUpdateManyMock.mock.calls[0][0] as { where: { uid: string } };
@@ -473,6 +548,7 @@ describe('autoDisableDelistedModels — manual-reenable grace period (2026-09-13
       disabled: 1,
       skippedUnhealthySource: 0,
       skippedManualReenableGrace: 0,
+      skippedNoDiscoverySignal: 0,
     });
   });
 });

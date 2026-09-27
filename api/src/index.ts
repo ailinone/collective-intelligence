@@ -53,7 +53,11 @@ dns.setDefaultResultOrder?.('ipv4first');
 
 import { config, validateConfig } from '@/config';
 import { logger } from '@/utils/logger';
-import { connectDatabase, disconnectDatabase } from '@/database/client';
+import {
+  connectDatabase,
+  disconnectDatabase,
+  verifyDatabaseReachableAtStartup,
+} from '@/database/client';
 import { markSecretAuditPersistenceReady } from '@/services/secret-audit-service';
 import { createServer, startServer, shutdownServer } from './server';
 import {
@@ -273,6 +277,15 @@ async function bootstrap(): Promise<void> {
       'Starting Ailin Dev API'
     );
 
+    // Boot-time database gate. The Swarm healthcheck probes /health/live,
+    // which never touches the database, so this is the check that keeps a
+    // task that cannot reach Postgres from ever serving: SELECT 1 with
+    // bounded retries, then throw (-> exit 1 below) so a start-first rollout
+    // rolls back. Runs BEFORE migrations and independently of
+    // SKIP_DB_MIGRATIONS, which would otherwise remove the only DB check.
+    logger.info('Checking database reachability (SELECT 1)...');
+    await verifyDatabaseReachableAtStartup();
+
     // CRITICAL: Always run database migrations before connecting
     // This ensures schema is up-to-date in all environments (dev, staging, production)
     // Migrations are safe to run multiple times (idempotent)
@@ -351,30 +364,42 @@ async function bootstrap(): Promise<void> {
     logger.info('Secret audit persistence enabled');
 
     if (process.env.MODEL_CATALOG_AUTO_SYNC !== 'false') {
-      logger.info('Starting 100% dynamic model discovery in background (non-blocking)...');
       try {
-        const { ModelDiscoveryService } = await import('./services/model-discovery-service.js');
-        const discoveryService = new ModelDiscoveryService(logger);
+        // Same boot-discovery switch as the runner below: with
+        // MODEL_DISCOVERY_RUN_ON_START=false (or MODEL_DISCOVERY_AUTO_SYNC=false)
+        // this process runs NO discovery round at boot; the fleet-wide
+        // "model-discovery-hourly" job keeps the catalog fresh. The catalog
+        // verification below still runs either way.
+        const { isBootDiscoveryEnabled } = await import('./services/model-discovery-runner.js');
+        if (isBootDiscoveryEnabled()) {
+          logger.info('Starting 100% dynamic model discovery in background (non-blocking)...');
+          const { ModelDiscoveryService } = await import('./services/model-discovery-service.js');
+          const discoveryService = new ModelDiscoveryService(logger);
 
-        // Start discovery in background to avoid blocking startup
-        discoveryService
-          .syncDiscoveredModels()
-          .then((result) => {
-            logger.info(
-              {
-                discovered: result.discovered,
-                updated: result.updated,
-                unchanged: result.unchanged,
-              },
-              '✅ Dynamic model discovery completed in background - 0 hardcoded models'
-            );
-          })
-          .catch((error) => {
-            logger.warn(
-              { error: serializeError(error) },
-              'Model discovery failed in background (non-critical, will retry later)'
-            );
-          });
+          // Start discovery in background to avoid blocking startup
+          discoveryService
+            .syncDiscoveredModels()
+            .then((result) => {
+              logger.info(
+                {
+                  discovered: result.discovered,
+                  updated: result.updated,
+                  unchanged: result.unchanged,
+                },
+                '✅ Dynamic model discovery completed in background - 0 hardcoded models'
+              );
+            })
+            .catch((error) => {
+              logger.warn(
+                { error: serializeError(error) },
+                'Model discovery failed in background (non-critical, will retry later)'
+              );
+            });
+        } else {
+          logger.info(
+            'At-boot model discovery disabled (MODEL_DISCOVERY_RUN_ON_START=false or MODEL_DISCOVERY_AUTO_SYNC=false); the model-discovery-hourly job keeps the catalog fresh'
+          );
+        }
 
         // Verify no hardcoded models exist
         const { getAllCatalogModels } = await import('./services/model-catalog-service.js');
@@ -581,26 +606,15 @@ async function bootstrap(): Promise<void> {
                 'Embedding pipeline rebuild failed — semantic resolver will fall back to pool query'
               );
             }
-            // Re-warm the catalog cache right after each discovery rebuild so the heavy
-            // ~69k-row catalog load never lands on a chat request's hot path. The cache
-            // otherwise expires between sparse requests, forcing a cold re-load that
-            // contends with the discovery write burst (the ~32s cold-selection tax).
-            // invalidate→reload guarantees the warmed cache reflects the just-rebuilt catalog.
-            try {
-              const { invalidateCatalogCache, getAllCatalogModels } =
-                await import('@/services/model-catalog-service.js');
-              invalidateCatalogCache();
-              const warmed = await getAllCatalogModels();
-              logger.info(
-                { models: warmed.length },
-                '✅ Catalog cache re-warmed after discovery rebuild'
-              );
-            } catch (err) {
-              logger.warn(
-                { err: serializeError(err) },
-                '⚠️ Catalog re-warm after rebuild failed (non-fatal)'
-              );
-            }
+            // Deliberately NO catalog cache work here (catalog load audit 2026-09-24, R1). This
+            // tick runs every ~5 min in every replica and only probes providers;
+            // it never writes `models`. It used to call invalidateCatalogCache()
+            // + getAllCatalogModels(), which DELeted the fleet-wide Redis snapshot
+            // and forced a full Postgres catalog read per replica per tick.
+            // Keep-warm is owned by cache-refresh-ahead.ts (Redis hydrate, no
+            // DEL) and the elected catalog-cache-refresh job, and an expired
+            // local copy is served stale while it revalidates
+            // (model-catalog-service.ts), so no chat request waits on it.
           },
         });
         logger.info({ intervalMs, initialDelayMs }, '✅ Operability discovery scheduler active');
@@ -1195,6 +1209,11 @@ async function bootstrap(): Promise<void> {
     // Enterprise governance control plane (budget cap, access policy, audit query)
     const { registerOrgGovernanceRoutes } = await import('./routes/admin/org-governance-routes.js');
     await registerOrgGovernanceRoutes(server);
+    // Catalog attribute-drafts admin review (Tier 3 LLM-draft promotion)
+    const { registerCatalogAttributeDraftsAdminRoutes } = await import(
+      './routes/admin/catalog-attribute-drafts-admin-routes.js'
+    );
+    await registerCatalogAttributeDraftsAdminRoutes(server);
     const { registerModelsConfigRoutes } = await import('./routes/models/models-config-routes.js');
     await registerModelsConfigRoutes(server); // Models configuration routes
     const { registerOrganizationSettingsRoutes } =
@@ -1397,6 +1416,22 @@ async function bootstrap(): Promise<void> {
       );
     }
 
+    // Per-process provider balance refresh (funding gate + balance score in
+    // the selector). It must start AFTER the provider catalog is loaded, or
+    // its first sweep probes an incomplete adapter set; with
+    // DEFER_CATALOG_LOAD=true that is the post-listen load below.
+    const startBalanceRefresh = async (): Promise<void> => {
+      try {
+        const { startProviderBalanceRefresh } = await import('./services/model-discovery-runner.js');
+        startProviderBalanceRefresh();
+      } catch (err) {
+        logger.warn(
+          { err: err instanceof Error ? err.message : String(err) },
+          'Failed to start the provider balance refresh (non-critical)'
+        );
+      }
+    };
+
     // R7 (2026-05-11): Post-listen deferred heavy init. The Fastify server is
     // now accepting /health and admin requests. We can run the expensive
     // catalog load + discovery in the background without blocking client
@@ -1418,8 +1453,12 @@ async function bootstrap(): Promise<void> {
             { err: err instanceof Error ? err.message : String(err) },
             'Post-listen catalog load failed'
           );
+        } finally {
+          await startBalanceRefresh();
         }
       });
+    } else {
+      await startBalanceRefresh();
     }
 
     // ==========================================
@@ -1491,6 +1530,13 @@ async function bootstrap(): Promise<void> {
       await runStep('dlq-manager', async () => {
         const { shutdownDLQManager } = await import('./queue/dlq-manager.js');
         await shutdownDLQManager();
+      });
+      // Stop an in-progress model equivalence rebuild (background CPU work,
+      // aborts at its next yield) before the scheduled-tasks teardown.
+      await runStep('model-equivalence-index', async () => {
+        const { shutdownModelEquivalenceIndex } =
+          await import('./services/model-equivalence-service.js');
+        shutdownModelEquivalenceIndex();
       });
       await runStep('scheduled-tasks', async () => {
         const { shutdownScheduledTasks } = await import('./jobs/register-scheduled-jobs.js');

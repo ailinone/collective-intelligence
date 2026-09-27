@@ -308,7 +308,7 @@ export function coerceRawResult(parsed: unknown): LLMJudgeRawResult {
 // ─── tolerant field extraction (rubric fields not modelled by JudgeVerdict) ──
 
 /** Coerce a parsed object or a JSON string into a plain object, else undefined. */
-function asObject(raw: unknown): Record<string, unknown> | undefined {
+export function asObject(raw: unknown): Record<string, unknown> | undefined {
   if (typeof raw === 'object' && raw !== null && !Array.isArray(raw)) {
     return raw as Record<string, unknown>;
   }

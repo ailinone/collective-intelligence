@@ -74,11 +74,14 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { randomBytes } from 'crypto';
 
-const { mockQueryRaw, mockExecuteRawUnsafe, mockFindMany } = vi.hoisted(() => ({
-  mockQueryRaw: vi.fn(),
-  mockExecuteRawUnsafe: vi.fn().mockResolvedValue(0),
-  mockFindMany: vi.fn(),
-}));
+const { mockQueryRaw, mockExecuteRawUnsafe, mockFindMany, mockTransactionOptions } = vi.hoisted(
+  () => ({
+    mockQueryRaw: vi.fn(),
+    mockExecuteRawUnsafe: vi.fn().mockResolvedValue(0),
+    mockFindMany: vi.fn(),
+    mockTransactionOptions: vi.fn(),
+  })
+);
 
 vi.mock('@/database/client', () => ({
   prisma: {
@@ -86,9 +89,14 @@ vi.mock('@/database/client', () => ({
     $executeRawUnsafe: mockExecuteRawUnsafe,
     // getBucketFairCandidateUids/getCuratedBucketSnapshot/getAggregatedBucketUids
     // each wrap their raw SQL in $transaction — simulate a real transaction by
-    // invoking the callback with this same mock object as the tx client.
-    $transaction: (cb: (tx: unknown) => unknown) =>
-      Promise.resolve(cb({ $queryRaw: mockQueryRaw, $executeRawUnsafe: mockExecuteRawUnsafe })),
+    // invoking the callback with this same mock object as the tx client, and
+    // record the per-call options (pool wait) each one passes.
+    $transaction: (cb: (tx: unknown) => unknown, options?: unknown) => {
+      mockTransactionOptions(options);
+      return Promise.resolve(
+        cb({ $queryRaw: mockQueryRaw, $executeRawUnsafe: mockExecuteRawUnsafe })
+      );
+    },
     model: { findMany: mockFindMany },
   },
 }));
@@ -101,6 +109,7 @@ process.env.SELECTION_POPULARITY_SEED = 'false';
 // import), so DynamicModelSelector's top-level `import { prisma }` resolves
 // against the mock from the very first (and only) module evaluation.
 import {
+  BUCKET_FAIR_TX_MAX_WAIT_MS,
   DynamicModelSelector,
   __resetBucketFairCachesForTests,
 } from '@/core/selection/dynamic-model-selector';
@@ -238,6 +247,7 @@ describe('bucket-fair candidate retrieval', () => {
     mockQueryRaw.mockReset();
     mockExecuteRawUnsafe.mockReset().mockResolvedValue(0);
     mockFindMany.mockReset();
+    mockTransactionOptions.mockReset();
     // See the file-level doc: guarantees every test starts from a real
     // cache-miss on both the curated-bucket snapshot and the popularity-seed
     // pool, regardless of what ran earlier in this worker/suite.
@@ -286,6 +296,31 @@ describe('bucket-fair candidate retrieval', () => {
     expect(aggregatedInResult.length).toBeGreaterThan(0);
     expect(curatedInResult).not.toHaveLength(resultIds.length); // not 100% curated
     expect(aggregatedInResult).not.toHaveLength(resultIds.length); // not 100% aggregated
+  });
+
+  it('keeps the 2 s pool wait on both fail-open bucket transactions, not the 8 s client default', async () => {
+    const openaiUid = randomUid('openai');
+    const agg1 = randomUid('hf');
+    mockRawQueries({
+      curatedSnapshot: [snapshotRow(openaiUid, 'openai')],
+      aggregated: [{ uid: agg1 }],
+    });
+    mockHydration([curatedRecord(openaiUid, 'openai'), aggregatedRecord(agg1)]);
+
+    await new DynamicModelSelector().findModelsByRequirements(baseCriteria);
+
+    // Prisma's own default, which these reads had before the client-wide
+    // default moved to 8 s (connection-url.ts, Phase 1f pool budget).
+    expect(BUCKET_FAIR_TX_MAX_WAIT_MS).toBe(2_000);
+    // Both the curated snapshot and the aggregated bucket query ran...
+    const queried = mockQueryRaw.mock.calls.map(([query]) => sqlTextOf(query));
+    expect(queried.some((text) => text.includes('hubInventoryClass'))).toBe(true);
+    expect(queried.some((text) => text.includes('serverless_callable'))).toBe(true);
+    // ...and every transaction on this path passed the short wait.
+    expect(mockTransactionOptions.mock.calls.length).toBeGreaterThanOrEqual(2);
+    for (const [options] of mockTransactionOptions.mock.calls) {
+      expect(options).toEqual({ maxWait: BUCKET_FAIR_TX_MAX_WAIT_MS });
+    }
   });
 
   it('(b) a curated model with NO serverless_callable flag is reachable when it is a strong real match', async () => {

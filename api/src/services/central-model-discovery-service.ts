@@ -26,6 +26,7 @@ import { computeModelUid } from '@/database/model-uid';
 import { Prisma, type Provider, type Model as PrismaModel } from '@/generated/prisma/index.js';
 import { getModelSelectionCache } from '@/core/selection/model-selection-cache';
 import { getModelDiscoveryScheduler } from './model-discovery-scheduler';
+import { attachRunwaymlTier1Metadata } from './central-model-discovery-service-runwayml-helper';
 import { isUniqueConstraintError, getUniqueConstraintFields } from '@/utils/prisma-error-helpers';
 import { modelCacheService } from '@/services/model-cache-service';
 import {
@@ -44,7 +45,19 @@ import {
 } from '@/capability/assertions/discovery-emitter';
 import { narrowAs } from '@/utils/type-guards';
 import { mapWithConcurrency } from '@/utils/map-with-concurrency';
+import { acquireDiscoveryLease, isDiscoveryLeaseEnabled } from '@/services/discovery-lease';
+import {
+  decideAutoDisableDiscoverySignal,
+  discoveryHealthOwnerId,
+  publishDiscoveryHealthSnapshot,
+  readDiscoveryHealthSnapshot,
+  resolveDiscoverySignalMaxAgeMs,
+  type AutoDisableDiscoverySignal,
+  type DiscoverySignalCandidate,
+} from '@/services/discovery-fleet-health';
 import { getProviderRegistry } from '@/providers/provider-registry';
+import { getQueueRedisClient } from '@/cache/redis-client';
+import { createRedisPaginationCursorStore } from '@/services/model-fetchers/hf-hub-model-fetcher';
 import type { BalanceCheckResult } from '@/providers/base/provider-adapter';
 import { providerDiscoveredModelsTotal } from '@/observability/ci-metrics';
 
@@ -195,6 +208,24 @@ export interface ModelDiscoveryResult {
   timestamp: Date;
 }
 
+/** Error recorded for sources not started because the discovery lease was lost mid-round. */
+export const DISCOVERY_LEASE_LOST_ERROR =
+  'skipped: discovery lease lost before this source started';
+
+/** True when the round dispatched every source (none skipped by a lost lease). */
+export function isCompleteDiscoveryRound(results: ModelDiscoveryResult[]): boolean {
+  return results.every((result) => !result.errors.includes(DISCOVERY_LEASE_LOST_ERROR));
+}
+
+/**
+ * Result of discoverAllModelsExclusive(): either this process ran the round
+ * (`leaseEpoch` is the fencing epoch it ran under, null when the lease is
+ * disabled or failed open), or another process held the discovery lease.
+ */
+export type DiscoveryRoundOutcome =
+  | { status: 'completed'; results: ModelDiscoveryResult[]; leaseEpoch: number | null }
+  | { status: 'skipped'; reason: 'lease-held'; holder: string | null };
+
 export interface CentralDiscoveryStats {
   totalSources: number;
   totalProviders: number;
@@ -251,13 +282,22 @@ export class CentralModelDiscoveryService {
   private providerBalanceStatus: Map<string, BalanceCheckResult> = new Map();
   private sourceHealthMap: Map<string, SourceHealthRecord> = new Map();
   private lastFullDiscovery: Date | null = null;
+  // Set only by a round that dispatched EVERY source (none skipped because
+  // the lease was lost): only then does sourceHealthMap cover every provider,
+  // which is what the auto-disable circuit breaker needs to be meaningful.
+  private lastCompleteRoundAt: Date | null = null;
+  // Per-process balance map freshness, independent of discovery rounds (see
+  // refreshProviderBalances()).
+  private lastBalanceCheckAt: Date | null = null;
+  private balanceRefreshInFlight: Promise<void> | null = null;
   private initializationPromise: Promise<void>;
   // In-flight discovery coalescing: when two callers ask for discoverAllModels()
   // simultaneously (e.g., index.ts syncDiscoveredModels + model-discovery-runner
   // at startup), both would concurrently upsert the same models → duplicate key
   // violations on models.uid. Instead, share the in-flight Promise so both get
-  // the same result without redundant DB writes.
-  private inFlightDiscovery: Promise<ModelDiscoveryResult[]> | null = null;
+  // the same result without redundant DB writes. Across processes the same
+  // job is done by the discovery lease (discovery-lease.ts).
+  private inFlightDiscovery: Promise<DiscoveryRoundOutcome> | null = null;
 
   constructor() {
     this.initializationPromise = this.initializeSources().catch((error: unknown) => {
@@ -352,6 +392,10 @@ export class CentralModelDiscoveryService {
    * A provider with no covering source that has been attempted yet (fresh
    * boot, before the first cron tick lands) is NOT flagged — there is no
    * signal yet, and flagging it would be a false positive, not a safety net.
+   * That makes this set meaningless on a process that has not run a complete
+   * round, so the auto-disable sweep does not call it directly: it goes
+   * through getAutoDisableDiscoverySignal() below, which refuses to vouch
+   * for anything without a recent complete round (2026-09-24 review fix).
    */
   getProvidersWithoutHealthyDiscovery(): Set<string> {
     const providerSourceCoverage = new Map<string, DiscoverySource[]>();
@@ -381,6 +425,67 @@ export class CentralModelDiscoveryService {
     }
 
     return unhealthy;
+  }
+
+  /**
+   * Input of the auto-disable circuit breaker (pricing-integrity-job.ts).
+   *
+   * The daily sweep lands on whichever process BullMQ picks, and with the
+   * discovery lease and no boot round on the api that process usually never
+   * ran a round itself, so its own getProvidersWithoutHealthyDiscovery() is
+   * empty for lack of data, not because every provider is healthy. This
+   * combines two verdicts and trusts only fresh ones:
+   *   - local: this process's own, if it finished a complete round recently;
+   *   - fleet: the snapshot the last process to finish a complete round
+   *     published on redis-lease (discovery-fleet-health.ts), read only when the
+   *     lease is enabled, since the lease and the snapshot go together.
+   * Untrusted means "do not disable anything this tick".
+   */
+  async getAutoDisableDiscoverySignal(
+    options: { maxAgeMs?: number; now?: number } = {}
+  ): Promise<AutoDisableDiscoverySignal> {
+    const maxAgeMs = options.maxAgeMs ?? resolveDiscoverySignalMaxAgeMs();
+    const now = options.now ?? Date.now();
+
+    const local: DiscoverySignalCandidate | null =
+      this.lastCompleteRoundAt === null
+        ? null
+        : {
+            basis: 'local',
+            completedAt: this.lastCompleteRoundAt.getTime(),
+            unhealthyProviders: this.getProvidersWithoutHealthyDiscovery(),
+          };
+
+    const snapshot = isDiscoveryLeaseEnabled() ? await readDiscoveryHealthSnapshot() : null;
+    const fleet: DiscoverySignalCandidate | null =
+      snapshot === null
+        ? null
+        : {
+            basis: 'fleet',
+            completedAt: snapshot.completedAt,
+            unhealthyProviders: snapshot.unhealthyProviders,
+          };
+
+    return decideAutoDisableDiscoverySignal([local, fleet], maxAgeMs, now);
+  }
+
+  /**
+   * After a complete round, shares this process's breaker verdict with the
+   * fleet. Best-effort: publishDiscoveryHealthSnapshot() never throws.
+   */
+  private async publishFleetDiscoveryHealth(
+    results: ModelDiscoveryResult[],
+    leaseEpoch: number | null
+  ): Promise<void> {
+    if (!isCompleteDiscoveryRound(results) || this.lastCompleteRoundAt === null) return;
+    await publishDiscoveryHealthSnapshot({
+      version: 1,
+      completedAt: this.lastCompleteRoundAt.getTime(),
+      unhealthyProviders: Array.from(this.getProvidersWithoutHealthyDiscovery()).sort(),
+      sourcesAttempted: results.length,
+      owner: discoveryHealthOwnerId(),
+      leaseEpoch,
+    });
   }
 
   /**
@@ -1810,7 +1915,19 @@ export class CentralModelDiscoveryService {
         providers: ['huggingface'],
         fetcher: async (): Promise<DiscoveredModel[]> => {
           const { HfHubModelFetcher } = await import('./model-fetchers/hf-hub-model-fetcher.js');
-          const fetcher = new HfHubModelFetcher(process.env.HF_TOKEN);
+          // Resumable-pagination store (2026-09-25/26 incident fix) — see
+          // HfHubPaginationCursorStore's doc. Only this production call site
+          // opts in; every test constructs the fetcher without it and gets
+          // the safe no-op default.
+          const cursorStore = createRedisPaginationCursorStore(() => getQueueRedisClient());
+          const fetcher = new HfHubModelFetcher(
+            process.env.HF_TOKEN,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            cursorStore
+          );
           return await fetcher.getModels();
         },
       });
@@ -2176,7 +2293,7 @@ export class CentralModelDiscoveryService {
               return pinnedModels.map(({ id: modelId, capabilities: declared }) => {
                 const capabilities =
                   declared.length > 0 ? [...declared] : (inferModelCapabilities({ modelId }) ?? []);
-                return {
+                const discovered = {
                   id: modelId,
                   name: modelId,
                   displayName: modelId,
@@ -2195,6 +2312,14 @@ export class CentralModelDiscoveryService {
                     capabilitySource: declared.length > 0 ? 'operator-declared' : 'name-regex',
                   },
                 };
+                // Tier 1 (LOTE AZ, 2026-09-23): for runwayml specifically, attach
+                // schema-sourced metadata.capabilityAttributes.video_generation
+                // here so it's non-empty on every discovery cycle. The existing
+                // bulk-upsert path below already persists `metadata` onto
+                // `Model.metadata` for free — no separate projection/DB-write
+                // step is needed for this tier (Tier 2/3 do need one; that's a
+                // later task).
+                return attachRunwaymlTier1Metadata(providerId, discovered);
               });
             }
 
@@ -2411,6 +2536,46 @@ export class CentralModelDiscoveryService {
     return models;
   }
 
+  /** When this process last finished a balance sweep; null before the first one. */
+  getLastProviderBalanceCheckAt(): Date | null {
+    return this.lastBalanceCheckAt;
+  }
+
+  /**
+   * Refreshes THIS process's provider balance map outside a discovery round.
+   *
+   * The selector reads getModelBalanceStatus() on every request (funding gate
+   * drops `no-credits`, scoring favours `has-credits` over `unknown`), and
+   * the map is per process. It used to be filled only at the end of a
+   * discovery round in the same process. With no boot round on the api
+   * (MODEL_DISCOVERY_RUN_ON_START=false) and one round fleet-wide per tick
+   * (discovery lease), an api task could serve for hours with every provider
+   * `unknown`. The runner calls this at boot and on a timer
+   * (model-discovery-runner.ts, startProviderBalanceRefresh()). It is the
+   * same sweep a round runs: HTTP balance probes with a 5 s timeout each, no
+   * catalog reads (a provider found without credits is persisted by the
+   * operability hub, one small upsert).
+   *
+   * `maxAgeMs`: skip when the last sweep (from a round or an earlier refresh)
+   * is younger than this. Concurrent callers share one sweep. Returns true
+   * when a sweep finished during this call (false when skipped, or when the
+   * sweep could not run, e.g. the provider registry is not initialised yet).
+   */
+  async refreshProviderBalances(options: { maxAgeMs?: number } = {}): Promise<boolean> {
+    const { maxAgeMs } = options;
+    const before = this.lastBalanceCheckAt;
+    if (maxAgeMs !== undefined && before !== null && Date.now() - before.getTime() < maxAgeMs) {
+      return false;
+    }
+    if (!this.balanceRefreshInFlight) {
+      this.balanceRefreshInFlight = this.checkProviderBalances().finally(() => {
+        this.balanceRefreshInFlight = null;
+      });
+    }
+    await this.balanceRefreshInFlight;
+    return this.lastBalanceCheckAt !== before;
+  }
+
   /**
    * Check balance/credits for all registered provider adapters.
    * Best-effort: failures are logged and skipped. Runs in parallel with a timeout.
@@ -2487,6 +2652,7 @@ export class CentralModelDiscoveryService {
       });
 
       await Promise.all(balanceChecks);
+      this.lastBalanceCheckAt = new Date();
 
       const checkedCount = this.providerBalanceStatus.size;
       const noCreditsCount = Array.from(this.providerBalanceStatus.values()).filter(
@@ -2517,11 +2683,24 @@ export class CentralModelDiscoveryService {
    * "models_pkey"` errors on the `uid` field.
    */
   async discoverAllModels(): Promise<ModelDiscoveryResult[]> {
+    const outcome = await this.discoverAllModelsExclusive();
+    return outcome.status === 'completed' ? outcome.results : [];
+  }
+
+  /**
+   * Same round as discoverAllModels(), but tells the caller whether THIS
+   * process ran it. Cross-process exclusion: when the discovery lease is
+   * enabled (discovery-lease.ts; on by default in production) only one
+   * process fleet-wide runs a round at a time, and a caller that finds the
+   * lease taken gets `status: 'skipped'` instead of starting a second
+   * full fan-out against the same database.
+   */
+  async discoverAllModelsExclusive(): Promise<DiscoveryRoundOutcome> {
     if (this.inFlightDiscovery) {
       this.log.debug('discoverAllModels called while another discovery is in-flight — coalescing');
       return this.inFlightDiscovery;
     }
-    this.inFlightDiscovery = this.runDiscoveryRound();
+    this.inFlightDiscovery = this.runLeasedDiscoveryRound();
     try {
       return await this.inFlightDiscovery;
     } finally {
@@ -2529,7 +2708,33 @@ export class CentralModelDiscoveryService {
     }
   }
 
-  private async runDiscoveryRound(): Promise<ModelDiscoveryResult[]> {
+  private async runLeasedDiscoveryRound(): Promise<DiscoveryRoundOutcome> {
+    if (!isDiscoveryLeaseEnabled()) {
+      return { status: 'completed', results: await this.runDiscoveryRound(), leaseEpoch: null };
+    }
+
+    const acquisition = await acquireDiscoveryLease();
+    if (!acquisition.acquired) {
+      this.log.info(
+        { holder: acquisition.holder },
+        'Model discovery round skipped: another process holds the discovery lease'
+      );
+      return { status: 'skipped', reason: 'lease-held', holder: acquisition.holder };
+    }
+
+    const { lease } = acquisition;
+    try {
+      const results = await this.runDiscoveryRound(() => lease.isValid());
+      await this.publishFleetDiscoveryHealth(results, lease.epoch);
+      return { status: 'completed', results, leaseEpoch: lease.epoch };
+    } finally {
+      await lease.release();
+    }
+  }
+
+  private async runDiscoveryRound(
+    canDispatchSource: () => boolean = () => true
+  ): Promise<ModelDiscoveryResult[]> {
     await this.ensureInitialized();
     this.log.info('Starting comprehensive model discovery from all sources');
 
@@ -2537,10 +2742,13 @@ export class CentralModelDiscoveryService {
     const results: ModelDiscoveryResult[] = [];
 
     // Fan-out across sources, capped by default: each source ends in an
-    // interactive bulk-upsert transaction (up to 20 s), and api + worker
-    // both run discovery at boot, so an unbounded fan-out can pin every
-    // pooled backend and starve chat queries (observed in production:
-    // ~95 sources racing a 30-connection prod / 5-connection dev pool).
+    // interactive bulk-upsert transaction (up to 20 s), and a round runs
+    // inside a process that also serves traffic, so an unbounded fan-out can
+    // pin every pooled backend and starve chat queries (observed in
+    // production: ~95 sources racing a 30-connection prod / 5-connection dev
+    // pool; 2026-09-24, two booting api tasks each filling a 100-connection
+    // pool). Production sets 4 explicitly and runs one round fleet-wide at a
+    // time (discovery lease).
     // Default of 4 mirrors this codebase's own documented tolerance for
     // concurrent long-lived background DB workers (see connection-url.ts's
     // DATABASE_CONNECTION_LIMIT comment: "4+ concurrent background workers").
@@ -2554,6 +2762,23 @@ export class CentralModelDiscoveryService {
       async ([sourceName, source]) => {
         const sourceStartTime = Date.now();
 
+        // Fencing: once this process can no longer prove it holds the
+        // discovery lease, it stops starting sources (a newer holder may
+        // already be running its own round). Not a failure of the source,
+        // so no health record is written for it.
+        if (!canDispatchSource()) {
+          return {
+            source: sourceName,
+            provider: source.providers.join(','),
+            modelsDiscovered: 0,
+            modelsUpdated: 0,
+            modelsNew: 0,
+            errors: [DISCOVERY_LEASE_LOST_ERROR],
+            duration: 0,
+            timestamp: new Date(),
+          };
+        }
+
         try {
           this.log.info(
             { source: sourceName, type: source.type },
@@ -2564,9 +2789,20 @@ export class CentralModelDiscoveryService {
           // emits ~58k cursor pages, Bytez ships ~100k in one shot) and need
           // a much longer budget than native_api endpoints. Configurable via
           // env so operators can tighten or extend per environment.
+          //
+          // Raised 120s -> 300s (2026-09-25/26 incident): ~65 pages at HF's
+          // own observed per-page latency left too little margin under any
+          // rate-limiting or network slowness, so this timeout was routinely
+          // cutting the walk short before it reached the end — every run, at
+          // roughly the same page — which is the direct cause of 13k+
+          // huggingface rows never being reconfirmed. This raise reduces how
+          // OFTEN a walk needs to fall back on the new resumable-pagination
+          // cursor (hf-hub-model-fetcher.ts) at all; it does not replace that
+          // fix, since even a generous timeout cannot guarantee completion
+          // under a genuine provider-side slowdown.
           const timeoutMs =
             source.type === 'aggregator'
-              ? Number(process.env.AGGREGATOR_DISCOVERY_TIMEOUT_MS || '120000')
+              ? Number(process.env.AGGREGATOR_DISCOVERY_TIMEOUT_MS || '300000')
               : Number(process.env.NATIVE_DISCOVERY_TIMEOUT_MS || '10000');
           const timeoutPromise = new Promise<never>((_, reject) => {
             setTimeout(
@@ -2651,6 +2887,13 @@ export class CentralModelDiscoveryService {
           this.recordSourceFailure(result.source, 'Zero models returned (empty API key?)', true);
         }
       }
+    }
+
+    // Per-source health is final at this point. Only a round that dispatched
+    // every source makes it a verdict on every provider (see
+    // getAutoDisableDiscoverySignal()).
+    if (isCompleteDiscoveryRound(discoveryResults)) {
+      this.lastCompleteRoundAt = new Date();
     }
 
     // Registra estatísticas no banco

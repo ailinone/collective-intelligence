@@ -161,6 +161,17 @@ export class OrganizationAggregate {
       }
     }
 
+    // Business rule: Cannot remove last owner. `isAdmin()` above only matches
+    // UserRole.ADMIN, so a member declared UserRole.OWNER (mirrored from the
+    // authoritative `user_roles` grant onto `users.role`, see rbac-service's
+    // updatePrimaryRole) was previously unprotected here.
+    if (member.isOwner()) {
+      const ownerCount = Array.from(this.members.values()).filter((m) => m.isOwner()).length;
+      if (ownerCount <= 1) {
+        throw new Error('Cannot remove last owner from organization');
+      }
+    }
+
     // Remove from aggregate
     this.members.delete(userId);
 

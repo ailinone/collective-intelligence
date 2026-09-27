@@ -14,7 +14,7 @@
 
 import type { FastifyInstance } from 'fastify';
 import { container } from 'tsyringe';
-import { authenticate, requireRole } from '@/middleware/auth-middleware';
+import { authenticate, requireRole, requirePlatformAdmin } from '@/middleware/auth-middleware';
 import { requirePermission } from '@/middleware/require-permission-middleware';
 import type { ExtendedFastifyRequest } from '@/types/fastify-extended';
 import { TierLevel } from '@/domain/value-objects/organization-tier';
@@ -62,9 +62,17 @@ export async function organizationRoutesClean(server: FastifyInstance): Promise<
     '/v1/organizations',
     {
       onRequest: [authenticate],
+      // SECURITY: this endpoint pages/filters across every organization on
+      // the platform (limit/offset/tier) -- it is a platform-wide listing
+      // capability, not a "list my own org" endpoint (a tenant only ever has
+      // one org). Gate it the same way as other platform-wide-scope admin
+      // endpoints (see routes/admin/*) instead of leaving it open to any
+      // authenticated tenant user, which would leak every tenant's org
+      // name/tier/status/createdAt.
+      preHandler: [requirePlatformAdmin()],
       schema: {
         tags: ['Organizations'],
-        description: 'List organizations',
+        description: 'List organizations (platform admin only)',
         security: [{ bearerAuth: [] }],
         querystring: {
           type: 'object',

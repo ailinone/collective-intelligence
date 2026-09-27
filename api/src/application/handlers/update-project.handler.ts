@@ -58,6 +58,15 @@ export class UpdateProjectHandler {
         };
       }
 
+      // Permission model: admin OR creator can update (see file header).
+      if (!command.requesterIsAdmin && project.createdBy !== command.requesterUserId) {
+        return {
+          success: false,
+          error: 'only the project creator or an admin can update this project',
+          errorCode: 'forbidden',
+        };
+      }
+
       // Apply updates. Entity invariants enforce length caps + throw on bad input.
       try {
         if (command.name !== undefined) {

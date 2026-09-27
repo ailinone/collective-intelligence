@@ -72,6 +72,25 @@ export class RemoveOrganizationMemberHandler {
         };
       }
 
+      // SECURITY (privilege escalation): the route's preHandler only proves the
+      // actor holds `users:role_assign`, which a plain 'admin' has -- nothing
+      // there stops an admin removing a strictly higher-ranked 'owner'. Mirror
+      // the hierarchy check `authorizeRoleChange` applies for role/status
+      // changes in user-management-routes.ts: compare rank from the
+      // AUTHORITATIVE `user_roles` grants, not the declared `users.role` hint.
+      const { getUserRoles, roleSetRank } = await import('@/services/rbac-service');
+      const [actorRoles, targetRoles] = await Promise.all([
+        getUserRoles(command.requesterUserId, command.organizationId),
+        getUserRoles(command.memberId, command.organizationId),
+      ]);
+      if (roleSetRank(targetRoles) > roleSetRank(actorRoles)) {
+        return {
+          success: false,
+          errorCode: 'forbidden',
+          error: 'Cannot remove a member who outranks you',
+        };
+      }
+
       const aggregate = await this.organizationRepository.findAggregateById(command.organizationId);
 
       if (!aggregate) {

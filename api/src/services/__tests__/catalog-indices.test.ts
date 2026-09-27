@@ -28,6 +28,7 @@
  * model-catalog-service-fleet-cache.test.ts for exactly this module.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { runCatalogPublishScript } from './fake-catalog-redis';
 
 const findManyMock = vi.fn();
 
@@ -44,9 +45,13 @@ const redisSet = vi.fn(async (key: string, value: string) => {
   return 'OK';
 });
 const redisDel = vi.fn(async (key: string) => (fakeRedisStore.delete(key) ? 1 : 0));
+// Conditional publish (catalog-snapshot-publisher.ts): staging SET + one EVAL.
+const redisEval = vi.fn(async (script: unknown, numKeys: unknown, ...args: unknown[]) =>
+  runCatalogPublishScript(fakeRedisStore, script, numKeys, ...args)
+);
 
 vi.mock('@/cache/redis-client', () => ({
-  getRedisClient: () => ({ get: redisGet, set: redisSet, del: redisDel }),
+  getRedisClient: () => ({ get: redisGet, set: redisSet, del: redisDel, eval: redisEval }),
 }));
 
 function makeRecord(

@@ -29,10 +29,18 @@ import {
   assertArgAllowed,
   assertCommandAllowed,
   isAgentsEnabled,
+  isCodeExecutionSandboxEnabled,
   isComputerUseEnabled,
   isMcpClientEnabled,
+  isSupportedCodeExecutionLanguage,
+  listCodeExecutionLanguages,
   resolveAgentLimits,
+  resolveCodeExecutionAllowlist,
+  resolveCodeExecutionArgs,
+  resolveCodeExecutionCommand,
+  resolveCodeExecutionImage,
   resolveCommandAllowlist,
+  resolveMaxCodeExecutionBytes,
   resolveNetworkMode,
   resolveSandboxLimits,
   resolveScopedPath,
@@ -43,6 +51,10 @@ const ENV_KEYS = [
   'AGENTIC_COMPUTER_USE_ENABLED',
   'AGENTIC_AGENTS_ENABLED',
   'MCP_CLIENT_ENABLED',
+  'CODE_EXECUTION_SANDBOX_ENABLED',
+  'CODE_EXECUTION_PYTHON_IMAGE',
+  'CODE_EXECUTION_NODE_IMAGE',
+  'CODE_EXECUTION_MAX_SOURCE_BYTES',
   'SANDBOX_COMMAND_ALLOWLIST',
   'SANDBOX_NETWORK_MODE',
   'SANDBOX_MEMORY_MB',
@@ -309,5 +321,134 @@ describe('limit clamping — an operator cannot configure the limits away', () =
   it('never runs the container as root by default', () => {
     expect(resolveSandboxLimits().user).not.toBe('0:0');
     expect(resolveSandboxLimits().user).toBe('65534:65534');
+  });
+});
+
+// ── ADR-026: code execution ─────────────────────────────────────────────
+
+describe('code execution flag — off by default, same strict-opt-in convention', () => {
+  it('defaults to disabled', () => {
+    expect(isCodeExecutionSandboxEnabled()).toBe(false);
+  });
+
+  it('enables only on the exact string "true"', () => {
+    for (const value of ['1', 'yes', 'TRUE', 'True', 'on', 'enabled', '']) {
+      process.env.CODE_EXECUTION_SANDBOX_ENABLED = value;
+      expect(isCodeExecutionSandboxEnabled(), `'${value}' must not enable it`).toBe(false);
+    }
+    process.env.CODE_EXECUTION_SANDBOX_ENABLED = 'true';
+    expect(isCodeExecutionSandboxEnabled()).toBe(true);
+  });
+
+  it('is independent of the three ADR-024 flags — none of them enable it, and it does not enable them', () => {
+    process.env.AGENTIC_COMPUTER_USE_ENABLED = 'true';
+    process.env.AGENTIC_AGENTS_ENABLED = 'true';
+    process.env.MCP_CLIENT_ENABLED = 'true';
+    expect(isCodeExecutionSandboxEnabled()).toBe(false);
+
+    delete process.env.AGENTIC_COMPUTER_USE_ENABLED;
+    delete process.env.AGENTIC_AGENTS_ENABLED;
+    delete process.env.MCP_CLIENT_ENABLED;
+    process.env.CODE_EXECUTION_SANDBOX_ENABLED = 'true';
+    expect(isComputerUseEnabled()).toBe(false);
+    expect(isAgentsEnabled()).toBe(false);
+    expect(isMcpClientEnabled()).toBe(false);
+  });
+});
+
+describe('code execution — supported languages', () => {
+  it('supports exactly python and javascript, nothing else', () => {
+    expect(listCodeExecutionLanguages().sort()).toEqual(['javascript', 'python']);
+    expect(isSupportedCodeExecutionLanguage('python')).toBe(true);
+    expect(isSupportedCodeExecutionLanguage('javascript')).toBe(true);
+    for (const bogus of ['ruby', 'go', 'java', 'bash', 'sh', 'perl', '', 'Python', 'PYTHON']) {
+      expect(isSupportedCodeExecutionLanguage(bogus), `'${bogus}' must not be supported`).toBe(
+        false
+      );
+    }
+  });
+
+  it('maps each language to its own bare interpreter command', () => {
+    expect(resolveCodeExecutionCommand('python')).toBe('python3');
+    expect(resolveCodeExecutionCommand('javascript')).toBe('node');
+  });
+
+  it('reads the program from stdin via a fixed, non-caller-controlled "-" argv', () => {
+    expect(resolveCodeExecutionArgs('python')).toEqual(['-']);
+    expect(resolveCodeExecutionArgs('javascript')).toEqual(['-']);
+  });
+
+  it('scopes the allowlist to exactly one command per language', () => {
+    const pythonAllowlist = resolveCodeExecutionAllowlist('python');
+    expect(pythonAllowlist.size).toBe(1);
+    expect(pythonAllowlist.has('python3')).toBe(true);
+    expect(pythonAllowlist.has('node')).toBe(false);
+
+    const jsAllowlist = resolveCodeExecutionAllowlist('javascript');
+    expect(jsAllowlist.size).toBe(1);
+    expect(jsAllowlist.has('node')).toBe(true);
+    expect(jsAllowlist.has('python3')).toBe(false);
+  });
+
+  it('the computer_use default allowlist is UNCHANGED — still excludes every interpreter', () => {
+    // The regression this guards: adding code-execution support must not
+    // widen the shared allowlist computer_use's shell tool consults.
+    for (const command of ['python3', 'python', 'node', 'sh', 'bash']) {
+      expect(
+        resolveCommandAllowlist().has(command),
+        `'${command}' must still be absent from the SHARED default allowlist`
+      ).toBe(false);
+    }
+  });
+
+  it('defaults to a minimal, pinned image per language and honours an operator override', () => {
+    expect(resolveCodeExecutionImage('python')).toBe('python:3.12-alpine');
+    expect(resolveCodeExecutionImage('javascript')).toBe('node:20-alpine');
+
+    process.env.CODE_EXECUTION_PYTHON_IMAGE = 'python:3.11-slim';
+    expect(resolveCodeExecutionImage('python')).toBe('python:3.11-slim');
+    // The other language's image is unaffected by the first's override.
+    expect(resolveCodeExecutionImage('javascript')).toBe('node:20-alpine');
+  });
+});
+
+describe('code execution — source-size ceiling', () => {
+  it('defaults to a bounded ceiling and clamps operator configuration into range', () => {
+    expect(resolveMaxCodeExecutionBytes()).toBe(200_000);
+
+    process.env.CODE_EXECUTION_MAX_SOURCE_BYTES = '999999999';
+    expect(resolveMaxCodeExecutionBytes()).toBe(2_000_000);
+
+    process.env.CODE_EXECUTION_MAX_SOURCE_BYTES = '0';
+    expect(resolveMaxCodeExecutionBytes()).toBe(1_000);
+  });
+});
+
+describe('assertCommandAllowed — per-call allowlist override (ADR-026)', () => {
+  it('honours a caller-supplied allowlist instead of the shared default', () => {
+    // 'python3' is refused against the shared default (see the "rejects
+    // network clients, shells and interpreters by default" test above) but
+    // permitted against code execution's own one-command allowlist.
+    expect(() => assertCommandAllowed('python3')).toThrow(SandboxPolicyError);
+    expect(() => assertCommandAllowed('python3', new Set(['python3']))).not.toThrow();
+  });
+
+  it('a language-scoped allowlist still refuses every OTHER command, including the other language', () => {
+    const pythonOnly = resolveCodeExecutionAllowlist('python');
+    expect(() => assertCommandAllowed('node', pythonOnly)).toThrow(SandboxPolicyError);
+    expect(() => assertCommandAllowed('sh', pythonOnly)).toThrow(SandboxPolicyError);
+    expect(() => assertCommandAllowed('cat', pythonOnly)).toThrow(SandboxPolicyError);
+  });
+
+  it('still rejects a path or shell metacharacters even against a permissive override', () => {
+    const permissive = new Set(['python3', 'sh']);
+    expect(() => assertCommandAllowed('/bin/python3', permissive)).toThrow(SandboxPolicyError);
+    expect(() => assertCommandAllowed('python3;sh', permissive)).toThrow(SandboxPolicyError);
+  });
+
+  it('with no override, still reads the shared resolveCommandAllowlist() per call (unchanged default behaviour)', () => {
+    process.env.SANDBOX_COMMAND_ALLOWLIST = 'cat';
+    expect(() => assertCommandAllowed('cat')).not.toThrow();
+    expect(() => assertCommandAllowed('ls')).toThrow(SandboxPolicyError);
   });
 });

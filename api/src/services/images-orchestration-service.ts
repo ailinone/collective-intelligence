@@ -42,6 +42,10 @@ import {
   type CandidateAttempt,
 } from '@/core/orchestration/execute-with-fallback';
 import { getImageCandidateJudge, type ImageJudgeVerdict } from '@/services/image-candidate-judge';
+import { PROVIDER_CATALOG } from '@/providers/catalog/providers.catalog';
+import type { ProviderCatalogEntry } from '@/providers/catalog/provider-catalog.types';
+import { canSatisfyCapabilityAttributes } from '@/providers/catalog/capability-attribute-matcher';
+import { parseDimensions } from '@/providers/catalog/image-capability-matcher';
 
 const log = logger.child({ service: 'images-orchestration' });
 
@@ -220,6 +224,23 @@ export class ImagesOrchestrationService {
     this.getRegistry = getProviderRegistry;
   }
 
+  /**
+   * Catalog entries by providerId — data lookup for the attribute-aware
+   * pre-filter below. Mirrors video-orchestration-service.ts's
+   * `catalogByProviderId`/`getCatalogEntry` pattern. Built lazily once; the
+   * catalog is a static import (data, not behavior), so no invalidation is
+   * needed within a process lifetime.
+   */
+  private catalogByProviderId: Map<string, ProviderCatalogEntry> | null = null;
+
+  private getCatalogEntry(providerId: string | undefined): ProviderCatalogEntry | undefined {
+    if (!providerId) return undefined;
+    if (!this.catalogByProviderId) {
+      this.catalogByProviderId = new Map(PROVIDER_CATALOG.map((e) => [e.providerId, e]));
+    }
+    return this.catalogByProviderId.get(providerId);
+  }
+
   // ============================================
   // Public API
   // ============================================
@@ -260,9 +281,13 @@ export class ImagesOrchestrationService {
       'Image generation orchestration started'
     );
 
+    const requestedDimensions = parseDimensions(size);
     const catalogRows = await this.resolveImageCatalog(
       ['image_generation' as ModelCapability],
-      model
+      model,
+      requestedDimensions
+        ? { width: requestedDimensions.width, height: requestedDimensions.height }
+        : undefined
     );
     // Strategy-major within-tier ordering, then parameter-bonus, then provider
     // diversification. The primitive's tier sort runs on top with stable
@@ -553,9 +578,13 @@ export class ImagesOrchestrationService {
     // because some providers tag generation models as edit-capable. The two
     // catalog searches are independent — run them concurrently instead of one
     // round-trip after another (cache-miss otherwise pays 2x the wait).
+    const requestedDimensions = parseDimensions(size);
     const merged = await this.resolveImageCatalog(
       ['image_editing' as ModelCapability, 'image_generation' as ModelCapability],
-      model
+      model,
+      requestedDimensions
+        ? { width: requestedDimensions.width, height: requestedDimensions.height }
+        : undefined
     );
     const ranked = this.sortModelsByStrategy(merged, strategyUsed, userContext);
     const preRanked = diversifyProviders(ranked);
@@ -752,14 +781,24 @@ export class ImagesOrchestrationService {
    * resolved by direct id/name lookup, and the automatic pool reaches the
    * whole catalog. How many candidates get TRIED stays governed by the
    * fallback time budget — never by what is allowed into the pool.
+   *
+   * `attributeRequest` (LOTE AZ, 2026-09-23): additive attribute-aware
+   * pre-filter, mirroring video-orchestration-service.ts's
+   * `canSatisfyVideoAttributes` wiring. A candidate whose DECLARED image
+   * capabilityAttributes conflict with the request is excluded from the
+   * AUTOMATIC pool only; a candidate with no declared attributes is NOT
+   * excluded (fail-open — see canSatisfyImageAttributes's contract).
    */
   private async resolveImageCatalog(
     capabilities: ModelCapability[],
-    explicit: string | undefined
+    explicit: string | undefined,
+    attributeRequest?: { width?: number; height?: number; format?: string }
   ): Promise<Model[]> {
     if (explicit && explicit !== 'auto') {
       // Returns EVERY provider row carrying this id, so fallback can cross
-      // providers of the same model.
+      // providers of the same model. Explicit model references bypass the
+      // attribute pre-filter, same as video's explicit path — an operator
+      // naming a model directly is trusted to know what it can do.
       const rows = await this.modelRepo.findModelsByIdOrName(explicit);
       return rows.filter((m) => capabilities.some((c) => (m.capabilities ?? []).includes(c)));
     }
@@ -768,7 +807,39 @@ export class ImagesOrchestrationService {
       capabilities.map((c) => this.modelRepo.searchModelsComplete({ capabilities: [c], status: 'active' }))
     );
     // De-duplicate across capabilities while preserving repository order.
-    return Array.from(new Map(pools.flat().map((m) => [`${m.provider}:${m.id}`, m])).values());
+    const deduped = Array.from(new Map(pools.flat().map((m) => [`${m.provider}:${m.id}`, m])).values());
+
+    if (!attributeRequest) return deduped;
+    return deduped.filter((model) => {
+      // Evaluate only the capability(ies) BOTH requested AND actually
+      // declared by this model's own `capabilities` array — not the full
+      // requested-capabilities array. `editImage` requests
+      // ['image_editing', 'image_generation']; a model that only declares
+      // one of the two must be judged on THAT one alone. Blindly `.some()`-
+      // ing across the full requested list let a violation on the model's
+      // own declared capability be masked by the OTHER, irrelevant
+      // capability being undeclared for it (undeclared attrs fail-open) —
+      // e.g. an image_generation-only model with a maxDimensions ceiling
+      // smaller than the request stayed in the pool because image_editing
+      // (checked first) was undeclared and fail-opened before
+      // image_generation's real violation was ever evaluated.
+      const relevantCapabilities = capabilities.filter((c) =>
+        (model.capabilities ?? []).includes(c)
+      );
+      // A model matching NONE of the requested capabilities is a pre-
+      // existing capability-matching concern (handled upstream, by the
+      // capability search itself) — this filter must not change that
+      // behavior either way, so an empty intersection passes through
+      // (`every` on an empty array is vacuously true) rather than being
+      // excluded here as an attribute violation it never actually had.
+      return relevantCapabilities.every((capability) =>
+        canSatisfyCapabilityAttributes(
+          capability,
+          this.getCatalogEntry(model.provider)?.capabilityAttributes?.[capability],
+          attributeRequest
+        )
+      );
+    });
   }
 
   // ============================================

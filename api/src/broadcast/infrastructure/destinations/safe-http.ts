@@ -93,16 +93,32 @@ export class EgressBlockedError extends Error {
 export function isForbiddenIp(ip: string): boolean {
   // IPv6 — handle first because IPv4-mapped addresses come as ::ffff:1.2.3.4
   if (ip.includes(':')) {
-    const lower = ip.toLowerCase();
-    if (lower === '::' || lower === '::1') return true; // unspecified, loopback
-    if (lower.startsWith('fe80:')) return true; // link-local
-    if (lower.startsWith('fc') || lower.startsWith('fd')) return true; // ULA
-    if (lower.startsWith('ff')) return true; // multicast
-    // IPv4-mapped: ::ffff:a.b.c.d — extract and re-check
-    const mapped = lower.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/);
-    if (mapped) return isForbiddenIp(mapped[1]!);
-    // Known cloud metadata over IPv6 (GCP + AWS IMDSv2 IPv6)
-    if (lower === 'fd00:ec2::254') return true;
+    // Parse into 8 numeric hextets instead of matching string prefixes: the
+    // WHATWG URL parser canonicalizes `[::ffff:169.254.169.254]` to
+    // `[::ffff:a9fe:a9fe]` (hex, no dotted quad), which a dotted-only regex
+    // would miss, letting a literal-IP URL or a redirect hop reach loopback,
+    // RFC1918, or cloud metadata over an IPv4-mapped socket.
+    const groups = parseIpv6(ip);
+    if (!groups) return true; // malformed: fail closed
+    const [g0 = 0, g1 = 0, g2 = 0, g3 = 0, g4 = 0, g5 = 0, g6 = 0, g7 = 0] = groups;
+    const embeddedV4 = `${g6 >> 8}.${g6 & 0xff}.${g7 >> 8}.${g7 & 0xff}`;
+    const upperZero = g0 === 0 && g1 === 0 && g2 === 0 && g3 === 0;
+    if (upperZero && g4 === 0 && g5 === 0 && g6 === 0 && (g7 === 0 || g7 === 1)) {
+      return true; // unspecified (::) and loopback (::1)
+    }
+    // IPv4-mapped ::ffff:a.b.c.d (any textual form): re-check the IPv4.
+    if (upperZero && g4 === 0 && g5 === 0xffff) return isForbiddenIp(embeddedV4);
+    // IPv4-translated ::ffff:0:a.b.c.d and deprecated IPv4-compatible ::a.b.c.d.
+    if (upperZero && g4 === 0xffff && g5 === 0) return isForbiddenIp(embeddedV4);
+    if (upperZero && g4 === 0 && g5 === 0) return isForbiddenIp(embeddedV4);
+    // NAT64 well-known (64:ff9b::/96) and local-use (64:ff9b:1::/48) prefixes.
+    if (g0 === 0x64 && g1 === 0xff9b && (g2 === 0 || g2 === 1)) {
+      return isForbiddenIp(embeddedV4);
+    }
+    if ((g0 & 0xfe00) === 0xfc00) return true; // ULA fc00::/7 (incl. fd00:ec2::254)
+    if ((g0 & 0xffc0) === 0xfe80) return true; // link-local fe80::/10
+    if ((g0 & 0xffc0) === 0xfec0) return true; // deprecated site-local fec0::/10
+    if ((g0 & 0xff00) === 0xff00) return true; // multicast ff00::/8
     return false;
   }
 
@@ -124,6 +140,44 @@ export function isForbiddenIp(ip: string): boolean {
   if (a >= 224 && a <= 239) return true; // multicast /4 (224.0.0.0/4)
   if (a >= 240) return true; // reserved + broadcast
   return false;
+}
+
+/**
+ * Expand any textual IPv6 form (compressed `::`, leading zeros, embedded
+ * dotted-quad tail, optional `%zone`) into its 8 hextets. Returns null for
+ * anything malformed so the caller can fail closed.
+ */
+function parseIpv6(raw: string): number[] | null {
+  let s = raw.toLowerCase();
+  const zone = s.indexOf('%');
+  if (zone !== -1) s = s.slice(0, zone);
+
+  const lastColon = s.lastIndexOf(':');
+  const tail = s.slice(lastColon + 1);
+  if (tail.includes('.')) {
+    const octets = tail.split('.');
+    if (octets.length !== 4 || octets.some((o) => !/^\d{1,3}$/.test(o) || Number(o) > 255)) {
+      return null;
+    }
+    const [a, b, c, d] = octets.map(Number) as [number, number, number, number];
+    s = `${s.slice(0, lastColon + 1)}${((a << 8) | b).toString(16)}:${((c << 8) | d).toString(16)}`;
+  }
+
+  const halves = s.split('::');
+  if (halves.length > 2) return null;
+  const split = (part: string): string[] => (part === '' ? [] : part.split(':'));
+  const head = split(halves[0]!);
+  let parts: string[];
+  if (halves.length === 2) {
+    const rest = split(halves[1]!);
+    const missing = 8 - head.length - rest.length;
+    if (missing < 1) return null;
+    parts = [...head, ...Array<string>(missing).fill('0'), ...rest];
+  } else {
+    parts = head;
+  }
+  if (parts.length !== 8 || parts.some((p) => !/^[0-9a-f]{1,4}$/.test(p))) return null;
+  return parts.map((p) => parseInt(p, 16));
 }
 
 // ─── URL validation ─────────────────────────────────────────────────────

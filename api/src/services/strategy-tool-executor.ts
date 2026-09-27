@@ -22,7 +22,8 @@
 import type { ToolCall } from '@/types';
 import type { ToolResult, ToolExecutionContext } from '@/services/advanced-tool-execution-service';
 import type { Logger } from 'pino';
-import { toolRegistry } from '@/core/tools/tool-registry';
+import { toolRegistry, isBlockedFromStrategyAutoExecution } from '@/core/tools/tool-registry';
+import { getToolsBaseDir } from '@/utils/tools-workspace-guard';
 
 interface ParsedStrategyToolCall {
   functionName: string;
@@ -69,8 +70,19 @@ function parseStrategyToolCall(
     };
   }
 
+  // SECURITY (2026-09-25, issue #664 finding 2): callers in this file's own
+  // strategy loop (base-strategy.ts, agentic-strategy.ts's planner steps)
+  // pass NO context, so this used to fall back to the bare API process's
+  // `process.cwd()` — the container's own source tree, not a tenant
+  // workspace. `getToolsBaseDir()` is the SAME server-controlled base
+  // `/v1/tools/*` (tools-routes.ts) and the chat-completions auto-dispatch
+  // path (chat-request-processor.ts's resolveWorkingDirectory) already trust
+  // for this exact purpose — it only narrows the default when an operator
+  // configures TOOLS_BASE_DIR, and is a no-op (still `process.cwd()`) when
+  // unconfigured, so this changes nothing for a deployment without that env
+  // var set.
   const execContext: ToolExecutionContext = {
-    workingDirectory: context?.workingDirectory || process.cwd(),
+    workingDirectory: context?.workingDirectory || getToolsBaseDir(),
     log,
     organizationId: context?.organizationId,
     userId: context?.userId,
@@ -99,6 +111,26 @@ export async function executeToolForStrategy(
       tool_call_id: toolCall.id,
       success: false,
       error: 'Tool registry not yet initialized.',
+    };
+  }
+
+  // SECURITY (2026-09-24): defense-in-depth for layer 1 of the #653 fix.
+  // `executeModelWithTools` already hands such calls back to the caller before
+  // reaching here; this also covers callers with no caller to hand back to,
+  // e.g. agentic-strategy's planner `tool_call` steps, whose tool name comes
+  // from an LLM the tenant's prompt steers (the planner prompt even suggests
+  // write_file). Same shared rule, so the refusal is an error result.
+  if (
+    isBlockedFromStrategyAutoExecution(parsed.functionName, toolRegistry.get(parsed.functionName))
+  ) {
+    log.warn(
+      { toolName: parsed.functionName },
+      'Refusing strategy execution of a tenant-unsafe tool'
+    );
+    return {
+      tool_call_id: toolCall.id,
+      success: false,
+      error: `Tool "${parsed.functionName}" is not permitted for automatic server-side execution on a chat request (filesystem-mutating or SSRF-capable). Use the /v1/tools/* API (admin/owner) instead.`,
     };
   }
 

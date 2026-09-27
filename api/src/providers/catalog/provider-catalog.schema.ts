@@ -171,6 +171,10 @@ export const ProviderSupportsSchema = z
 
 // ─── Video capability attributes (LOTE AS, 2026-09-06) ──────────────────────
 
+// ─── Capability attribute source tier (LOTE AZ, 2026-09-23) ─────────────────
+
+const CapabilityAttributeSourceSchema = z.enum(['schema', 'probed', 'llm_draft', 'human']);
+
 /**
  * Mirrors `VideoCapabilityAttributes` in provider-catalog.types.ts. Every
  * field is optional — absence means "undocumented", never "unsupported".
@@ -187,6 +191,51 @@ export const VideoCapabilityAttributesSchema = z
       .string()
       .regex(/^\d{4}-\d{2}-\d{2}$/, 'attributesVerifiedAt must be ISO date (YYYY-MM-DD)')
       .optional(),
+    source: CapabilityAttributeSourceSchema.optional(),
+  })
+  .strict();
+
+/** Mirrors `ImageCapabilityAttributes` in provider-catalog.types.ts. */
+export const ImageCapabilityAttributesSchema = z
+  .object({
+    maxDimensions: z.string().min(1).max(24).optional(),
+    minDimensions: z.string().min(1).max(24).optional(),
+    supportedFormats: z.array(z.string().min(1).max(16)).min(1).max(16).optional(),
+    attributesVerifiedAt: z
+      .string()
+      .regex(/^\d{4}-\d{2}-\d{2}$/, 'attributesVerifiedAt must be ISO date (YYYY-MM-DD)')
+      .optional(),
+    source: CapabilityAttributeSourceSchema.optional(),
+  })
+  .strict();
+
+/** Mirrors `DocumentCapabilityAttributes` in provider-catalog.types.ts. */
+export const DocumentCapabilityAttributesSchema = z
+  .object({
+    maxPages: z.number().int().positive().max(100_000).optional(),
+    attributesVerifiedAt: z
+      .string()
+      .regex(/^\d{4}-\d{2}-\d{2}$/, 'attributesVerifiedAt must be ISO date (YYYY-MM-DD)')
+      .optional(),
+    source: CapabilityAttributeSourceSchema.optional(),
+  })
+  .strict();
+
+/**
+ * Generic per-entry map, keyed by `ModelCapability` string. Not modeled as a
+ * true discriminated union keyed off a `kind` tag — the map KEY is the
+ * discriminant (`video_generation` -> video shape, etc.) — so this uses a
+ * permissive per-key union and relies on callers keying correctly, mirroring
+ * `ProviderCatalogEntry.capabilityAttributes`'s TS shape (`Partial<Record<...>>`).
+ * Zod has no native "validate value shape based on sibling key name" — this
+ * is intentionally checked defensively per known key instead.
+ */
+export const CapabilityAttributesEntrySchema = z
+  .object({
+    video_generation: VideoCapabilityAttributesSchema.optional(),
+    image_generation: ImageCapabilityAttributesSchema.optional(),
+    image_editing: ImageCapabilityAttributesSchema.optional(),
+    pdf_understanding: DocumentCapabilityAttributesSchema.optional(),
   })
   .strict();
 
@@ -283,7 +332,7 @@ export const ProviderCatalogEntrySchema = z
     // Capabilities
     supports: ProviderSupportsSchema,
     capabilityHints: z.array(CapabilityHintSchema).max(32).optional(),
-    videoCapabilityAttributes: VideoCapabilityAttributesSchema.optional(),
+    capabilityAttributes: CapabilityAttributesEntrySchema.optional(),
 
     // Pricing
     pricingMode: PricingModeSchema,

@@ -31,12 +31,14 @@ import type { OrchestrationEngine } from '@/core/orchestration/orchestration-eng
 import type { ChatRequestWithMetadata } from '@/types/chat-request-extended';
 import { isChatRequestWithMetadata, getTaskType } from '@/types/chat-request-extended';
 import { narrowAs } from '@/utils/type-guards';
+import { CHAT_AUTO_EXECUTE_BLOCKED_TOOLS } from '@/core/tools/tool-registry';
 import { getToolsBaseDir, clampWorkingDirectory } from '@/utils/tools-workspace-guard';
 import { getRequestLogger } from '@/services/request-logger';
 import { sanitizeForPromptContext } from '@/core/coordination/collective-prompt-safety';
 import { getCacheService } from '@/cache/cache-service';
 import { trackChatUsage } from '@/services/billing-usage-tracker';
 import { applyBranding } from '@/utils/branding';
+import { config } from '@/config';
 import { VideoOrchestrationService } from '@/services/video-orchestration-service';
 import { extractVideoGenerationSpec } from '@/core/orchestration/media-generation-spec';
 import { createCapabilityInvoker } from '@/core/orchestration/capability-invoker';
@@ -838,11 +840,18 @@ async function executeToolCallsAutomatically(
   const { toolRegistry } = await import('@/core/tools/tool-registry');
   const serverOwnsEveryToolCall =
     toolRegistry.isInitialized() &&
-    toolCalls.every(
-      (toolCall) =>
-        !CHAT_AUTO_EXECUTE_BLOCKED_TOOLS.has(toolCall.function?.name ?? '') &&
-        toolRegistry.get(toolCall.function?.name ?? '')?.safeForStrategies === true
-    );
+    toolCalls.every((toolCall) => {
+      const calledName = toolCall.function?.name ?? '';
+      const reg = toolRegistry.get(calledName);
+      // Resolve through the registry to the tool's CANONICAL name before
+      // checking the blocklist — a blocked tool reached via one of its
+      // `aliases` (e.g. grep_search's `grep_tool`/`grep`) must not slip past
+      // a check keyed only on the exact incoming name.
+      const isBlocked =
+        CHAT_AUTO_EXECUTE_BLOCKED_TOOLS.has(calledName) ||
+        (reg !== undefined && CHAT_AUTO_EXECUTE_BLOCKED_TOOLS.has(reg.name));
+      return !isBlocked && reg?.safeForStrategies === true;
+    });
   if (!serverOwnsEveryToolCall) {
     log.info(
       { toolCallCount: toolCalls.length },
@@ -1054,31 +1063,11 @@ function resolvePathWithinWorkspace(workingDirectory: string, targetPath: string
   return normalizedTarget;
 }
 
-// SECURITY (2026-07-29): tools whose own registration marks them unsafe for
-// unattended execution (`safeForStrategies: false` in registerToolsInRegistry
-// below) must never run through chat completions' automatic tool_calls loop —
-// that surface authenticates any tenant API key with no role check, unlike
-// the admin/owner-gated `/v1/tools/*` routes these operations were designed
-// for. Mirrors the registry's own safeForStrategies flags; kept as an
-// explicit list (rather than only relying on executeForStrategy() below) so
-// the pre-registry-boot switch fallback further down is covered too, since it
-// has no registration object to consult.
-export const CHAT_AUTO_EXECUTE_BLOCKED_TOOLS = new Set([
-  'run_command',
-  'delete_file',
-  'git_commit',
-  'git_push',
-  'git_pull',
-  'git_create_branch',
-  'git_merge',
-  'git_rebase',
-  'git_resolve_conflict',
-  'todo_write',
-  'create_todo',
-  'update_todo',
-  'execute_workflow',
-  'register_workflow',
-]);
+// The unsafe-tool blocklist lives in tool-registry.ts so this post-orchestration
+// auto-dispatch (layer 2) and the strategies' own tool loop (layer 1,
+// base-strategy.ts `executeModelWithTools`) read the SAME list. Re-exported
+// here for existing importers.
+export { CHAT_AUTO_EXECUTE_BLOCKED_TOOLS };
 
 /**
  * Execute tool calls with actual tool implementations
@@ -1094,7 +1083,18 @@ export async function executeRealTool(
 
   log.info({ toolName: name, args }, 'Executing real tool');
 
-  if (CHAT_AUTO_EXECUTE_BLOCKED_TOOLS.has(name)) {
+  // Resolve through the registry to the tool's CANONICAL name before
+  // checking the blocklist — a blocked tool reached via one of its
+  // `aliases` (e.g. grep_search's `grep_tool`/`grep`) must not slip past a
+  // check keyed only on the exact incoming name (mirrors
+  // isBlockedFromStrategyAutoExecution's own reg.name fallback, layer 1).
+  const { toolRegistry } = await import('@/core/tools/tool-registry');
+  const registrationForName = toolRegistry.get(name);
+  const isBlockedByName =
+    CHAT_AUTO_EXECUTE_BLOCKED_TOOLS.has(name) ||
+    (registrationForName !== undefined &&
+      CHAT_AUTO_EXECUTE_BLOCKED_TOOLS.has(registrationForName.name));
+  if (isBlockedByName) {
     log.warn({ toolName: name }, 'Blocked unsafe tool from automatic chat execution');
     return {
       tool_call_id: toolCall.id,
@@ -1112,7 +1112,6 @@ export async function executeRealTool(
     // safeForStrategies:false — even one not yet added to the blocklist
     // above — is refused here too, using the registry's own live flag as the
     // authoritative source.
-    const { toolRegistry } = await import('@/core/tools/tool-registry');
     if (toolRegistry.isInitialized() && toolRegistry.has(name)) {
       return await toolRegistry.executeForStrategy(
         name,
@@ -2848,9 +2847,42 @@ export function registerToolsInRegistry(): void {
               '@/services/images-orchestration-service'
             );
 
+            // Section A (2026-09-23): real judge critics, gated behind
+            // `config.mediaPlanner.judgeEnabled` (MEDIA_PLANNER_JUDGE_ENABLED,
+            // default false). With the flag off — the default in every
+            // environment until deliberately turned on — `critics` stays
+            // `[]` exactly as before, so `MediaConsensusStrategy` keeps
+            // degrading to scoringMode:'unavailable'/verdict:'uncertain' and
+            // pickBestCandidate() deterministically picking the first
+            // gate-passing candidate (see media-consensus-strategy.ts's own
+            // documented degrade path). With the flag on,
+            // `buildMediaCritics()` resolves a real vision-capable judge
+            // model and returns role-differentiated critics, or degrades
+            // gracefully (empty critics + a labeled
+            // `qualityJudgingUnavailableReason`) when none resolves. Same
+            // wiring as `/v1/capabilities/media-plan/execute`
+            // (capabilities-routes.ts).
+            let critics: Awaited<
+              ReturnType<
+                typeof import('@/core/orchestration/strategies/media-critics-factory').buildMediaCritics
+              >
+            >['critics'] = [];
+            let qualityJudgingUnavailableReason: string | undefined;
+            if (config.mediaPlanner.judgeEnabled) {
+              const { buildMediaCritics } = await import(
+                '@/core/orchestration/strategies/media-critics-factory'
+              );
+              const { getProviderRegistry } = await import('@/providers/provider-registry');
+              const built = await buildMediaCritics({ providerRegistry: getProviderRegistry() });
+              critics = built.critics;
+              qualityJudgingUnavailableReason = built.qualityJudgingUnavailableReason;
+            }
+
             const executor = new MediaConsensusStrategy({
               videoService: mediaType === 'video' ? new VideoSvc() : undefined,
               imagesService: mediaType === 'image' ? new ImagesOrchestrationService() : undefined,
+              critics,
+              qualityJudgingUnavailableReason,
             });
 
             const requestId = `generate_media-${toolCallId}`;

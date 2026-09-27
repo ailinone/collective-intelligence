@@ -59,7 +59,28 @@
  */
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { HfHubModelFetcher } from '@/services/model-fetchers/hf-hub-model-fetcher';
+import {
+  HfHubModelFetcher,
+  type HfHubPaginationCursorStore,
+} from '@/services/model-fetchers/hf-hub-model-fetcher';
+
+/** In-memory fake — records every write so tests can assert on the sequence. */
+function fakeCursorStore(initial: string | null = null): HfHubPaginationCursorStore & {
+  writes: Array<string | null>;
+} {
+  let current = initial;
+  const writes: Array<string | null> = [];
+  return {
+    writes,
+    async read() {
+      return current;
+    },
+    async write(nextUrl) {
+      current = nextUrl;
+      writes.push(nextUrl);
+    },
+  };
+}
 
 function jsonResponse(payload: unknown, status = 200, linkHeader?: string): Response {
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
@@ -611,6 +632,142 @@ describe('hf-hub-model-fetcher', () => {
       const models = await new HfHubModelFetcher().getModels();
 
       expect(models[0].capabilities).toEqual(['image_editing']);
+    });
+  });
+
+  describe('resumable pagination cursor (2026-09-25/26 incident: 13k+ huggingface rows never reconfirmed)', () => {
+    // Root cause: raising `maxModels` (2026-09-08) only removed the hardcoded
+    // ceiling — it did not change that pagination ALWAYS restarts at page 1 of
+    // the same trendingScore-DESC order. A per-run timeout or rate-limit that
+    // consistently cuts the walk short around the same page reproduces the
+    // exact same permanent-tail-starvation symptom at whatever point it stops,
+    // regardless of how high the ceiling is. The fix persists where a run left
+    // off so the NEXT run can continue past that point instead of re-covering
+    // the same already-confirmed head every time.
+
+    it('starts at page 1 when the store has no saved cursor (default, unchanged behavior)', async () => {
+      const store = fakeCursorStore(null);
+      const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(jsonResponse([]));
+
+      await new HfHubModelFetcher(undefined, undefined, undefined, undefined, undefined, store).getModels();
+
+      const [url] = fetchSpy.mock.calls[0];
+      expect(String(url)).toContain('huggingface.co/api/models?inference_provider=all');
+    });
+
+    it('resumes from a saved cursor instead of restarting at page 1', async () => {
+      const resumeUrl = 'https://huggingface.co/api/models?cursor=resume-here';
+      const store = fakeCursorStore(resumeUrl);
+      const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(jsonResponse([]));
+
+      await new HfHubModelFetcher(undefined, undefined, undefined, undefined, undefined, store).getModels();
+
+      expect(fetchSpy).toHaveBeenCalledWith(resumeUrl, expect.anything());
+    });
+
+    it('persists the next-page cursor after every successfully fetched page', async () => {
+      const store = fakeCursorStore(null);
+      const page1 = [{ _id: 'a', id: 'org/model-a', inferenceProviderMapping: [liveProvider('conversational')] }];
+      const page2 = [{ _id: 'b', id: 'org/model-b', inferenceProviderMapping: [liveProvider('conversational')] }];
+      vi.spyOn(globalThis, 'fetch')
+        .mockResolvedValueOnce(
+          jsonResponse(page1, 200, '<https://huggingface.co/api/models?cursor=p2>; rel="next"')
+        )
+        .mockResolvedValueOnce(jsonResponse(page2));
+
+      await new HfHubModelFetcher(undefined, undefined, undefined, undefined, undefined, store).getModels();
+
+      // Written once after page 1 (advancing to page 2), once after page 2
+      // (the real end of the catalog — clears the cursor with `null`).
+      expect(store.writes).toEqual(['https://huggingface.co/api/models?cursor=p2', null]);
+    });
+
+    it('clears the cursor once a walk reaches the real end of the catalog, so the next run starts a fresh lap at page 1', async () => {
+      const store = fakeCursorStore('https://huggingface.co/api/models?cursor=resume-here');
+      vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(jsonResponse([]));
+
+      await new HfHubModelFetcher(undefined, undefined, undefined, undefined, undefined, store).getModels();
+
+      expect(await store.read()).toBeNull();
+    });
+
+    it('leaves the cursor at the last successful page when a later page exhausts its retries (does not advance past the failure)', async () => {
+      const page1 = [{ _id: 'a', id: 'org/model-a', inferenceProviderMapping: [liveProvider('conversational')] }];
+      const store = fakeCursorStore(null);
+      const fetchSpy = vi.spyOn(globalThis, 'fetch');
+      fetchSpy.mockResolvedValueOnce(
+        jsonResponse(page1, 200, '<https://huggingface.co/api/models?cursor=p2>; rel="next"')
+      );
+      // Every attempt at page 2 fails — retries exhaust, pagination stops here.
+      fetchSpy.mockResolvedValue(jsonResponse({ error: 'upstream down' }, 503));
+
+      const models = await new HfHubModelFetcher(
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        store
+      ).getModels();
+
+      expect(models.map((m) => m.id)).toEqual(['org/model-a']);
+      // Cursor stayed at page 2's URL (page 1's successful write) — a future
+      // run resumes AT the failed page, not past it and not back at page 1.
+      expect(await store.read()).toBe('https://huggingface.co/api/models?cursor=p2');
+    });
+
+  });
+
+  describe('createRedisPaginationCursorStore (production store: Redis trouble must never throw)', () => {
+    it('read() returns null (starts at page 1) when the Redis client throws', async () => {
+      const { createRedisPaginationCursorStore } = await import(
+        '@/services/model-fetchers/hf-hub-model-fetcher'
+      );
+      const store = createRedisPaginationCursorStore(() => ({
+        get: () => Promise.reject(new Error('ECONNREFUSED')),
+        set: () => Promise.reject(new Error('ECONNREFUSED')),
+        del: () => Promise.reject(new Error('ECONNREFUSED')),
+      }));
+
+      await expect(store.read()).resolves.toBeNull();
+    });
+
+    it('write() swallows a Redis failure instead of throwing (a failed persist just makes this run non-resumable)', async () => {
+      const { createRedisPaginationCursorStore } = await import(
+        '@/services/model-fetchers/hf-hub-model-fetcher'
+      );
+      const store = createRedisPaginationCursorStore(() => ({
+        get: () => Promise.reject(new Error('ECONNREFUSED')),
+        set: () => Promise.reject(new Error('ECONNREFUSED')),
+        del: () => Promise.reject(new Error('ECONNREFUSED')),
+      }));
+
+      await expect(store.write('https://huggingface.co/api/models?cursor=x', 1000)).resolves.toBeUndefined();
+      await expect(store.write(null, 1000)).resolves.toBeUndefined();
+    });
+
+    it('write(url, ttl) calls set with a PX expiry; write(null, ttl) calls del', async () => {
+      const { createRedisPaginationCursorStore } = await import(
+        '@/services/model-fetchers/hf-hub-model-fetcher'
+      );
+      const set = vi.fn().mockResolvedValue('OK');
+      const del = vi.fn().mockResolvedValue(1);
+      const store = createRedisPaginationCursorStore(() => ({
+        get: () => Promise.resolve(null),
+        set,
+        del,
+      }));
+
+      await store.write('https://huggingface.co/api/models?cursor=x', 60_000);
+      expect(set).toHaveBeenCalledWith(
+        'discovery:hf-hub:pagination-cursor',
+        'https://huggingface.co/api/models?cursor=x',
+        'PX',
+        60_000
+      );
+
+      await store.write(null, 60_000);
+      expect(del).toHaveBeenCalledWith('discovery:hf-hub:pagination-cursor');
     });
   });
 });

@@ -30,15 +30,20 @@
  *     AILIN_WORKSPACE_ROOT env-var fallback (operator config, not client
  *     input) unclamped exactly as before.
  */
-import { describe, it, expect, vi, afterEach } from 'vitest';
+import { describe, it, expect, vi, afterEach, beforeAll } from 'vitest';
 import path from 'node:path';
 import type { Logger } from 'pino';
 import type { ToolCall } from '@/types';
 import {
   executeRealTool,
   resolveWorkingDirectory,
+  registerToolsInRegistry,
   CHAT_AUTO_EXECUTE_BLOCKED_TOOLS,
 } from '../chat-request-processor';
+import {
+  toolRegistry,
+  CHAT_AUTO_EXECUTE_BLOCKED_TOOLS as REGISTRY_BLOCKED_TOOLS,
+} from '@/core/tools/tool-registry';
 
 function makeLog(): Logger {
   const noop = () => undefined;
@@ -71,11 +76,17 @@ describe('chat completions tool_calls — unsafe-tool blocklist (RCE fix)', () =
     vi.restoreAllMocks();
   });
 
-  it('the blocklist matches every tool the registry marks safeForStrategies:false', () => {
+  it('the blocklist matches every tool the registry marks safeForStrategies:false, plus the admin-only tools also blocked here', () => {
     // Keep this pinned to the exact registrations in registerToolsInRegistry()
     // (services/chat-request-processor.ts) so a future unsafe tool added there
     // without a matching blocklist entry fails this test rather than silently
     // reopening the hole for the pre-registry-boot switch fallback.
+    //
+    // The second group below (write_file .. extract_code_from_screenshot) is
+    // registered `safeForStrategies: true` but is still blocked here: those
+    // are the same filesystem-mutation and vision (SSRF-capable) tools the
+    // /v1/tools/* routes restrict to admin/owner, and chat completions has no
+    // role check at all (2026-09-23 fix).
     expect([...CHAT_AUTO_EXECUTE_BLOCKED_TOOLS].sort()).toEqual(
       [
         'run_command',
@@ -92,6 +103,29 @@ describe('chat completions tool_calls — unsafe-tool blocklist (RCE fix)', () =
         'update_todo',
         'execute_workflow',
         'register_workflow',
+
+        'write_file',
+        'search_replace',
+        'rename_symbol',
+        'extract_function',
+        'extract_variable',
+        'inline_function',
+        'refactor_code',
+        'heal_file',
+        'analyze_image',
+        'compare_images',
+        'extract_code_from_screenshot',
+
+        // issue #664 finding 1 (2026-09-25): READ tools, same rationale —
+        // safeForStrategies:true, not auto-recommendable, but a client can
+        // force them via its own tools/tool_choice and have them read the
+        // API container's own source tree instead of coming back unexecuted.
+        'read_file',
+        'grep_search',
+        'explore_codebase',
+        'list_directory',
+        'file_search',
+        'analyze_codebase',
       ].sort()
     );
   });
@@ -114,6 +148,72 @@ describe('chat completions tool_calls — unsafe-tool blocklist (RCE fix)', () =
       );
     }
   );
+
+  it('layer 2 reads the SAME blocklist object as layer 1 (tool-registry.ts), not a copy', () => {
+    // base-strategy.executeModelWithTools and strategy-tool-executor gate on
+    // `isBlockedFromStrategyAutoExecution`, which reads the registry's set; a
+    // second literal here could drift from it.
+    expect(CHAT_AUTO_EXECUTE_BLOCKED_TOOLS).toBe(REGISTRY_BLOCKED_TOOLS);
+  });
+
+  describe('read tools never auto-execute for a client-forced tool_choice (issue #664 finding 1)', () => {
+    it('refuses "read_file" and does not read the API\'s own source tree', async () => {
+      const log = makeLog();
+      // A real path that exists in this repo (this test file's own package.json) —
+      // proves the block happens BEFORE any filesystem access, not that the
+      // path merely fails to resolve.
+      const toolCall = makeToolCall('read_file', { file_path: 'package.json' });
+
+      const result = await executeRealTool(toolCall, { messages: [] } as never, log, 'org_1', 'user_1');
+
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('not permitted for automatic execution via chat completions');
+    });
+
+    it('refuses "grep_search" with a pattern that would match real source', async () => {
+      const log = makeLog();
+      const toolCall = makeToolCall('grep_search', { pattern: 'CHAT_AUTO_EXECUTE_BLOCKED_TOOLS' });
+
+      const result = await executeRealTool(toolCall, { messages: [] } as never, log, 'org_1', 'user_1');
+
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('not permitted for automatic execution via chat completions');
+    });
+  });
+
+  describe('a blocked tool cannot be reached through one of its aliases (issue #664 hardening)', () => {
+    beforeAll(() => {
+      registerToolsInRegistry();
+    });
+
+    it("registry has 'grep_search' registered with the 'grep_tool'/'grep' aliases pointing at the same registration", () => {
+      // Sanity check the premise: if this ever stops being true the aliasing
+      // test below would pass for the wrong reason (no alias to bypass with).
+      expect(toolRegistry.isInitialized()).toBe(true);
+      const canonical = toolRegistry.get('grep_search');
+      expect(canonical?.name).toBe('grep_search');
+      expect(toolRegistry.get('grep_tool')?.name).toBe('grep_search');
+      expect(toolRegistry.get('grep')?.name).toBe('grep_search');
+    });
+
+    it.each(['grep_tool', 'grep'])(
+      'refuses "grep_search" reached via its "%s" alias, not just the canonical name',
+      async (aliasName) => {
+        const log = makeLog();
+        // Pre-fix, layer 2's blocklist checks compared the RAW incoming name
+        // against the literal set — `grep_search` is listed, but `grep_tool`
+        // and `grep` are not, so a client sending the alias would have
+        // slipped past both the `serverOwnsEveryToolCall` gate and
+        // `executeRealTool`'s own check and actually run the search.
+        const toolCall = makeToolCall(aliasName, { pattern: 'CHAT_AUTO_EXECUTE_BLOCKED_TOOLS' });
+
+        const result = await executeRealTool(toolCall, { messages: [] } as never, log, 'org_1', 'user_1');
+
+        expect(result.success).toBe(false);
+        expect(result.error).toContain('not permitted for automatic execution via chat completions');
+      }
+    );
+  });
 
   it('run_command is refused even with a shell-metacharacter payload (defense-in-depth sanity check)', async () => {
     const log = makeLog();

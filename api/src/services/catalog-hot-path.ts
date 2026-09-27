@@ -124,8 +124,9 @@ export function mapPrismaModel(record: CatalogHotPathRecord): Model {
 export const CATALOG_REDIS_KEY = 'catalog:hot-path:snapshot:v1';
 
 /**
- * Small companion key published right AFTER the snapshot above by the same
- * elected process. Readers fetch this (a few hundred bytes) before deciding
+ * Small companion key published atomically WITH the snapshot above (one Lua
+ * compare-and-swap, see catalog-snapshot-publisher.ts). Readers fetch this
+ * (a few hundred bytes) before deciding
  * whether to GET + JSON.parse the >100 MB snapshot at all: the elected job
  * republishes every tick whether or not anything changed, so a timestamp
  * or version counter would never let a reader skip; only a fingerprint of
@@ -140,6 +141,9 @@ export interface CatalogSnapshotMeta {
    *  model-catalog-service.ts's serializeCatalogSnapshot for why). */
   fingerprint: string;
   rowCount: number;
+  /** Wall-clock ms at which the producer STARTED its Postgres read. Also the
+   *  publish version: a snapshot with a smaller value never replaces one
+   *  with a larger value (catalog-snapshot-publisher.ts). */
   generatedAt: number;
 }
 

@@ -23,7 +23,22 @@ export type CapabilityExecutionMode =
    * `CodeExecutionService` (E2B/Daytona/LocalProcessSandbox) and is untouched
    * by this mode — the two are unrelated systems and must never be conflated.
    */
-  | 'agentic_sandbox';
+  | 'agentic_sandbox'
+  /**
+   * ADR-026: `code_interpreter` on the SAME isolated Docker sandbox primitive
+   * as `agentic_sandbox`, via a purpose-built caller
+   * (`core/sandbox/code-execution.ts`) rather than that mode's dispatcher
+   * (`executeAgenticSandboxMode`) — code execution's request/response shape
+   * (language + source, stdin-delivered) and its own one-command-per-language
+   * allowlist are different enough from computer_use/agents/mcp's tool-call
+   * shape to warrant a separate mode rather than overloading
+   * `agentic_sandbox`'s dispatch branch. Gated by its own flag
+   * (`CODE_EXECUTION_SANDBOX_ENABLED`, default off); with it off,
+   * `executeCodeExecutionSandboxMode` throws before anything is created and
+   * the dispatcher falls through to the PRE-EXISTING `sandbox_workflow` mode
+   * unchanged — see `code_interpreter`'s override below.
+   */
+  | 'code_execution_sandbox';
 
 export interface CapabilityExecutionPlan {
   id: ModelCapability;
@@ -331,8 +346,15 @@ const CAPABILITY_OVERRIDES: Partial<Record<ModelCapability, CapabilityPlanOverri
     requiredCapabilities: ['code_generation'],
   },
   code_interpreter: {
-    executionPath: ['sandbox_workflow', 'orchestration'],
-    dependencies: ['sandbox_runtime', ...DEFAULT_DEPENDENCIES],
+    // ADR-026: `code_execution_sandbox` tried FIRST. With
+    // CODE_EXECUTION_SANDBOX_ENABLED off (default), `executeCodeExecutionSandboxMode`
+    // throws immediately — before creating a session or touching Docker —
+    // and the dispatcher (`executeCapabilityByPlan`'s try/catch-and-continue
+    // loop) falls through to `sandbox_workflow` exactly as it did before this
+    // ADR, byte-for-byte. Only when the flag is on does this list's first
+    // entry ever actually run.
+    executionPath: ['code_execution_sandbox', 'sandbox_workflow', 'orchestration'],
+    dependencies: ['code_execution_sandbox_runtime', 'sandbox_runtime', ...DEFAULT_DEPENDENCIES],
   },
   // ── Agentic family — executable behind a default-off flag (ADR-024) ────
   //

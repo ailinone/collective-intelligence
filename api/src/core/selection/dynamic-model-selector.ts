@@ -211,17 +211,27 @@ const CURATED_BUCKET_SNAPSHOT_TTL_MS = 120_000;
 // which bounds a query that DOES run on every request.
 const CURATED_SNAPSHOT_QUERY_TIMEOUT_MS = 3_000;
 
+// How long the two fail-open bucket transactions (getCuratedBucketSnapshot,
+// getAggregatedBucketUids) may wait for a pool connection before BEGIN. The
+// PrismaClient-wide default is 8 s (connection-url.ts), sized so wallet and
+// auth writes survive a short queue in the Phase 1f pool of 23. These reads
+// run on the request path and are built to fail open fast, so they keep
+// Prisma's own 2 s: a request never waits longer here than before the pool
+// cap, and a saturated pool degrades the bucket instead of the request.
+export const BUCKET_FAIR_TX_MAX_WAIT_MS = 2_000;
+
 async function getCuratedBucketSnapshot(): Promise<{ rows: CuratedBucketRow[]; queried: boolean }> {
   const now = Date.now();
   if (curatedBucketSnapshotCache && curatedBucketSnapshotCache.expiresAt > now) {
     return { rows: curatedBucketSnapshotCache.rows, queried: false };
   }
   try {
-    const rows = await prisma.$transaction(async (tx) => {
-      await tx.$executeRawUnsafe(
-        `SET LOCAL statement_timeout = ${CURATED_SNAPSHOT_QUERY_TIMEOUT_MS}`
-      );
-      return tx.$queryRaw<CuratedBucketRow[]>(Prisma.sql`
+    const rows = await prisma.$transaction(
+      async (tx) => {
+        await tx.$executeRawUnsafe(
+          `SET LOCAL statement_timeout = ${CURATED_SNAPSHOT_QUERY_TIMEOUT_MS}`
+        );
+        return tx.$queryRaw<CuratedBucketRow[]>(Prisma.sql`
         SELECT m.uid AS "uid", m.provider_id AS "providerId", p.name AS "providerName",
                m.context_window AS "contextWindow", m.usage_count AS "usageCount"
         FROM models m
@@ -229,7 +239,9 @@ async function getCuratedBucketSnapshot(): Promise<{ rows: CuratedBucketRow[]; q
         WHERE m.status <> 'disabled'
           AND (m.metadata->>'hubInventoryClass') IS DISTINCT FROM 'aggregated_index'
       `);
-    });
+      },
+      { maxWait: BUCKET_FAIR_TX_MAX_WAIT_MS }
+    );
     curatedBucketSnapshotCache = { rows, expiresAt: now + CURATED_BUCKET_SNAPSHOT_TTL_MS };
     return { rows, queried: true };
   } catch (rawErr) {
@@ -541,14 +553,15 @@ async function getAggregatedBucketUids(
 ): Promise<{ uids: string[]; aggregatedCount: number }> {
   try {
     const commonSql = buildBucketFilterFragments(filters);
-    const rows = await prisma.$transaction(async (tx) => {
-      // `SET` does not accept bind parameters (confirmed: PostgreSQL rejects
-      // `PREPARE ... AS SET LOCAL statement_timeout = $1` with a syntax
-      // error) — $executeRawUnsafe is required here, and is safe: the
-      // interpolated value is the compile-time constant above, never
-      // request-derived input.
-      await tx.$executeRawUnsafe(`SET LOCAL statement_timeout = ${BUCKET_FAIR_QUERY_TIMEOUT_MS}`);
-      return tx.$queryRaw<Array<{ uid: string }>>(Prisma.sql`
+    const rows = await prisma.$transaction(
+      async (tx) => {
+        // `SET` does not accept bind parameters (confirmed: PostgreSQL rejects
+        // `PREPARE ... AS SET LOCAL statement_timeout = $1` with a syntax
+        // error), so $executeRawUnsafe is required here, and is safe: the
+        // interpolated value is the compile-time constant above, never
+        // request-derived input.
+        await tx.$executeRawUnsafe(`SET LOCAL statement_timeout = ${BUCKET_FAIR_QUERY_TIMEOUT_MS}`);
+        return tx.$queryRaw<Array<{ uid: string }>>(Prisma.sql`
         SELECT uid FROM models
         WHERE status <> 'disabled'
           AND metadata @> '{"serverless_callable":true}'::jsonb
@@ -556,7 +569,9 @@ async function getAggregatedBucketUids(
         ORDER BY usage_count DESC
         LIMIT ${aggregatedTake}
       `);
-    });
+      },
+      { maxWait: BUCKET_FAIR_TX_MAX_WAIT_MS }
+    );
     return { uids: rows.map((r) => r.uid), aggregatedCount: rows.length };
   } catch (rawErr) {
     log.warn(

@@ -22,6 +22,7 @@ import { authenticate, requireRole } from '@/middleware/auth-middleware';
 import { rejectAnonymousGuestKeyPreHandler } from '@/services/anonymous-quota-gate';
 import { rejectChatFreeTierKeyPreHandler } from '@/services/free-tier-quota-gate';
 import { requirePermission } from '@/middleware/require-permission-middleware';
+import { getUserRoles, roleSetRank } from '@/services/rbac-service';
 import { prisma } from '@/database/client';
 import { logger } from '@/utils/logger';
 import type { ExtendedFastifyRequest } from '@/types/fastify-extended';
@@ -293,6 +294,21 @@ export async function registerAdminRoutes(server: FastifyInstance): Promise<void
           return reply.code(403).send({
             error: 'Forbidden',
             message: 'Cannot delete your own account',
+          });
+        }
+
+        // SECURITY (privilege escalation): `users:role_assign` is held by a
+        // plain 'admin', so without a rank check an admin could hard-delete a
+        // strictly higher-ranked owner. Same rule as authorizeRoleChange and
+        // the member-removal route, ranked from the `user_roles` grants.
+        const [actorDbRoles, targetDbRoles] = await Promise.all([
+          getUserRoles(currentUserId, organizationId),
+          getUserRoles(targetUser.id, organizationId),
+        ]);
+        if (roleSetRank(targetDbRoles) > roleSetRank(actorDbRoles)) {
+          return reply.code(403).send({
+            error: 'Forbidden',
+            message: 'Cannot delete a user who outranks you',
           });
         }
 

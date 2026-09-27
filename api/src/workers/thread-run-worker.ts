@@ -78,9 +78,10 @@ async function processThreadRun(
       },
     });
 
-    // 2. Fetch assistant details
-    const assistant = await prisma.assistant.findUnique({
-      where: { id: assistantId },
+    // 2. Fetch assistant details, scoped to the run's organization so a run
+    // can never execute another tenant's Assistant configuration.
+    const assistant = await prisma.assistant.findFirst({
+      where: { id: assistantId, organizationId },
     });
 
     if (!assistant) {

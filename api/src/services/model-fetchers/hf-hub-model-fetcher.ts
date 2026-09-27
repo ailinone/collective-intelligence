@@ -30,6 +30,110 @@ import { BaseProviderModelFetcher, type ProviderModel } from './provider-model-f
 import type { ModelCapability } from '@/types';
 import { logger } from '@/utils/logger';
 
+const cursorLog = logger.child({ component: 'hf-hub-fetcher-cursor' });
+
+/**
+ * Persists where a truncated pagination walk left off, so the NEXT run can
+ * resume from there instead of always restarting at page 1 of the same
+ * trendingScore-DESC order (see the `maxModels` constructor comment and the
+ * 2026-09-25/26 incident this closes: 13k+ huggingface rows auto-disabled
+ * because the low-trending tail below whatever page the walk happens to stop
+ * at is structurally never reached by ANY future run — raising `maxModels`
+ * alone does not fix this, since a per-run timeout/rate-limit can still cut
+ * the walk short well below the ceiling, every run, at roughly the same page).
+ *
+ * `write(null, ...)` clears the cursor — used when a walk reaches the REAL
+ * end of the catalog (no more `next` link), so the following run starts a
+ * fresh lap at page 1 and keeps reconfirming the high-trending head
+ * regularly, rather than resuming a completed cycle forever.
+ */
+export interface HfHubPaginationCursorStore {
+  read(): Promise<string | null>;
+  write(nextUrl: string | null, ttlMs: number): Promise<void>;
+}
+
+/**
+ * Safe default: no persistence, every run starts at page 1. This is what
+ * every existing caller (including every test in this suite) gets unless it
+ * explicitly opts in — resuming mid-catalog is a real behavior change that
+ * should not silently become the default for constructors that never asked
+ * for it, and a test suite has no Redis to persist to anyway.
+ */
+export function createNoopPaginationCursorStore(): HfHubPaginationCursorStore {
+  return {
+    async read() {
+      return null;
+    },
+    async write() {
+      // no-op
+    },
+  };
+}
+
+/** Minimal slice of ioredis the store needs (keeps it unit-testable). */
+export interface HfHubCursorRedisClient {
+  get(key: string): Promise<string | null>;
+  set(key: string, value: string, mode: 'PX', ttlMs: number): Promise<unknown>;
+  del(key: string): Promise<unknown>;
+}
+
+export const HF_HUB_PAGINATION_CURSOR_KEY = 'discovery:hf-hub:pagination-cursor';
+
+/**
+ * 24h: long enough that a skipped or slow day of discovery doesn't lose the
+ * resume point, short enough that a cursor from a catalog shape that has
+ * since shifted significantly does not get reused indefinitely. Matches the
+ * order of magnitude of this codebase's other discovery-related TTLs (see
+ * discovery-fleet-health.ts's DISCOVERY_HEALTH_SNAPSHOT_TTL_MS, 48h).
+ */
+export const DEFAULT_HF_HUB_PAGINATION_CURSOR_TTL_MS = 24 * 60 * 60 * 1000;
+
+export function resolveHfHubCursorTtlMs(env: NodeJS.ProcessEnv = process.env): number {
+  const parsed = Number(env.HF_HUB_PAGINATION_CURSOR_TTL_MS);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULT_HF_HUB_PAGINATION_CURSOR_TTL_MS;
+}
+
+/**
+ * Production store. Redis trouble never throws out of this module — a failed
+ * read counts as "no cursor" (start at page 1, the pre-existing behavior),
+ * and a failed write is a warning (this run's progress simply is not
+ * resumable; the next run starts fresh instead of crashing or blocking
+ * discovery on a Redis blip).
+ */
+export function createRedisPaginationCursorStore(
+  getClient: () => HfHubCursorRedisClient,
+  key: string = HF_HUB_PAGINATION_CURSOR_KEY
+): HfHubPaginationCursorStore {
+  return {
+    async read() {
+      try {
+        return await getClient().get(key);
+      } catch (error) {
+        cursorLog.warn(
+          { error: error instanceof Error ? error.message : String(error) },
+          'Could not read the HF Hub pagination cursor; starting this run at page 1'
+        );
+        return null;
+      }
+    },
+    async write(nextUrl, ttlMs) {
+      try {
+        const client = getClient();
+        if (nextUrl === null) {
+          await client.del(key);
+        } else {
+          await client.set(key, nextUrl, 'PX', ttlMs);
+        }
+      } catch (error) {
+        cursorLog.warn(
+          { error: error instanceof Error ? error.message : String(error) },
+          "Could not persist the HF Hub pagination cursor; this run's progress will not be resumable"
+        );
+      }
+    },
+  };
+}
+
 interface HfHubModel {
   _id: string;
   id: string;
@@ -160,6 +264,8 @@ export class HfHubModelFetcher extends BaseProviderModelFetcher {
   private maxModels: number;
   private pageSize: number;
   private requestTimeoutMs: number;
+  private cursorStore: HfHubPaginationCursorStore;
+  private cursorTtlMs: number;
   private log = logger.child({ component: 'hf-hub-fetcher' });
 
   constructor(
@@ -185,7 +291,13 @@ export class HfHubModelFetcher extends BaseProviderModelFetcher {
     // near/mid-term catalog size rather than a routine truncation point.
     maxModels = Number(process.env.HF_HUB_DISCOVERY_MAX_MODELS || '500000'),
     pageSize = Number(process.env.HF_HUB_DISCOVERY_PAGE_SIZE || '1000'),
-    requestTimeoutMs = Number(process.env.HF_HUB_DISCOVERY_TIMEOUT_MS || '15000')
+    requestTimeoutMs = Number(process.env.HF_HUB_DISCOVERY_TIMEOUT_MS || '15000'),
+    // Opt-in: every existing caller (including every test in this suite) gets
+    // the safe no-op default — see createNoopPaginationCursorStore's doc.
+    // The real production call site (central-model-discovery-service.ts)
+    // passes a Redis-backed store explicitly.
+    cursorStore: HfHubPaginationCursorStore = createNoopPaginationCursorStore(),
+    cursorTtlMs: number = resolveHfHubCursorTtlMs()
   ) {
     super();
     this.token = token && token.length > 0 ? token : undefined;
@@ -193,6 +305,8 @@ export class HfHubModelFetcher extends BaseProviderModelFetcher {
     this.maxModels = maxModels;
     this.pageSize = pageSize;
     this.requestTimeoutMs = requestTimeoutMs;
+    this.cursorStore = cursorStore;
+    this.cursorTtlMs = cursorTtlMs;
   }
 
   async getModels(): Promise<ProviderModel[]> {
@@ -220,11 +334,27 @@ export class HfHubModelFetcher extends BaseProviderModelFetcher {
     // at all before this fix, which made the `mapCapabilities` pipeline_tag
     // fallback below (branch 2, used when a model has no LIVE inference provider —
     // confirmed to occur on live data) structurally unreachable in practice.
-    let nextUrl: string | null =
+    const firstPageUrl =
       `${this.baseUrl}?inference_provider=all` +
       `&expand[]=inferenceProviderMapping&expand[]=downloads&expand[]=likes&expand[]=trendingScore` +
       `&expand[]=pipeline_tag&expand[]=tags&expand[]=library_name` +
       `&limit=${this.pageSize}`;
+    // Resumable pagination (2026-09-25/26 incident, see HfHubPaginationCursorStore's
+    // doc): if the PREVIOUS run got cut off mid-walk, resume from where it left
+    // off instead of restarting at page 1 of the same trendingScore-DESC order —
+    // otherwise a run that consistently can't finish in one pass (rate-limiting,
+    // a slow network window) permanently starves the same low-trending tail,
+    // no matter how many times it retries, because every retry re-covers the
+    // same already-confirmed head and never reaches past the same cutoff point.
+    const savedCursor = await this.cursorStore.read();
+    let nextUrl: string | null = savedCursor ?? firstPageUrl;
+    const resumedFromCursor = savedCursor !== null;
+    if (resumedFromCursor) {
+      this.log.info(
+        { resumeUrl: savedCursor },
+        'HF Hub discovery resuming from a saved pagination cursor (previous run did not reach the end)'
+      );
+    }
     let pages = 0;
     // Auto-re-enable bug (2026-09-09): a model this codebase auto-disabled only
     // self-heals back to 'active' when a discovery run's output actually
@@ -258,7 +388,15 @@ export class HfHubModelFetcher extends BaseProviderModelFetcher {
         }
 
         const page = (await response.json()) as HfHubModel[];
-        if (!Array.isArray(page) || page.length === 0) break;
+        if (!Array.isArray(page) || page.length === 0) {
+          // Also the real end of the catalog (HF signals it with an empty
+          // page, not only via a missing Link header) — clear the cursor
+          // here too, or a walk that happens to end on this branch would
+          // leave a stale cursor pointing at this same now-empty page
+          // forever, resuming into an infinite empty-page loop next run.
+          await this.cursorStore.write(null, this.cursorTtlMs);
+          break;
+        }
 
         for (const m of page) {
           if (out.length >= this.maxModels) break;
@@ -268,6 +406,14 @@ export class HfHubModelFetcher extends BaseProviderModelFetcher {
 
         pages++;
         nextUrl = this.parseNextLink(response.headers.get('link'));
+        // Persist progress after EVERY page, not just at the end: the caller
+        // (central-model-discovery-service.ts) races this whole call against
+        // an outer wall-clock timeout and does not cancel the loser, so a
+        // write here is the only way this run's progress survives being
+        // abandoned mid-walk by that outer timeout. `nextUrl` is `null` on
+        // the page that reaches the real end of the catalog, which correctly
+        // CLEARS the cursor via the store's write(null, ...) contract.
+        await this.cursorStore.write(nextUrl, this.cursorTtlMs);
       }
 
       const capped = out.length >= this.maxModels;
@@ -277,6 +423,7 @@ export class HfHubModelFetcher extends BaseProviderModelFetcher {
         durationMs: Date.now() - start,
         capped,
         truncatedEarly,
+        resumedFromCursor,
       };
       // Landmine guard: `capped: true` here means the SAME truncation bug fixed
       // 2026-09-08 is recurring at the new (much higher) ceiling — the long tail

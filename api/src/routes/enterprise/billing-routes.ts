@@ -9,7 +9,7 @@
 
 import type { FastifyInstance } from 'fastify';
 import type { ExtendedFastifyRequest } from '@/types/fastify-extended';
-import { authenticate } from '@/middleware/auth-middleware';
+import { authenticate, isPlatformAdminRequest } from '@/middleware/auth-middleware';
 import { rejectAnonymousGuestKeyPreHandler } from '@/services/anonymous-quota-gate';
 import { rejectChatFreeTierKeyPreHandler } from '@/services/free-tier-quota-gate';
 import {
@@ -32,7 +32,9 @@ import {
   createSetupIntentForOrganization,
   attachPaymentMethodToOrganization,
   detachPaymentMethodFromOrganization,
+  findOverlappingInvoice,
 } from '@/services/billing-service';
+import { aggregateUsageCosts } from '@/services/billing-usage-aggregation';
 import type {
   BillingConfig,
   BillingSubscription,
@@ -51,6 +53,19 @@ interface ApiErrorResponse {
     message: string;
   };
 }
+
+// SECURITY (billing fraud, follow-up to #654): `BillingProfile.currency` /
+// `taxRate` feed EVERY invoice for an org — including the ones the daily
+// usage-reconciliation job creates with no request body at all
+// (`createUsageInvoiceFromUsage` -> `createInvoice` falls back to
+// `profile.currency`/`profile.taxRate` whenever the caller doesn't supply
+// them). #654 stopped a self-service caller from dictating `currency` on the
+// invoice body itself, but left this config route free to write an arbitrary
+// string / a negative tax rate into that same profile, which every future
+// invoice (self-service or automated) then reads back. Keep this list small
+// and explicit; extend it only when real multi-currency billing lands, never
+// widen it back to free text.
+const SUPPORTED_BILLING_CURRENCIES = ['USD'] as const;
 
 export async function registerEnterpriseBillingRoutes(server: FastifyInstance): Promise<void> {
   const hasSchema = (schemaId: string): boolean => {
@@ -350,8 +365,8 @@ export async function registerEnterpriseBillingRoutes(server: FastifyInstance): 
             paymentMethod: { type: 'string' },
             defaultPaymentMethodId: { type: 'string' },
             autoPay: { type: 'boolean' },
-            taxRate: { type: 'number' },
-            currency: { type: 'string' },
+            taxRate: { type: 'number', minimum: 0, maximum: 1 },
+            currency: { type: 'string', enum: [...SUPPORTED_BILLING_CURRENCIES] },
             metadata: { type: 'object' },
           },
           required: ['billingEmail'],
@@ -367,7 +382,35 @@ export async function registerEnterpriseBillingRoutes(server: FastifyInstance): 
       ],
     },
     async (request, reply) => {
-      const { organizationId } = getTenantContext(request);
+      const { organizationId, userId } = getTenantContext(request);
+
+      // SECURITY (billing fraud, follow-up to #654): currency/taxRate are
+      // written into the org's billing profile and read back by every future
+      // invoice (self-service AND the daily usage job), so — unlike
+      // billingEmail/paymentMethod/autoPay/metadata, which any org admin may
+      // still manage here — only a platform admin may change them.
+      if (
+        (request.body.currency !== undefined || request.body.taxRate !== undefined) &&
+        !isPlatformAdminRequest(request)
+      ) {
+        await recordSecurityEvent({
+          eventType: 'billing_config_currency_tax_rate_denied',
+          severity: 'critical',
+          message: 'Non-platform-admin attempted to change billing currency/taxRate.',
+          organizationId,
+          userId,
+          metadata: {
+            route: request.url,
+          },
+        });
+        return reply.status(403).send({
+          error: {
+            code: 'billing_currency_tax_rate_forbidden',
+            message:
+              'Currency and tax rate are restricted to platform administrators; contact support to change them.',
+          },
+        });
+      }
 
       await upsertBillingConfig({
         ...request.body,
@@ -507,10 +550,97 @@ export async function registerEnterpriseBillingRoutes(server: FastifyInstance): 
         });
       }
 
-      const invoice = await createInvoice({
+      // SECURITY (billing fraud): self-service callers must never dictate
+      // their own invoice line-item amounts — `items`/`costMetrics`/
+      // `costEvents` are only trustworthy when computed server-side from real
+      // usage. A caller-supplied `items`/`costMetrics`/`costEvents` payload is
+      // only honoured for genuine platform admins (e.g. correcting billing);
+      // everyone else gets amounts computed here from actual usage data.
+      const suppliesManualLineItems =
+        request.body.items !== undefined ||
+        request.body.costMetrics !== undefined ||
+        request.body.costEvents !== undefined;
+
+      if (suppliesManualLineItems && !isPlatformAdminRequest(request)) {
+        await recordSecurityEvent({
+          eventType: 'billing_manual_invoice_items_denied',
+          severity: 'critical',
+          message: 'Non-platform-admin attempted to submit manual invoice line items.',
+          organizationId: tenantContext.organizationId,
+          userId: tenantContext.userId,
+          metadata: {
+            route: request.url,
+          },
+        });
+        return reply.status(403).send({
+          error: {
+            code: 'manual_invoice_items_forbidden',
+            message:
+              'Manual invoice items are restricted to platform administrators; self-service invoices are computed from usage.',
+          },
+        });
+      }
+
+      const invoicePayload: Omit<CreateInvoiceRequest, 'organizationId'> & {
+        organizationId: string;
+      } = {
         ...request.body,
         organizationId: tenantContext.organizationId,
-      });
+      };
+
+      if (!isPlatformAdminRequest(request)) {
+        // SECURITY (billing fraud): the period must be closed and already
+        // elapsed. The daily usage job (createUsageInvoiceFromUsage) skips any
+        // period that already has an invoice with the exact same bounds, so a
+        // self-service invoice for a still-open window (e.g. today, created
+        // early with little usage) would suppress the real invoice for it.
+        const { periodStart, periodEnd } = request.body;
+        if (
+          !Number.isFinite(periodStart) ||
+          !Number.isFinite(periodEnd) ||
+          periodStart >= periodEnd ||
+          periodEnd > Date.now()
+        ) {
+          return reply.status(400).send({
+            error: {
+              code: 'invalid_invoice_period',
+              message:
+                'Self-service invoices must cover a period that has already ended (periodStart < periodEnd <= now).',
+            },
+          });
+        }
+
+        // Never invoice the same usage twice: amounts are now computed from
+        // real usage and charged automatically, so a period that overlaps an
+        // existing invoice would double-bill the organization.
+        const overlapping = await findOverlappingInvoice(
+          tenantContext.organizationId,
+          new Date(periodStart),
+          new Date(periodEnd)
+        );
+        if (overlapping) {
+          return reply.status(409).send({
+            error: {
+              code: 'invoice_period_overlap',
+              message: 'An existing invoice already covers part of this period.',
+            },
+          });
+        }
+
+        const { metrics, events } = await aggregateUsageCosts({
+          organizationId: tenantContext.organizationId,
+          periodStart: new Date(periodStart),
+          periodEnd: new Date(periodEnd),
+        });
+        invoicePayload.costMetrics = metrics;
+        invoicePayload.costEvents = events;
+        // Usage costs are USD-denominated and there is no FX conversion: a
+        // caller-chosen currency would re-denominate the same number (e.g.
+        // 42 USD billed as 42 of a weaker currency). The server decides it.
+        delete invoicePayload.currency;
+      }
+
+      const invoice = await createInvoice(invoicePayload);
 
       return reply.send(invoice);
     }
@@ -617,7 +747,9 @@ export async function registerEnterpriseBillingRoutes(server: FastifyInstance): 
     },
     async (request, reply) => {
       const { organizationId } = getTenantContext(request);
-      await markInvoicePaid(organizationId, request.params.invoiceId);
+      await markInvoicePaid(organizationId, request.params.invoiceId, {
+        allowManualMark: isPlatformAdminRequest(request),
+      });
       return reply.status(204).send();
     }
   );

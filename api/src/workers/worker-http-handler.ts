@@ -13,12 +13,14 @@
  * Extracted so the routes are testable without booting the worker (which
  * connects to Postgres/Redis/BullMQ at module load). Routes:
  * - `/metrics`: Prometheus scrape, gated by the scrape token.
- * - `/health`: liveness only (process is up), unauthenticated.
- * - `/health/ready`: readiness; runs the same `checkDatabaseHealth()` the
- *   api's `/health/ready` uses (circuit-breaker protected) so the Swarm
- *   healthcheck has a real database gate during a pooler canary. Bounded by
- *   a short timeout so a hung pool acquisition cannot outlive the compose
- *   healthcheck's own `timeout`.
+ * - `/health`: liveness only (process is up), unauthenticated. This is what
+ *   the Swarm healthcheck probes (SAB plan Phase 1b); the database gate is
+ *   the boot-time SELECT 1 in queue-runner.ts (database/startup-db-check.ts),
+ *   which runs before this server starts listening.
+ * - `/health/ready`: readiness for alerting and manual checks; runs the same
+ *   `checkDatabaseHealth()` the api's `/health/ready` uses (circuit-breaker
+ *   protected). Bounded by a short timeout so a hung pool acquisition cannot
+ *   hang the caller.
  */
 import type { IncomingMessage, ServerResponse } from 'node:http';
 

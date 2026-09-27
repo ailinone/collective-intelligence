@@ -18,6 +18,15 @@
  */
 import type { ChatMessage, ChatRequest, Model, OrchestrationContext } from '@/types';
 import { isObject } from '@/utils/type-guards';
+import { config } from '@/config';
+import { getMediaPlannerConfigForOrg } from '@/core/coordination/collective-feature-flags';
+import type { CapabilityAttributes } from '@/providers/catalog/provider-catalog.types';
+import {
+  canSatisfyCapabilityAttributes,
+  type CapabilityAttributeRequest,
+} from '@/providers/catalog/capability-attribute-matcher';
+import type { VideoAttributeRequest } from '@/providers/catalog/video-capability-matcher';
+import type { ImageAttributeRequest } from '@/providers/catalog/image-capability-matcher';
 import {
   MEDIA_GENERATION_CAPABILITIES,
   type MediaConstraintSet,
@@ -209,37 +218,79 @@ export function resolveMediaPlanRouting(
   return evaluateMediaPlannerGate(request, context);
 }
 
+/**
+ * Effective MediaPlanner gate: the global `MEDIA_PLANNER_ENABLED` env flag
+ * OR a per-org canary allowlist entry (`getMediaPlannerConfigForOrg`,
+ * `Organization.settings.mediaPlannerConfig.enabled` — a SIBLING key to
+ * `collectiveConfig`, never merged into `CoordinationConfig`). The global
+ * flag is checked FIRST and short-circuits before touching the DB/cache at
+ * all, so an org with the global flag already on never pays for an
+ * org-settings lookup.
+ *
+ * Every caller that used to pass `config.mediaPlanner.enabled` straight
+ * into `resolveMediaPlanRouting` should resolve this first instead, so a
+ * named canary org gets the same effective behavior as a global flip
+ * without one being required.
+ */
+export async function resolveEffectiveMediaPlannerEnabled(
+  organizationId: string | undefined
+): Promise<boolean> {
+  if (config.mediaPlanner.enabled) return true;
+  if (!organizationId) return false;
+  const orgConfig = await getMediaPlannerConfigForOrg(organizationId);
+  return orgConfig.enabled === true;
+}
+
 // ─── Native joint-collapse check (§3.3) ────────────────────────────────────
 
 /**
- * Provisional shape for the `capabilityAttributes` field the parallel LOTE
- * AS fix is expected to add (to `ProviderCatalogEntry`, per its task brief —
- * genuinely absent from `origin/main` as of this PR, confirmed by Part 1's
- * report and re-verified here). Rather than block on that field's exact
- * final shape, this reads it OFF `Model.metadata.capabilityAttributes`
- * (the existing `Record<string, unknown>` catch-all every model already
- * carries) so the check degrades to "no native match" — never throws,
- * never blocks decomposition — for every model until whichever discovery
- * path LOTE AS lands actually starts populating it. If LOTE AS ends up
- * projecting the field somewhere else (e.g. only on the catalog entry, not
- * onto the runtime `Model`), this is the one function to update.
+ * `capabilityAttributes` reconciliation (2026-09-25): Section B
+ * (`capability-attribute-projection.ts`) writes `Model.metadata.
+ * capabilityAttributes` as a map keyed by capability (`{ video_generation:
+ * { maxDurationSeconds, maxResolution: '4K', ... } }`), using the real
+ * `VideoCapabilityAttributes`/`ImageCapabilityAttributes` shapes from
+ * `provider-catalog.types.ts` — not the flat, differently-named provisional
+ * shape (`maxDurationSec`, `maxResolution: {width,height}`) this file
+ * originally guessed at before that field existed anywhere. Both sides
+ * flagged the mismatch explicitly rather than papering over it (see
+ * capability-attribute-projection.ts's own "KNOWN SHAPE MISMATCH" note);
+ * this reads the real shape and reuses the real per-capability matchers
+ * (`canSatisfyCapabilityAttributes`) instead of re-implementing resolution/
+ * duration comparison ad hoc.
  */
-export interface MediaCapabilityAttributesLike {
-  readonly nativeAudioSupport?: boolean;
-  readonly supportsJointAudioVideo?: boolean;
-  readonly maxDurationSec?: number;
-  readonly maxResolution?: { readonly width?: number; readonly height?: number };
-}
-
-function readCapabilityAttributes(model: Model): MediaCapabilityAttributesLike | undefined {
+function readCapabilityAttributesFor(
+  model: Model,
+  capability: MediaGenerationCapability
+): CapabilityAttributes | undefined {
   const raw = model.metadata?.['capabilityAttributes'];
   if (!isObject(raw)) return undefined;
-  return raw as MediaCapabilityAttributesLike;
+  const byCapability = raw as Partial<Record<MediaGenerationCapability, unknown>>;
+  const attrs = byCapability[capability];
+  return isObject(attrs) ? (attrs as CapabilityAttributes) : undefined;
 }
 
 export interface NativeCollapseMatch {
   readonly model: Model;
-  readonly attributes: MediaCapabilityAttributesLike;
+  readonly attributes: CapabilityAttributes;
+}
+
+function toCapabilityAttributeRequest(
+  capability: MediaGenerationCapability,
+  constraints: MediaConstraintSet | undefined
+): CapabilityAttributeRequest {
+  if (capability === 'image_generation') {
+    return {
+      width: constraints?.resolution?.width,
+      height: constraints?.resolution?.height,
+    } satisfies ImageAttributeRequest;
+  }
+  // video_generation — the only other member of MediaGenerationCapability.
+  const { width, height } = constraints?.resolution ?? {};
+  return {
+    durationSeconds: constraints?.durationSec?.minSec,
+    resolution: width !== undefined && height !== undefined ? `${width}x${height}` : undefined,
+    audioRequested: constraints?.requireAudioTrack,
+  } satisfies VideoAttributeRequest;
 }
 
 /**
@@ -247,9 +298,11 @@ export interface NativeCollapseMatch {
  * generate→gate→(mux) chain, check whether a single model already
  * satisfies every stated constraint natively. Returns `undefined`
  * (decompose as normal) whenever there is nothing to collapse (no
- * constraints) or no model exposes `capabilityAttributes` at all — the
- * fail-open-on-unknown-data default this whole area of the architecture
- * commits to.
+ * constraints) or no model declares `capabilityAttributes` for this
+ * specific capability — deliberately conservative (unlike
+ * `canSatisfyCapabilityAttributes`'s own fail-open default): collapsing two
+ * calls into one is an optimization that should only fire on positive
+ * evidence a model can do it natively, not merely "we don't know it can't".
  */
 export function findNativeCollapseModel(
   models: readonly Model[],
@@ -258,30 +311,13 @@ export function findNativeCollapseModel(
 ): NativeCollapseMatch | undefined {
   if (!hasAnyConstraint(constraints)) return undefined;
 
+  const request = toCapabilityAttributeRequest(capability, constraints);
+
   for (const model of models) {
     if (!model.capabilities.includes(capability)) continue;
-    const attributes = readCapabilityAttributes(model);
+    const attributes = readCapabilityAttributesFor(model, capability);
     if (!attributes) continue;
-
-    if (constraints?.requireAudioTrack && !(attributes.nativeAudioSupport || attributes.supportsJointAudioVideo)) {
-      continue;
-    }
-    const minSec = constraints?.durationSec?.minSec;
-    if (minSec !== undefined && attributes.maxDurationSec !== undefined && attributes.maxDurationSec < minSec) {
-      continue;
-    }
-    const wantWidth = constraints?.resolution?.width;
-    if (wantWidth !== undefined && attributes.maxResolution?.width !== undefined && attributes.maxResolution.width < wantWidth) {
-      continue;
-    }
-    const wantHeight = constraints?.resolution?.height;
-    if (
-      wantHeight !== undefined &&
-      attributes.maxResolution?.height !== undefined &&
-      attributes.maxResolution.height < wantHeight
-    ) {
-      continue;
-    }
+    if (!canSatisfyCapabilityAttributes(capability, attributes, request)) continue;
 
     return { model, attributes };
   }

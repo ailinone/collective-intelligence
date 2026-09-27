@@ -53,7 +53,14 @@ import { getErrorMessage } from '@/utils/type-guards';
 import { classifyGoogleCredentialShape } from '@/core/operability/provider-failure-classification';
 import { resolveReasoningEffort } from '@/utils/reasoning-effort';
 import { recordProviderPromptCacheUsage } from '@/observability/ci-metrics';
+import { safeFetch } from '@/broadcast/infrastructure/destinations/safe-http';
 import { randomUUID } from 'crypto';
+
+// Caller-supplied image/video URLs (Veo start/end frame + source video
+// conditioning) can legitimately be much larger than the 1 MiB default
+// `safeFetch` uses for webhook-style responses, so this raises the cap for
+// this one media-fetch path while keeping it bounded (not unlimited).
+const MAX_INLINE_MEDIA_FETCH_BYTES = 100 * 1024 * 1024; // 100 MiB
 
 /**
  * Google Gemini Adapter
@@ -1360,19 +1367,44 @@ export class GoogleAdapter extends ProviderAdapter {
     }
 
     if (this.isLikelyUrl(value)) {
-      const response = await fetch(value, {
-        method: 'GET',
-        signal: AbortSignal.timeout(60_000),
-      });
-      if (!response.ok) {
-        throw new Error(`Failed to fetch media URL (${response.status})`);
+      // Caller-supplied URL — route through the SSRF-safe fetch helper
+      // (DNS-pinned IP resolution, private/metadata IP denylist, bounded
+      // MANUAL redirect re-validation, capped size/time) instead of a raw
+      // fetch, which would let a caller point this at internal services or
+      // cloud metadata (169.254.169.254).
+      let response;
+      try {
+        response = await safeFetch(value, {
+          method: 'GET',
+          timeoutMs: 60_000,
+          maxResponseBytes: MAX_INLINE_MEDIA_FETCH_BYTES,
+        });
+      } catch (error) {
+        // Never echo raw fetch/SSRF-guard error details (status, resolved
+        // IP, DNS failure reason) back to the caller — that would turn a
+        // blocked request into an internal-network scanning oracle even
+        // though the fetch itself was refused. Log the real reason
+        // server-side only.
+        this.providerLog.warn(
+          { error: getErrorMessage(error) },
+          'Blocked or failed fetch of caller-supplied media URL'
+        );
+        throw new Error('Failed to fetch media URL');
       }
-      const buffer = Buffer.from(await response.arrayBuffer());
+
+      if (response.status < 200 || response.status >= 300) {
+        this.providerLog.warn(
+          { status: response.status },
+          'Caller-supplied media URL returned a non-success status'
+        );
+        throw new Error('Failed to fetch media URL');
+      }
+
       const mimeType =
-        response.headers.get('content-type')?.split(';')[0]?.trim() || defaultMimeType;
+        response.headers['content-type']?.split(';')[0]?.trim() || defaultMimeType;
       return {
         mimeType,
-        data: buffer.toString('base64'),
+        data: response.body.toString('base64'),
       };
     }
 

@@ -26,8 +26,23 @@ import net from 'net';
 import { lookup as dnsLookup } from 'dns/promises';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
+import { safeFetch } from '@/broadcast/infrastructure/destinations/safe-http';
+import { getToolsBaseDir } from '@/utils/tools-workspace-guard';
+// SECURITY: exact "is this path inside that directory" check
+// (js/path-injection) — reused from tool-execution-service.ts rather than
+// duplicated here. A naked `resolved.startsWith(baseDir)` prefix check is
+// bypassable via sibling-directory collisions (e.g. baseDir "/base"
+// incorrectly matches "/base-evil"); `isPathWithinDirectory` compares via
+// `path.relative` instead, which is exact.
+import { isPathWithinDirectory } from '@/services/tool-execution-service';
 
 const execFileAsync = promisify(execFile);
+
+// Caller-supplied image URLs (analyze_image / compare_images) can be larger
+// than the 1 MiB default `safeFetch` uses for webhook-style responses —
+// raise the cap for this media-fetch path while keeping it bounded (not
+// unlimited), mirroring the same override in google-adapter.ts.
+const MAX_IMAGE_FETCH_BYTES = 20 * 1024 * 1024; // 20 MiB
 
 /**
  * SECURITY: shell-free subprocess execution for the code-quality tools below
@@ -260,7 +275,7 @@ export async function executeExtractFunctionTool(
     const fullPath = path.resolve(workingDirectory, filePath);
 
     // Security check
-    if (!fullPath.startsWith(workingDirectory)) {
+    if (!isPathWithinDirectory(workingDirectory, fullPath)) {
       return {
         tool_call_id: toolCallId,
         success: false,
@@ -457,7 +472,7 @@ export async function executeRenameSymbolTool(
       const fullPath = path.resolve(workingDirectory, filePattern);
 
       // Security check
-      if (!fullPath.startsWith(workingDirectory)) {
+      if (!isPathWithinDirectory(workingDirectory, fullPath)) {
         continue;
       }
 
@@ -540,7 +555,7 @@ export async function executeExtractVariableTool(
   try {
     const fullPath = path.resolve(workingDirectory, filePath);
 
-    if (!fullPath.startsWith(workingDirectory)) {
+    if (!isPathWithinDirectory(workingDirectory, fullPath)) {
       return {
         tool_call_id: toolCallId,
         success: false,
@@ -644,7 +659,7 @@ export async function executeHealFileTool(
   try {
     const fullPath = path.resolve(workingDirectory, filePath);
 
-    if (!fullPath.startsWith(workingDirectory)) {
+    if (!isPathWithinDirectory(workingDirectory, fullPath)) {
       return {
         tool_call_id: toolCallId,
         success: false,
@@ -824,7 +839,7 @@ export async function executeGenerateTestsTool(
   try {
     const fullPath = path.resolve(workingDirectory, filePath);
 
-    if (!fullPath.startsWith(workingDirectory)) {
+    if (!isPathWithinDirectory(workingDirectory, fullPath)) {
       return {
         tool_call_id: toolCallId,
         success: false,
@@ -1127,7 +1142,7 @@ export async function executeRefactorCodeTool(
   try {
     const fullPath = path.resolve(workingDirectory, filePath);
 
-    if (!fullPath.startsWith(workingDirectory)) {
+    if (!isPathWithinDirectory(workingDirectory, fullPath)) {
       return {
         tool_call_id: toolCallId,
         success: false,
@@ -1268,9 +1283,17 @@ export async function executeAnalyzeImageTool(
       try {
         // SECURITY: SSRF guard — resolves the hostname and rejects
         // private/loopback/link-local targets before fetching (js/request-forgery).
+        // The initial check alone isn't enough: a URL that passes it could
+        // still 302-redirect to an internal/metadata address, so the actual
+        // fetch goes through `safeFetch`, which re-resolves and re-validates
+        // every redirect hop (manual redirect following) instead of letting
+        // a raw `fetch()` follow redirects blindly.
         const validatedUrl = await assertPublicHttpUrl(image_url);
-        const response = await fetch(validatedUrl);
-        if (!response.ok) {
+        const response = await safeFetch(validatedUrl.toString(), {
+          method: 'GET',
+          maxResponseBytes: MAX_IMAGE_FETCH_BYTES,
+        });
+        if (response.status < 200 || response.status >= 300) {
           return {
             tool_call_id: toolCallId,
             success: false,
@@ -1278,12 +1301,11 @@ export async function executeAnalyzeImageTool(
           };
         }
         // Detect mime type from response
-        const contentType = response.headers.get('content-type');
+        const contentType = response.headers['content-type'];
         if (contentType) {
           mimeType = contentType.split(';')[0].trim();
         }
-        const buffer = await response.arrayBuffer();
-        imageData = Buffer.from(buffer).toString('base64');
+        imageData = response.body.toString('base64');
         imageSource = 'url';
       } catch (fetchError) {
         return {
@@ -1295,8 +1317,26 @@ export async function executeAnalyzeImageTool(
     } else if (image_path) {
       // Read local file
       const fullPath = path.resolve(workingDirectory, image_path);
-      // Security check
-      if (!fullPath.startsWith(workingDirectory)) {
+      // SECURITY (2026-09-25, issue #664 finding 2): `analyze_image` is
+      // `safeForStrategies: true` AND auto-recommendable (category
+      // `image`), so — unlike write_file/read_file/etc. — a strategy's
+      // tool-calling loop keeps auto-executing it even when a tenant forced
+      // it via its own `tools`/`tool_choice`. The pre-existing
+      // `isPathWithinDirectory(workingDirectory, fullPath)` check is the
+      // correct exact-containment helper (not a `startsWith` prefix check),
+      // but it is only as strong as `workingDirectory` itself — a caller
+      // that passes none (base-strategy.ts's tool loop, before this fix)
+      // defaults to the whole API container's cwd, making the check a
+      // no-op. Require containment within BOTH the caller's working
+      // directory AND the server-wide `TOOLS_BASE_DIR` floor
+      // (`getToolsBaseDir()`, `/v1/tools/*`'s own base) — whichever is
+      // narrower always wins, so this can only ever tighten access, never
+      // loosen it relative to before.
+      const toolsBaseDir = getToolsBaseDir();
+      if (
+        !isPathWithinDirectory(workingDirectory, fullPath) ||
+        !isPathWithinDirectory(toolsBaseDir, fullPath)
+      ) {
         return {
           tool_call_id: toolCallId,
           success: false,
@@ -1469,12 +1509,16 @@ export async function executeCompareImagesTool(
       if (url) {
         try {
           // SECURITY: SSRF guard — resolves the hostname and rejects
-          // private/loopback/link-local targets before fetching (js/request-forgery).
+          // private/loopback/link-local targets before fetching
+          // (js/request-forgery). As above, the actual fetch goes through
+          // `safeFetch` so a redirect hop can't bypass the initial check.
           const validatedUrl = await assertPublicHttpUrl(url);
-          const response = await fetch(validatedUrl);
-          if (!response.ok) return null;
-          const buffer = await response.arrayBuffer();
-          return { data: Buffer.from(buffer).toString('base64'), source: 'url' };
+          const response = await safeFetch(validatedUrl.toString(), {
+            method: 'GET',
+            maxResponseBytes: MAX_IMAGE_FETCH_BYTES,
+          });
+          if (response.status < 200 || response.status >= 300) return null;
+          return { data: response.body.toString('base64'), source: 'url' };
         } catch {
           return null;
         }
@@ -1484,7 +1528,7 @@ export async function executeCompareImagesTool(
         try {
           const fullPath = path.resolve(workingDirectory, filePath);
           // Security check
-          if (!fullPath.startsWith(workingDirectory)) {
+          if (!isPathWithinDirectory(workingDirectory, fullPath)) {
             return null;
           }
           const buffer = await fs.readFile(fullPath);
@@ -1690,7 +1734,7 @@ export async function executeInlineFunctionTool(
 
   try {
     const fullPath = path.resolve(workingDirectory, filePath);
-    if (!fullPath.startsWith(workingDirectory)) {
+    if (!isPathWithinDirectory(workingDirectory, fullPath)) {
       return {
         tool_call_id: toolCallId,
         success: false,
@@ -1853,7 +1897,7 @@ export async function executeFileSearchTool(
     const fullPath = path.resolve(workingDirectory, searchPath);
 
     // Security check
-    if (!fullPath.startsWith(workingDirectory)) {
+    if (!isPathWithinDirectory(workingDirectory, fullPath)) {
       return {
         tool_call_id: toolCallId,
         success: false,
@@ -2038,7 +2082,7 @@ export async function executeDetectErrorsTool(
     const fullPath = path.resolve(workingDirectory, filePath);
 
     // Security check
-    if (!fullPath.startsWith(workingDirectory)) {
+    if (!isPathWithinDirectory(workingDirectory, fullPath)) {
       return {
         tool_call_id: toolCallId,
         success: false,
@@ -2303,7 +2347,7 @@ export async function executeValidateCodeTool(
       const warnings: CodeError[] = [];
 
       // Security check
-      if (!fullPath.startsWith(workingDirectory)) {
+      if (!isPathWithinDirectory(workingDirectory, fullPath)) {
         results.set(filePath, {
           valid: false,
           errors: [
@@ -2499,7 +2543,7 @@ export async function executeGitResolveConflictTool(
     const fullPath = path.resolve(workingDirectory, filePath);
 
     // Security check
-    if (!fullPath.startsWith(workingDirectory)) {
+    if (!isPathWithinDirectory(workingDirectory, fullPath)) {
       return {
         tool_call_id: toolCallId,
         success: false,
@@ -2596,7 +2640,7 @@ export async function executeDeleteFileTool(
     const fullPath = path.resolve(workingDirectory, filePath);
 
     // Security check
-    if (!fullPath.startsWith(workingDirectory)) {
+    if (!isPathWithinDirectory(workingDirectory, fullPath)) {
       return {
         tool_call_id: toolCallId,
         success: false,
@@ -3258,7 +3302,7 @@ export async function executeExploreCodebaseTool(
     const fullPath = path.resolve(workingDirectory, targetPath);
 
     // Security check
-    if (!fullPath.startsWith(workingDirectory)) {
+    if (!isPathWithinDirectory(workingDirectory, fullPath)) {
       return {
         tool_call_id: toolCallId,
         success: false,

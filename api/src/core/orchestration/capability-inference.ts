@@ -675,6 +675,73 @@ export function detectCodeExecutionIntent(text: string): boolean {
 }
 
 // ---------------------------------------------------------------------------
+// Real code execution (ADR-026) — extracting WHAT to run, once intent is
+// confirmed. This module stays dependency-free (see its header doc): the
+// language identifier below is a plain string union, not an import of
+// `core/sandbox/sandbox-policy`'s `CodeExecutionLanguage` — the two are kept
+// structurally identical by convention and the orchestration call site
+// (`code-execution-orchestration.ts`) is the seam that talks to the sandbox.
+// ---------------------------------------------------------------------------
+
+/** Languages `resolveExecutableCodeRequest` will hand off for real execution. */
+export type ExecutableCodeLanguage = 'python' | 'javascript';
+
+/** Fenced-block language tags this module recognizes, mapped onto the pair above. */
+const CODE_FENCE_LANGUAGE_ALIASES: Record<string, ExecutableCodeLanguage> = {
+  python: 'python',
+  python3: 'python',
+  py: 'python',
+  javascript: 'javascript',
+  js: 'javascript',
+  node: 'javascript',
+  nodejs: 'javascript',
+  mjs: 'javascript',
+};
+
+// Captures a fenced block's language tag (immediately after the opening
+// fence, same line) and its body. Deliberately non-global: the FIRST fenced
+// block is used, matching the natural phrasing this targets — "execute this
+// code: ```python\n...\n```" — where the instruction precedes the one block
+// meant to run. `[\s\S]*?` (non-greedy) stops at the first closing fence
+// rather than swallowing past a second, unrelated block.
+const CODE_FENCE_WITH_LANGUAGE_RE = /```([A-Za-z0-9_+-]*)[ \t]*\r?\n([\s\S]*?)```/;
+
+/**
+ * Extract the first fenced code block's language + body, when the language
+ * tag is one this module recognizes. Returns `null` — never a guess — when
+ * there is no fenced block, or its tag is missing/unrecognized: silently
+ * assuming a language for untagged code would risk running it as the WRONG
+ * interpreter, which is worse than not executing it at all.
+ */
+export function extractExecutableCodeBlock(
+  text: string
+): { language: ExecutableCodeLanguage; code: string } | null {
+  const match = CODE_FENCE_WITH_LANGUAGE_RE.exec(text);
+  if (!match) return null;
+  const tag = match[1].trim().toLowerCase();
+  const language = CODE_FENCE_LANGUAGE_ALIASES[tag];
+  if (!language) return null;
+  const code = match[2];
+  if (code.trim().length === 0) return null;
+  return { language, code };
+}
+
+/**
+ * Combine intent detection with code extraction: the single entry point
+ * `code-execution-orchestration.ts` calls to decide whether it has enough to
+ * actually run something. `null` means "fall back to the honesty directive" —
+ * either there is no genuine execution intent, or there is intent but no
+ * confidently-identified language+code to run (e.g. prose describing code
+ * with no fence, or a fence in a language the sandbox does not support).
+ */
+export function resolveExecutableCodeRequest(
+  text: string
+): { language: ExecutableCodeLanguage; code: string } | null {
+  if (!detectCodeExecutionIntent(text)) return null;
+  return extractExecutableCodeBlock(text);
+}
+
+// ---------------------------------------------------------------------------
 // Core inference
 // ---------------------------------------------------------------------------
 

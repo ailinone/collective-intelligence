@@ -81,6 +81,9 @@ export interface MediaConsensusResultLike {
   readonly totalDurationMs: number;
   readonly degraded: boolean;
   readonly degradedReason?: string;
+  /** Structural mirror of Part 1's `MediaConsensusResult.qualityJudgingUnavailableReason`
+   *  (Section A, 2026-09-23) — see that file's doc comment. */
+  readonly qualityJudgingUnavailableReason?: string;
 }
 
 export interface MediaConsensusRequestLike {
@@ -145,6 +148,46 @@ const GenerateActionSchema = z.object({
   reasoning: z.string().optional(),
 });
 
+/** Objective image constraints checked by `image-deterministic-gate.ts` —
+ *  mirrors `MediaConstraintSetSchema`'s shape (duration/resolution/audio)
+ *  but for the two things a still image actually has: dimensions and
+ *  file format. See `image-capability-attributes.ts` for the TS-level
+ *  type this schema's shape is kept in sync with. */
+const ImageEditConstraintSetSchema = z
+  .object({
+    dimensions: z
+      .object({
+        width: z.number().positive().optional(),
+        height: z.number().positive().optional(),
+        tolerancePct: z.number().min(0).max(1).optional(),
+      })
+      .strict()
+      .optional(),
+    format: z.string().min(1).optional(),
+  })
+  .strict();
+
+/**
+ * Dispatch an `image_editing` step through the deterministic-gate +
+ * vision-judge + bounded-retry cycle (Section D). ADDITIVE next to
+ * `capability_call` / `generate` / `final` — none of those three schemas
+ * or their dispatch code are modified by this action kind's existence.
+ *
+ * `sourceArtifactIndex` references `PlannerState.artifacts` (0-based).
+ * When omitted, `MediaPlannerStrategy` uses the MOST RECENT artifact
+ * (`state.artifacts.length - 1`) — the common case of "edit what was just
+ * generated." An LLM planner action is a small JSON object, not a place to
+ * smuggle megabytes of base64 image data, which is why this references an
+ * artifact by index instead of carrying image bytes inline.
+ */
+const EditActionSchema = z.object({
+  kind: z.literal('edit'),
+  prompt: z.string().min(1),
+  sourceArtifactIndex: z.number().int().min(0).optional(),
+  constraints: ImageEditConstraintSetSchema.optional(),
+  reasoning: z.string().optional(),
+});
+
 /**
  * Terminal action. `unmetConstraints` is REQUIRED (an empty array is a
  * valid value meaning "nothing unmet") — per the architecture's explicit
@@ -161,12 +204,14 @@ const FinalActionSchema = z.object({
 export const PlannerActionSchema = z.discriminatedUnion('kind', [
   CapabilityCallActionSchema,
   GenerateActionSchema,
+  EditActionSchema,
   FinalActionSchema,
 ]);
 
 export type PlannerAction = z.infer<typeof PlannerActionSchema>;
 export type CapabilityCallAction = z.infer<typeof CapabilityCallActionSchema>;
 export type GenerateAction = z.infer<typeof GenerateActionSchema>;
+export type EditAction = z.infer<typeof EditActionSchema>;
 export type FinalAction = z.infer<typeof FinalActionSchema>;
 
 // ─── Turn / state / budget (the persisted audit trail — §3.3) ─────────────
@@ -181,11 +226,29 @@ export type PlannerTurnOutcome =
       readonly fallbackUsed?: boolean;
     }
   | {
+      readonly type: 'document_review_result';
+      readonly capability: string;
+      readonly success: boolean;
+      readonly summary: string;
+      readonly pageCount: number;
+      readonly issueCount: number;
+      readonly degraded?: boolean;
+    }
+  | {
       readonly type: 'generation_result';
       readonly capability: MediaGenerationCapability;
       readonly success: boolean;
       readonly summary: string;
       readonly degraded?: boolean;
+      readonly hasArtifact: boolean;
+      readonly qualityJudgingUnavailableReason?: string;
+    }
+  | {
+      readonly type: 'edit_result';
+      readonly success: boolean;
+      /** How many generate→gate→judge cycles were attempted (1..maxEditAttempts). */
+      readonly attempts: number;
+      readonly summary: string;
       readonly hasArtifact: boolean;
     }
   | {

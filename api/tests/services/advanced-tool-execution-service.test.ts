@@ -21,6 +21,20 @@ import * as fs from 'fs/promises';
 import * as path from 'path';
 import { existsSync } from 'fs';
 
+// The other analyze_image/compare_images/extract_code_from_screenshot cases
+// in this file all use a NONEXISTENT image path, so they return before ever
+// reaching `capabilityService.isCapabilityAvailable('vision')` — which, with
+// no real DB/provider catalog in this test environment, hits the (real)
+// 30s circuit-breaker timeout while discovering vision-capable models. The
+// new image_path-containment cases below use a REAL file specifically to
+// reach past the security check, so this mock keeps that path fast and
+// deterministic without touching any other test's behavior.
+vi.mock('@/services/capability-execution-service', () => ({
+  getCapabilityExecutionService: () => ({
+    isCapabilityAvailable: vi.fn().mockResolvedValue(false),
+  }),
+}));
+
 // Mock logger
 const mockLog = {
   info: vi.fn(),
@@ -463,6 +477,72 @@ export function multiply(a: number, b: number): number {
         expect(result.tool_call_id).toBe('test-analyze-img-1');
         // Should fail gracefully - no image or no API key
         expect(result).toHaveProperty('success');
+      });
+
+      describe('image_path containment (issue #664 finding 2)', () => {
+        const ORIGINAL_TOOLS_BASE_DIR = process.env.TOOLS_BASE_DIR;
+        let narrowBaseDir: string;
+        let wideWorkingDir: string;
+
+        beforeEach(async () => {
+          // `narrowBaseDir` stands in for an operator-configured TOOLS_BASE_DIR
+          // — a real sandbox narrower than the caller's own working directory.
+          // `wideWorkingDir` stands in for the strategy layer's pre-fix default
+          // (`process.cwd()`, the whole API source tree): it is a SIBLING of
+          // narrowBaseDir, not a descendant, so a naive `startsWith` check on
+          // either directory could be fooled by the other's name prefix, and a
+          // check against `workingDirectory` ALONE (the pre-fix code) cannot
+          // see that the file lives outside the server-wide sandbox at all.
+          narrowBaseDir = path.join(tempDir, `narrow-base-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+          wideWorkingDir = path.join(tempDir, `wide-working-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+          await fs.mkdir(narrowBaseDir, { recursive: true });
+          await fs.mkdir(wideWorkingDir, { recursive: true });
+          await fs.writeFile(path.join(wideWorkingDir, 'secret.png'), Buffer.from('not-really-a-png'));
+        });
+
+        afterEach(async () => {
+          if (ORIGINAL_TOOLS_BASE_DIR === undefined) delete process.env.TOOLS_BASE_DIR;
+          else process.env.TOOLS_BASE_DIR = ORIGINAL_TOOLS_BASE_DIR;
+          await fs.rm(narrowBaseDir, { recursive: true, force: true }).catch(() => undefined);
+          await fs.rm(wideWorkingDir, { recursive: true, force: true }).catch(() => undefined);
+        });
+
+        it('refuses image_path when it is within workingDirectory but outside the configured TOOLS_BASE_DIR', async () => {
+          process.env.TOOLS_BASE_DIR = narrowBaseDir;
+          const { executeAnalyzeImageTool } = await import('@/services/advanced-tool-execution-service');
+
+          // Pre-fix, the ONLY check was isPathWithinDirectory(workingDirectory,
+          // fullPath) — `secret.png` IS inside `wideWorkingDir`
+          // (workingDirectory here), so that check alone would have passed and
+          // the file's bytes would have been read and sent to the vision
+          // model. The fix adds a second containment check against
+          // getToolsBaseDir(), which `wideWorkingDir` sits entirely outside.
+          const result = await executeAnalyzeImageTool(
+            { image_path: 'secret.png', analysis_type: 'general' },
+            'test-analyze-img-containment-1',
+            createTestContext(wideWorkingDir)
+          );
+
+          expect(result.success).toBe(false);
+          expect(result.error).toContain('Access denied');
+        });
+
+        it('still reads image_path when it is within BOTH workingDirectory and TOOLS_BASE_DIR', async () => {
+          process.env.TOOLS_BASE_DIR = wideWorkingDir;
+          const { executeAnalyzeImageTool } = await import('@/services/advanced-tool-execution-service');
+
+          const result = await executeAnalyzeImageTool(
+            { image_path: 'secret.png', analysis_type: 'general' },
+            'test-analyze-img-containment-2',
+            createTestContext(wideWorkingDir)
+          );
+
+          // Not rejected by the containment check — whatever happens next
+          // (vision capability unavailable in this unit test env) is a
+          // DIFFERENT failure than 'Access denied', proving the new check
+          // does not regress the legitimate same-sandbox case.
+          expect(result.error).not.toContain('Access denied');
+        });
       });
     });
 

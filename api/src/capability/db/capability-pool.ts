@@ -34,6 +34,7 @@ import pg from 'pg';
 import { logger } from '@/utils/logger';
 import { getRuntimeDatabaseUrl } from '@/database/connection-url';
 import { attachPoolMetrics } from '@/database/pool-metrics';
+import { pgPoolIdentityOptions } from '@/database/pg-pool-identity';
 
 const log = logger.child({ component: 'capability-pool' });
 
@@ -83,6 +84,8 @@ export function getCapabilityPool(): pg.Pool {
     max: parseInt(process.env.HCRA_POOL_MAX ?? '10', 10),
     idleTimeoutMillis: 60_000,
     connectionTimeoutMillis: 20_000,
+    // application_name + TCP keepalive, shared with the Prisma and SAB pools.
+    ...pgPoolIdentityOptions('capability'),
   });
 
   pool.on('error', (err: unknown) => {

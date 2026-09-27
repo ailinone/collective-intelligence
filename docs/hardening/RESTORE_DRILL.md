@@ -51,14 +51,19 @@ fact, not an assumption.
 
 1. Finds the **newest** backup matching `ailin_dev_*.sql.gz` in `BACKUP_DIR`
    (or takes an explicit file as `$1`).
-2. Verifies it is a valid gzip archive.
+2. Reads the whole file: the gzip stream must decompress with a valid CRC and
+   the archive must end with pg_dump's end-of-data marker (5 zero bytes), so a
+   truncated dump fails here, before any container starts (see the 2026-09-23
+   incident in §5.1 for why `gunzip -t` alone is not enough).
 3. Starts an **ephemeral, throwaway** Postgres container
    (`pgvector/pgvector:pg16`, matching production so the `vector` extension in
    the dump restores). It publishes **no host port** and mounts **no named
    volume** — all state is discarded when the container is removed.
 4. Restores the backup into that container with `pg_restore`.
 5. Runs sanity `SELECT count(*)` queries on the key business tables:
-   `organizations`, `api_keys`, `request_logs`, `invoices`.
+   `organizations`, `api_keys`, `request_logs`, `invoices`. Each one must
+   exist and hold at least one row (a dump cut during table data still
+   creates every table, empty).
 6. Prints a **PASS/FAIL** summary.
 7. Tears the ephemeral container down (always, via an `EXIT` trap).
 
@@ -185,9 +190,76 @@ host step. What it does:
 | **Schedule** | loop with `sleep`; **every 24h** by default (`BACKUP_INTERVAL_SECONDS`, default `86400`) → **RPO ≤ 24h** |
 | **Database** | the **same** DB as `db` — `DB_NAME=app_db`, `DB_USER=app_user`, password from the **same** `db_password` swarm secret via `DB_PASSWORD_FILE`. No `ailin_dev`. |
 | **Encryption / offsite** | `pg_dump` custom format + gzip, uploaded to `s3://$S3_BUCKET/$S3_PREFIX/` with server-side encryption (`S3_SSE`, default `AES256`; set `aws:kms` + `S3_SSE_KMS_KEY_ID` for KMS) |
-| **Retention** | local rotation via `RETENTION_DAYS` (default 30); off-host retention should be an **S3 lifecycle policy** on the bucket |
-| **No duplicate runs** | `replicas: 1`, pinned to the manager node next to `db` (`placement: node.role == manager`) so it never runs duplicated across tasks |
+| **Retention** | local rotation via `RETENTION_DAYS` (script default 30; the service sets 7 through `BACKUP_RETENTION_DAYS`); off-host retention should be an **S3 lifecycle policy** on the bucket |
+| **No duplicate runs** | `replicas: 1`, pinned to the dedicated ci node that also runs `db` (`placement: node.labels.ci-dedicated==true`); on top of that the script holds an `flock` on `BACKUP_DIR/.backup-database.lock`, so a second run (manual or scheduled) exits with `BACKUP FAILED reason=locked` instead of dumping twice |
+| **Script delivery** | the container reads `/usr/local/bin/backup-database.sh` from a bind mount of `/opt/ailin/api/scripts/backup-database.sh` **on the node that runs the task** (the ci-dedicated node). The deploy workflow copies that file to the manager (`DEPLOY_HOST`) only, and warns on every deploy that changes it, so a change to the script reaches the service only through the manual in-place copy described below |
 | **On failure** | a failed cycle logs `ERROR: backup cycle FAILED` and retries after `BACKUP_RETRY_SECONDS` (default 1800s); the scheduler stays alive |
+| **Hung dump** | `pg_dump` connects with TCP keepalives and `tcp_user_timeout` (dead peer detected in ~2 min) and runs under `BACKUP_TIMEOUT_SECONDS` (default 10800 = 3h; full dumps take 40 to 51 min), then TERM, then KILL after `BACKUP_KILL_GRACE_SECONDS`; the run exits 124 and the retry path above takes over. These knobs (and `BACKUP_PG_*`) are script defaults: the service does not pass them through its environment yet, so changing them needs a compose change |
+| **Partial dumps** | written as `.inprogress.<prefix>_<timestamp>.<pid>.partial` in `BACKUP_DIR` and renamed to `<prefix>_<timestamp>.sql.gz` only after verification; deleted on any failure, timeout or TERM/INT/HUP. A container stop KILLs the script (TERM only reaches the loop, PID 1), and the partial it leaves is deleted by the next run as soon as that run holds the lock |
+| **Verification** | `pg_dump` and `gzip` exit 0, `pg_restore -l` lists at least one `TABLE DATA` entry, the whole gzip stream decompresses, and the archive ends with pg_dump's end-of-data marker; `.last-backup-success` is touched only after that |
+| **Script updates while it runs** | the script's body is one `main()` function called from its last line, so bash parses the whole file before running anything and an in-place copy during a dump cannot make the running shell execute a mix of old and new code |
+
+#### Incident 2026-09-23: hung pg_dump and truncated dumps under final names
+
+A `pg_dump` started at 19:06 kept waiting on its socket for 2+ hours after the
+`db` task behind it was stopped (the dump file stopped growing at 19:15:22), and
+the scheduler loop waited on it, so no retry ran and the newest successful
+backup was ~45 h old. Earlier failed runs had also left truncated files under
+final backup names (1.2 GB, 20 bytes, 5.4 GB, 2.9 GB), because the old script
+wrote straight to `<prefix>_<timestamp>.sql.gz` and never removed it on
+failure. The current `api/scripts/backup-database.sh` handles this as the
+table above describes, once it is the copy on the ci node (see "Script
+delivery"). Its header documents every knob, and
+`scripts/ci/test_backup_database.py` exercises success, a hang past the
+timeout, a `pg_dump` error, truncated or empty archives, SIGTERM during the
+dump, leftover partials, the lock and an in-place rewrite of the running
+script with stub binaries.
+
+Why `pg_restore -l` alone is not a sufficient check: pg_dump writes the whole
+TOC before the table data, and `pg_restore -l` stops after the TOC. On the real
+truncated files of 2026-09-23 it listed 1035 TOC entries and 102 `TABLE DATA`
+entries and exited 0 for the 1.2 GB, 2.9 GB and 5.4 GB files (exactly like a
+complete dump); only the 20-byte file failed. `pg_restore -l` run directly on
+a `.sql.gz` file always fails ("input file does not appear to be a valid
+archive"), complete or not, because the archive is gzip-wrapped, so the script
+feeds it through `gunzip -c`. What the two other checks gave on the real files
+(read on the manager, 2026-09-24):
+
+| File | Full gzip read | Last 5 bytes of the archive | Caught by |
+| --- | --- | --- | --- |
+| `ailin_dev_20260923_175024` (20 B) | OK (valid empty gzip) | none | `pg_restore -l` ("input file is too short") |
+| `ailin_dev_20260923_015154` (1.2 GB) | "unexpected end of file" | n/a | gzip CRC/length |
+| `ailin_dev_20260923_190640` (2.9 GB) | "unexpected end of file" | n/a | gzip CRC/length |
+| `ailin_dev_20260923_182024` (5.4 GB) | OK | `18 eb 44 14 d9` | end-of-data marker |
+| `ailin_dev_20260915_215930` (8.9 GB) | OK | `96 6e e8 ac a3` | end-of-data marker |
+| `ailin_dev_20260920_223243` (17.5 GB, complete) | OK | `00 00 00 00 00` | passes |
+
+Truncated files written before this fix keep their final names. Retention
+only runs on the node where the service runs, so the ones on the manager's
+`app_db-backups` volume (the four 2026-09-23 files) are never pruned, and
+`ailin_dev_20260915_215930` is truncated on both nodes. `restore-drill.sh` now
+refuses all of them before starting a container.
+
+**Updating the backup script on the ci node** (until the deploy syncs it):
+
+1. Make sure no run is in progress, because the copy being replaced may be
+   the old script, which is not safe to rewrite mid-run:
+   `docker exec <app_db-backup container> ps -o pid,etime,args` must show only
+   the loop and `sleep`, no `bash /usr/local/bin/backup-database.sh`. Runs
+   start about 24 h after the last `.last-backup-success`, and every
+   `BACKUP_RETRY_SECONDS` after a failure.
+2. Copy the file from the merged commit over the existing one **in place**,
+   for example `sudo cp /tmp/backup-database.sh
+   /opt/ailin/api/scripts/backup-database.sh`. A single-file bind mount pins
+   the inode, so `mv`, or any tool that writes a new file and renames it,
+   would not reach the running container. `stat -c %i` must print the same
+   inode before and after.
+3. Check that `sha256sum /opt/ailin/api/scripts/backup-database.sh` on the
+   node and `docker exec <container> sha256sum /usr/local/bin/backup-database.sh`
+   both match `git show origin/main:api/scripts/backup-database.sh | sha256sum`.
+4. After the next cycle the log shows
+   `BACKUP START ... keepalives=60/10/6 tcp_user_timeout=120000ms`, then
+   `Archive verified` and `BACKUP SUCCESS`.
 
 **Enabling off-host (do this in the deploy env)** — the service runs even
 without it, but then backups are **local-only** (logged as an RPO risk). Set:
@@ -217,7 +289,13 @@ AWS_DEFAULT_REGION=<region>
   that a recent backup *succeeded*. Alert when no new S3 object / no
   `BACKUP SUCCESS` log line has appeared in > N hours; a silently failing backup
   is indistinguishable from none.
-- **Alert on `ERROR: backup cycle FAILED`** in the service logs.
+- **Alert on `ERROR: backup cycle FAILED`** in the service logs. The script's
+  own line just before it says why: `BACKUP FAILED reason=timeout`,
+  `pg_dump_error`, `gzip_error`, `verify_failed`, `signal`, `locked`,
+  `name_collision`, `unexpected_exit`, `upload`, `config` (bad settings or no
+  password, found before anything runs) or `error`. A script that is KILLed
+  (container stop, OOM) logs nothing, so anchor alerts on the loop's line,
+  not on `reason=`.
 - Add an **S3 lifecycle policy** for off-host retention/expiry.
 - Run this **drill on a schedule** against the newest off-host backup and alert
   on a `FAIL`.

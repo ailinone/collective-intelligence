@@ -67,6 +67,8 @@ import { logger } from '@/utils/logger';
 import { getErrorMessage } from '@/utils/type-guards';
 import { findNativeCollapseModel } from './media-planner-gate';
 import { persistMediaPlanRun } from './media-planner-repository';
+import { runImageDeterministicGate } from './image-deterministic-gate';
+import type { EvaluationResult } from './evaluation/strategy-output-evaluator';
 import {
   MEDIA_GENERATION_CAPABILITIES,
   PlannerActionSchema,
@@ -78,6 +80,7 @@ import {
   type PlannerTurn,
   type PlannerTurnOutcome,
 } from './media-planner-types';
+import type { DocumentReviewExecutor, DocumentReviewRequest } from './document-review-strategy';
 
 const log = logger.child({ component: 'media-planner-strategy' });
 
@@ -96,9 +99,27 @@ export type CapabilityDispatcher = (
   body: CapabilityRequestBody
 ) => Promise<{ result: CapabilityModeResult; fallbackUsed: boolean }>;
 
+/**
+ * Structural interface for the before/after image-edit judge (Section D).
+ * `MediaJudgeEvaluator.evaluateImageEdit` already satisfies this shape —
+ * TypeScript structural typing means a real instance can be passed in with
+ * no adapter code, exactly like `MediaConsensusExecutor` above.
+ */
+export interface ImageEditJudge {
+  evaluateImageEdit(input: {
+    readonly editInstruction: string;
+    readonly preArtifact: AilinArtifact;
+    readonly postArtifact: AilinArtifact;
+  }): Promise<EvaluationResult>;
+}
+
 export interface MediaPlannerDeps {
   readonly capabilityDispatcher?: CapabilityDispatcher;
   readonly mediaConsensusExecutor?: MediaConsensusExecutor;
+  /** Optional — when absent, `pdf_understanding` capability_call actions
+   *  dispatch exactly as before (raw extraction, no critic review). See
+   *  document-review-strategy.ts. */
+  readonly documentReviewExecutor?: DocumentReviewExecutor;
   /** Falls back to the real singleton (`getCapabilityExecutionService()`) —
    *  only overridden in tests. */
   readonly capabilityExecutionService?: Pick<CapabilityExecutionService, 'executeWithCapabilities'>;
@@ -110,6 +131,14 @@ export interface MediaPlannerDeps {
   readonly candidateCount?: number;
   /** Injectable clock for deterministic duration assertions in tests. */
   readonly now?: () => number;
+  /** Optional before/after vision-judge for `edit` actions (Section D). When
+   *  absent, an edit that passes the deterministic gate is accepted without
+   *  a subjective quality check — the same fail-open-on-missing-dependency
+   *  posture `generate` already has for `mediaConsensusExecutor`. */
+  readonly imageEditJudge?: ImageEditJudge;
+  /** Bounded retry count for `edit` actions. Default 2, per the approved
+   *  design ("Bounded retry: ... up to 2 times"). */
+  readonly maxEditAttempts?: number;
 }
 
 // ─── Small local helpers ────────────────────────────────────────────────
@@ -135,6 +164,66 @@ function stripJsonCodeFence(text: string): string {
   const trimmed = text.trim();
   const fenced = trimmed.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/i);
   return fenced ? fenced[1] : trimmed;
+}
+
+/**
+ * `CapabilityModeResult.data` is `unknown` (it's built generically for
+ * every capability's response shape) — narrow it defensively rather than
+ * trusting the JSON shape blindly. Mirrors the response shape
+ * `capabilities-routes.ts`'s `image_editing` branch actually returns:
+ * `{ data: { data: Array<{ url?, b64_json?, revised_prompt? }> } }`.
+ */
+function extractEditedArtifact(
+  result: CapabilityModeResult,
+  action: Extract<PlannerAction, { kind: 'edit' }>
+): AilinArtifact {
+  const outer = result.data as { data?: unknown } | undefined;
+  const images = Array.isArray(outer?.data) ? (outer.data as Array<Record<string, unknown>>) : [];
+  const first = images[0];
+  const url = typeof first?.url === 'string' ? first.url : undefined;
+  const b64Json = typeof first?.b64_json === 'string' ? first.b64_json : undefined;
+  if (!first || (!url && !b64Json)) {
+    return {
+      modality: 'image',
+      stage_name: 'media-plan-edit',
+      stage_index: 0,
+      error: 'image edit call returned no usable output',
+    };
+  }
+  return {
+    modality: 'image',
+    stage_name: 'media-plan-edit',
+    stage_index: 0,
+    url,
+    b64_json: b64Json,
+    revised_prompt: typeof first.revised_prompt === 'string' ? first.revised_prompt : undefined,
+    provider: result.resolvedProvider,
+    model: result.resolvedModel,
+    metadata: { editInstruction: action.prompt },
+  };
+}
+
+interface PdfCapabilityResultData {
+  readonly text: string;
+  readonly metadata: { readonly pageCount: number };
+}
+
+/** Narrow, defensive guard — `CapabilityModeResult.data` is typed `unknown`.
+ *  Returns `undefined` (never throws) on anything that doesn't look like a
+ *  pdf_understanding result, so the caller falls through to the unchanged
+ *  plain `capability_result` outcome. */
+function extractPdfCapabilityData(data: unknown): PdfCapabilityResultData | undefined {
+  if (typeof data !== 'object' || data === null) return undefined;
+  const rec = data as Record<string, unknown>;
+  if (typeof rec.text !== 'string' || rec.text.trim().length === 0) return undefined;
+  const metadata = rec.metadata;
+  const pageCount =
+    typeof metadata === 'object' &&
+    metadata !== null &&
+    typeof (metadata as Record<string, unknown>).pageCount === 'number'
+      ? ((metadata as Record<string, unknown>).pageCount as number)
+      : 0;
+  return { text: rec.text, metadata: { pageCount } };
 }
 
 function buildChatResponse(
@@ -163,8 +252,14 @@ function summarizeTurnForTranscript(turn: PlannerTurn): string {
   switch (outcome.type) {
     case 'capability_result':
       return `Turn ${turn.turnIndex}: called capability "${outcome.capability}" — ${outcome.success ? 'succeeded' : 'failed'} (${outcome.summary})`;
+    case 'document_review_result':
+      return `Turn ${turn.turnIndex}: document review via "${outcome.capability}" — ${outcome.success ? 'succeeded' : 'failed'}${outcome.degraded ? ' (degraded)' : ''} (${outcome.pageCount} pages, ${outcome.issueCount} issue(s)): ${outcome.summary}`;
     case 'generation_result':
       return `Turn ${turn.turnIndex}: generated via "${outcome.capability}" — ${outcome.success ? 'succeeded' : 'failed'}${outcome.degraded ? ' (degraded)' : ''} (${outcome.summary})`;
+    case 'edit_result':
+      return outcome.success
+        ? `Turn ${turn.turnIndex}: image edit verified after ${outcome.attempts} attempt(s) (${outcome.summary})`
+        : `Turn ${turn.turnIndex}: image edit FAILED verification after ${outcome.attempts} attempt(s) — you MUST name this in the final action's unmetConstraints (${outcome.summary})`;
     case 'native_collapse':
       return `Turn ${turn.turnIndex}: model "${outcome.modelId}" natively satisfies constraints for "${outcome.capability}" — skipped decomposition (${outcome.summary})`;
     case 'final':
@@ -219,6 +314,7 @@ function buildPlannerSystemPrompt(
     '',
     'Respond with EXACTLY ONE JSON object, no prose, no markdown fences, matching one of:',
     '  {"kind":"generate","capability":"video_generation"|"image_generation","prompt":"...","constraints"?:{"durationSec"?:{"minSec"?:number,"maxSec"?:number},"resolution"?:{"width"?:number,"height"?:number,"tolerancePct"?:number},"requireAudioTrack"?:boolean},"reasoning"?:"..."}',
+    '  {"kind":"edit","prompt":"...describe the edit...","sourceArtifactIndex"?:number,"constraints"?:{"dimensions"?:{"width"?:number,"height"?:number,"tolerancePct"?:number},"format"?:"png"|"jpeg"|"webp"|"..."},"reasoning"?:"..."} — use this (NOT capability_call) whenever the user wants to EDIT an existing image; it automatically verifies the edit and retries on failure',
     '  {"kind":"capability_call","capability":"<one of the non-generation tools above>","body"?:{...arbitrary capability-specific fields...},"reasoning"?:"..."}',
     '  {"kind":"final","content":"...user-facing answer...","unmetConstraints":["...describe each constraint you could NOT satisfy, or an empty array if none"],"reasoning"?:"..."}',
     '',
@@ -355,6 +451,15 @@ export class MediaPlannerStrategy extends BaseStrategy {
           baselineCallCostUsd = consensusResult.totalJudgeCostUsd;
         }
 
+        const generationSummary = [
+          consensusResult.degraded
+            ? `degraded: ${consensusResult.degradedReason ?? 'all candidates failed'}`
+            : `best candidate #${consensusResult.bestCandidateIndex} selected from ${consensusResult.candidates.length} generated`,
+          consensusResult.qualityJudgingUnavailableReason,
+        ]
+          .filter(Boolean)
+          .join(' — ');
+
         state.turns.push({
           turnIndex,
           action,
@@ -362,11 +467,12 @@ export class MediaPlannerStrategy extends BaseStrategy {
             type: 'generation_result',
             capability: action.capability,
             success: !consensusResult.degraded,
-            summary: consensusResult.degraded
-              ? `degraded: ${consensusResult.degradedReason ?? 'all candidates failed'}`
-              : `best candidate #${consensusResult.bestCandidateIndex} selected from ${consensusResult.candidates.length} generated`,
+            summary: generationSummary,
             degraded: consensusResult.degraded,
             hasArtifact: Boolean(consensusResult.bestArtifact),
+            ...(consensusResult.qualityJudgingUnavailableReason
+              ? { qualityJudgingUnavailableReason: consensusResult.qualityJudgingUnavailableReason }
+              : {}),
           },
           durationMs: (this.deps.now?.() ?? Date.now()) - turnStartedAt,
           costUsd: consensusResult.totalJudgeCostUsd,
@@ -383,6 +489,18 @@ export class MediaPlannerStrategy extends BaseStrategy {
           stopReason = 'cost_ceiling_exhausted';
           break;
         }
+        continue;
+      }
+
+      if (action.kind === 'edit') {
+        const outcome = await this.runImageEdit(action, state);
+        state.turns.push({
+          turnIndex,
+          action,
+          outcome,
+          durationMs: (this.deps.now?.() ?? Date.now()) - turnStartedAt,
+          costUsd: 0,
+        });
         continue;
       }
 
@@ -425,6 +543,57 @@ export class MediaPlannerStrategy extends BaseStrategy {
           plan,
           (action.body ?? {}) as CapabilityRequestBody
         );
+
+        // pdf_understanding gets routed through the critic fan-out instead
+        // of the raw extraction — document review becomes a first-class
+        // planner path, not a separate strategy class (Section C). Every
+        // other capability's dispatch is byte-for-byte unchanged below.
+        // Fails open (falls through to the plain outcome) when the
+        // dependency isn't wired or the result doesn't look like a PDF
+        // result — never throws, never silently drops the extraction.
+        if (plan.id === 'pdf_understanding' && this.deps.documentReviewExecutor) {
+          const pdfData = extractPdfCapabilityData(result.data);
+          if (pdfData) {
+            const bodyFilename = action.body?.filename;
+            const reviewRequest: DocumentReviewRequest = {
+              documentText: pdfData.text,
+              pageCount: pdfData.metadata.pageCount,
+              filename: typeof bodyFilename === 'string' && bodyFilename.trim().length > 0 ? bodyFilename : 'document.pdf',
+              userMessageExcerpt: state.originalRequest.slice(0, 200),
+              userContext: context,
+              requestId: `${requestId}-turn-${turnIndex}-doc-review`,
+            };
+            const review = await this.deps.documentReviewExecutor.execute(reviewRequest);
+
+            totalJudgeCostUsd += review.totalCostUsd;
+            if (baselineCallCostUsd === 0 && review.totalCostUsd > 0) {
+              baselineCallCostUsd = review.totalCostUsd;
+            }
+
+            state.turns.push({
+              turnIndex,
+              action,
+              outcome: {
+                type: 'document_review_result',
+                capability: plan.id,
+                success: true,
+                summary: review.reportText,
+                pageCount: pdfData.metadata.pageCount,
+                issueCount: review.totalIssueCount,
+                degraded: review.degraded,
+              },
+              durationMs: (this.deps.now?.() ?? Date.now()) - turnStartedAt,
+              costUsd: review.totalCostUsd,
+            });
+
+            if (baselineCallCostUsd > 0 && totalJudgeCostUsd > costCeilingMultiplier * baselineCallCostUsd) {
+              stopReason = 'cost_ceiling_exhausted';
+              break;
+            }
+            continue;
+          }
+        }
+
         state.turns.push({
           turnIndex,
           action,
@@ -660,6 +829,130 @@ export class MediaPlannerStrategy extends BaseStrategy {
         hasArtifact: false,
       };
     }
+  }
+
+  /**
+   * §D "Image editing with verify": dispatch through the EXISTING,
+   * UNMODIFIED `image_editing` capability plan (the same
+   * `capabilityDispatcher`/`executeCapabilityByPlan` path a `capability_call`
+   * action already uses), then gate the result with
+   * `runImageDeterministicGate` and, if a judge is wired, confirm the edit
+   * instruction was followed via `ImageEditJudge.evaluateImageEdit`.
+   *
+   * Bounded retry (default 2 attempts, `deps.maxEditAttempts` overridable):
+   * NOTE this does NOT mirror a "retry-on-gate-fail loop inside
+   * `MediaConsensusStrategy`" — no such loop exists there (it generates N
+   * candidates in parallel and filters outliers, never re-generates one).
+   * This loop instead mirrors this class's OWN outer turn loop shape
+   * (`execute()` above): keep trying up to a bound, and on exhaustion
+   * produce a plain-language failure reason instead of throwing. It reuses
+   * `MediaConsensusStrategy.evaluateCandidate`'s real, worth-keeping
+   * property — the deterministic gate outranks the (paid) judge, so a gate
+   * failure never reaches a judge call.
+   */
+  private async runImageEdit(
+    action: Extract<PlannerAction, { kind: 'edit' }>,
+    state: PlannerState
+  ): Promise<PlannerTurnOutcome> {
+    const sourceIndex = action.sourceArtifactIndex ?? state.artifacts.length - 1;
+    const source = state.artifacts[sourceIndex];
+    if (!source || !source.b64_json) {
+      return {
+        type: 'edit_result',
+        success: false,
+        attempts: 0,
+        summary:
+          sourceIndex < 0 || !state.artifacts.length
+            ? 'no artifact has been produced yet to edit'
+            : `artifact at index ${sourceIndex} has no inline image bytes to edit`,
+        hasArtifact: false,
+      };
+    }
+    if (!this.deps.capabilityDispatcher) {
+      return {
+        type: 'edit_result',
+        success: false,
+        attempts: 0,
+        summary: 'capability dispatcher not wired',
+        hasArtifact: false,
+      };
+    }
+    const plan = getCapabilityExecutionPlan('image_editing');
+    if (!plan) {
+      return {
+        type: 'edit_result',
+        success: false,
+        attempts: 0,
+        summary: 'image_editing not in the live capability registry',
+        hasArtifact: false,
+      };
+    }
+
+    const maxAttempts = Math.max(1, this.deps.maxEditAttempts ?? 2);
+    let lastFailureReason = 'unknown failure';
+
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      let edited: AilinArtifact;
+      try {
+        const { result } = await this.deps.capabilityDispatcher(plan, {
+          image_base64: source.b64_json,
+          prompt: action.prompt,
+          response_format: 'b64_json',
+        });
+        edited = extractEditedArtifact(result, action);
+      } catch (err) {
+        lastFailureReason = `edit call failed: ${getErrorMessage(err)}`;
+        continue;
+      }
+      if (edited.error) {
+        lastFailureReason = `edit call failed: ${edited.error}`;
+        continue;
+      }
+
+      const gate = await runImageDeterministicGate(edited, action.constraints);
+      if (gate.status === 'fail') {
+        lastFailureReason = `deterministic gate failed: ${gate.violations
+          .map((v) => `${v.constraint} expected ${v.expected}, got ${v.actual}`)
+          .join('; ')}`;
+        continue;
+      }
+
+      if (this.deps.imageEditJudge) {
+        // Only an explicit 'fail' verdict triggers a retry below — 'pass'
+        // AND 'uncertain' are both treated as acceptance. This mirrors
+        // `EvaluationVerdict`'s own documented semantics (see
+        // `strategy-output-evaluator.ts`): 'uncertain' means the judge ran
+        // but lacks objective evidence to commit to pass/fail, which is a
+        // soft-pass elsewhere in this codebase (the outlier detector), not
+        // grounds to spend another paid edit attempt.
+        const judgeResult = await this.deps.imageEditJudge.evaluateImageEdit({
+          editInstruction: action.prompt,
+          preArtifact: source,
+          postArtifact: edited,
+        });
+        if (judgeResult.verdict === 'fail') {
+          lastFailureReason = `vision judge rejected the edit: ${judgeResult.notes ?? 'no rationale given'}`;
+          continue;
+        }
+      }
+
+      state.artifacts.push(edited);
+      return {
+        type: 'edit_result',
+        success: true,
+        attempts: attempt,
+        summary: `edit verified after ${attempt} attempt(s)`,
+        hasArtifact: true,
+      };
+    }
+
+    return {
+      type: 'edit_result',
+      success: false,
+      attempts: maxAttempts,
+      summary: `edit failed verification after ${maxAttempts} attempt(s): ${lastFailureReason}`,
+      hasArtifact: false,
+    };
   }
 
   private synthesizeDegradedSummary(state: PlannerState, unmetConstraints: readonly string[]): string {

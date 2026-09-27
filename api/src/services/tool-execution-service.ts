@@ -125,7 +125,7 @@ export function assertSafeGitRemote(value: string, label: string): void {
  * path from base to target starts with '..' (or is itself absolute, e.g.
  * across Windows drives) if and only if target escapes base.
  */
-function isPathWithinDirectory(baseDir: string, targetPath: string): boolean {
+export function isPathWithinDirectory(baseDir: string, targetPath: string): boolean {
   const relative = path.relative(baseDir, targetPath);
   return relative !== '..' && !relative.startsWith('..' + path.sep) && !path.isAbsolute(relative);
 }
@@ -293,7 +293,7 @@ export async function executeSearchReplaceTool(
     const fullPath = path.resolve(workingDirectory, file_path);
 
     // Security: Validate path is within working directory
-    if (!fullPath.startsWith(workingDirectory)) {
+    if (!isPathWithinDirectory(workingDirectory, fullPath)) {
       return {
         tool_call_id: toolCallId,
         success: false,
@@ -1142,7 +1142,7 @@ export async function executeListDirectoryTool(
     const fullPath = path.resolve(workingDirectory, targetPath);
 
     // Security check
-    if (!fullPath.startsWith(workingDirectory)) {
+    if (!isPathWithinDirectory(workingDirectory, fullPath)) {
       return {
         tool_call_id: toolCallId,
         success: false,

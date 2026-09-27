@@ -413,3 +413,36 @@ describe('sampleFramesForCandidate', () => {
     expect(frames).toBeUndefined();
   });
 });
+
+describe('MediaConsensusStrategy — qualityJudgingUnavailableReason passthrough', () => {
+  it('echoes the constructor-supplied reason on every result, even with critics: []', async () => {
+    const images: ImageResult[] = [
+      { images: [{ b64_json: 'aW1hZ2Utb25l' }], modelUsed: 'm', provider: 'p', durationMs: 5 },
+    ];
+    const imagesService = fakeImagesService(images);
+    const strategy = new MediaConsensusStrategy({
+      imagesService,
+      candidateCount: 1,
+      qualityJudgingUnavailableReason:
+        'quality judging unavailable: no vision-capable judge model configured',
+    });
+
+    const result = await strategy.execute(baseRequest({ candidateCount: 1 }));
+
+    expect(result.qualityJudgingUnavailableReason).toBe(
+      'quality judging unavailable: no vision-capable judge model configured'
+    );
+  });
+
+  it('is undefined when the constructor does not supply one (default, unchanged behavior)', async () => {
+    const images: ImageResult[] = [
+      { images: [{ b64_json: 'aW1hZ2Utb25l' }], modelUsed: 'm', provider: 'p', durationMs: 5 },
+    ];
+    const imagesService = fakeImagesService(images);
+    const strategy = new MediaConsensusStrategy({ imagesService, candidateCount: 1 });
+
+    const result = await strategy.execute(baseRequest({ candidateCount: 1 }));
+
+    expect(result.qualityJudgingUnavailableReason).toBeUndefined();
+  });
+});

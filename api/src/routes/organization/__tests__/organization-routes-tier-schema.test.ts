@@ -24,7 +24,7 @@
  * from `Object.values(TierLevel)`, so they cannot independently drift again.
  */
 import 'reflect-metadata';
-import Fastify, { type FastifyInstance, type FastifyRequest } from 'fastify';
+import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -32,8 +32,16 @@ import { TierLevel } from '@/domain/value-objects/organization-tier';
 
 const TEST_USER = { userId: 'user-1', organizationId: 'org-1', roles: ['owner'] };
 
-const { findAllMock } = vi.hoisted(() => ({
+const { findAllMock, requirePlatformAdminPreHandlerMock } = vi.hoisted(() => ({
   findAllMock: vi.fn().mockResolvedValue([]),
+  // SECURITY (org-listing-platform-admin-gate): GET /v1/organizations is now
+  // gated by requirePlatformAdmin() (see organization-routes-clean.ts). This
+  // suite is about the tier enum, not platform-admin authorization (that's
+  // require-platform-admin.test.ts's job), so it defaults to letting every
+  // caller through and only the dedicated 403 test below overrides it.
+  requirePlatformAdminPreHandlerMock: vi.fn(async (_request: FastifyRequest, _reply: FastifyReply) => {
+    // no-op: caller is treated as a platform admin by default
+  }),
 }));
 
 vi.mock('@/middleware/auth-middleware', () => ({
@@ -45,6 +53,7 @@ vi.mock('@/middleware/auth-middleware', () => ({
     async () => {
       // no-op: RBAC coarse gate isn't under test here
     },
+  requirePlatformAdmin: () => requirePlatformAdminPreHandlerMock,
 }));
 
 vi.mock('@/middleware/require-permission-middleware', () => ({
@@ -81,6 +90,9 @@ describe('organization-routes-clean — tier enum (HTTP behavior)', () => {
   beforeEach(async () => {
     vi.clearAllMocks();
     findAllMock.mockResolvedValue([]);
+    requirePlatformAdminPreHandlerMock.mockImplementation(async () => {
+      // default: caller passes the platform-admin gate
+    });
     server = Fastify();
     const { organizationRoutesClean } = await import('@/routes/organization/organization-routes-clean');
     await organizationRoutesClean(server);
@@ -109,6 +121,23 @@ describe('organization-routes-clean — tier enum (HTTP behavior)', () => {
   it('GET /v1/organizations?tier=<garbage> is still rejected with 400 (the enum still validates)', async () => {
     const res = await server.inject({ method: 'GET', url: '/v1/organizations?tier=not-a-real-tier' });
     expect(res.statusCode).toBe(400);
+  });
+
+  // SECURITY (org-listing-platform-admin-gate): GET /v1/organizations pages
+  // over every tenant's org name/tier/status/createdAt, so it must be
+  // restricted to platform admins (requirePlatformAdmin()), not any
+  // authenticated tenant user. Full authorization-logic coverage lives in
+  // require-platform-admin.test.ts; this just asserts the route actually
+  // wires the gate in.
+  it('GET /v1/organizations is rejected with 403 for a caller that fails the platform-admin gate', async () => {
+    requirePlatformAdminPreHandlerMock.mockImplementation(async (_request, reply) => {
+      reply.code(403).send({ error: 'Forbidden', message: 'Platform administrator privileges required' });
+    });
+
+    const res = await server.inject({ method: 'GET', url: '/v1/organizations' });
+
+    expect(res.statusCode).toBe(403);
+    expect(findAllMock).not.toHaveBeenCalled();
   });
 });
 

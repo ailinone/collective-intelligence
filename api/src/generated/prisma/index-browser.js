@@ -765,6 +765,18 @@ exports.Prisma.DiscoveryLogScalarFieldEnum = {
   createdAt: 'createdAt'
 };
 
+exports.Prisma.ProviderCapabilityAttributeRecordScalarFieldEnum = {
+  id: 'id',
+  providerId: 'providerId',
+  capability: 'capability',
+  source: 'source',
+  attributes: 'attributes',
+  attributesVerifiedAt: 'attributesVerifiedAt',
+  promotionNote: 'promotionNote',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
+};
+
 exports.Prisma.TaskPreferenceScalarFieldEnum = {
   id: 'id',
   organizationId: 'organizationId',
@@ -1525,6 +1537,7 @@ exports.Prisma.ModelName = {
   UserRole: 'UserRole',
   SecurityAuditLog: 'SecurityAuditLog',
   DiscoveryLog: 'DiscoveryLog',
+  ProviderCapabilityAttributeRecord: 'ProviderCapabilityAttributeRecord',
   TaskPreference: 'TaskPreference',
   ModelPerformanceMetric: 'ModelPerformanceMetric',
   ModelSelectionStrategy: 'ModelSelectionStrategy',

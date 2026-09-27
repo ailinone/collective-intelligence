@@ -100,7 +100,7 @@ interface RunwayTask {
 const STATIC_MODELS: readonly string[] = ['gen3a_turbo', 'gen3_alpha', 'act-one'] as const;
 
 /** Documented API version header value. */
-const DEFAULT_API_VERSION = '2024-11-06';
+export const DEFAULT_RUNWAYML_API_VERSION = '2024-11-06';
 
 export class RunwayMLAdapter extends ProviderAdapter {
   private readonly apiKey: string;
@@ -114,7 +114,7 @@ export class RunwayMLAdapter extends ProviderAdapter {
     super('runwayml', 'RunwayML', config);
     this.apiKey = config.apiKey;
     this.baseUrl = (config.baseUrl || 'https://api.dev.runwayml.com').replace(/\/$/, '');
-    this.apiVersion = config.apiVersion || DEFAULT_API_VERSION;
+    this.apiVersion = config.apiVersion || DEFAULT_RUNWAYML_API_VERSION;
     this.pollMaxAttempts = config.pollMaxAttempts ?? 120;
     this.pollIntervalMs = config.pollIntervalMs ?? 2000;
   }

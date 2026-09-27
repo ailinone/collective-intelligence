@@ -62,6 +62,9 @@ import type { OrchestrationContext } from '@/types';
 import type { ChatRequest } from '@/types';
 import { ValidationError } from '@/utils/custom-errors';
 import { incrementCounter, observeHistogram, METRIC_NAMES } from '@/core/operability/metrics';
+import { ModelRepository } from '@/services/model-repository';
+import { PROVIDER_CATALOG } from '@/providers/catalog/providers.catalog';
+import { canSatisfyDocumentAttributes } from '@/providers/catalog/document-capability-matcher';
 
 const log = logger.child({ service: 'pdf' });
 
@@ -169,9 +172,11 @@ type PdfParser = InstanceType<Awaited<ReturnType<typeof loadPdfParse>>>;
 
 export class PDFService {
   private readonly getVisionService: () => VisionOrchestrationService;
+  private readonly modelRepo: ModelRepository;
 
   constructor(getVisionService: () => VisionOrchestrationService = getVisionOrchestrationService) {
     this.getVisionService = getVisionService;
+    this.modelRepo = new ModelRepository();
   }
 
   async analyzePDF(options: PDFAnalysisOptions): Promise<PDFAnalysisResult> {
@@ -289,11 +294,13 @@ export class PDFService {
       );
     }
 
+    const resolvedModel = await this.selectPdfAnalysisModel(model, metadata.pageCount);
+
     const analysis = await this.analyzeText({
       text,
       filename,
       prompt,
-      model,
+      model: resolvedModel,
       metadata,
       userContext,
       requestId,
@@ -487,6 +494,47 @@ export class PDFService {
   // ============================================
   // Stage 3 — analysis over the assembled text
   // ============================================
+
+  /**
+   * LOTE AZ (2026-09-23): pdf-service.ts has no capability-based candidate
+   * selection of its own (unlike video/images orchestration) — it hands
+   * `model: 'auto'` straight to the generic orchestration engine. This
+   * resolves `pdf_understanding` candidates and pins the request to the
+   * best SURVIVING one only when the maxPages pre-filter actually excludes
+   * something; otherwise (including when filtering would exclude every
+   * candidate) it leaves the original model untouched — fail-open, never
+   * blocks a request just because this optional pre-filter had nothing
+   * useful to add.
+   */
+  private async selectPdfAnalysisModel(
+    explicitModel: string | undefined,
+    pageCount: number
+  ): Promise<string | undefined> {
+    if (explicitModel && explicitModel !== 'auto') return explicitModel;
+
+    const candidates = await this.modelRepo.searchModelsComplete({
+      capabilities: ['pdf_understanding'],
+      status: 'active',
+    });
+    if (candidates.length === 0) return explicitModel;
+
+    const catalogByProviderId = new Map(PROVIDER_CATALOG.map((e) => [e.providerId, e]));
+    const surviving = candidates.filter((model) =>
+      canSatisfyDocumentAttributes(
+        catalogByProviderId.get(model.provider)?.capabilityAttributes?.pdf_understanding,
+        { pageCount }
+      )
+    );
+
+    if (surviving.length === 0 || surviving.length === candidates.length) {
+      // Nothing to add: either every candidate would be excluded (fail-open
+      // — don't block the request) or nothing was excluded at all (no need
+      // to override the engine's own, richer selection).
+      return explicitModel;
+    }
+
+    return surviving[0].id;
+  }
 
   private async analyzeText(params: {
     text: string;

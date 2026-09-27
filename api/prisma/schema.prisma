@@ -1202,6 +1202,37 @@ model DiscoveryLog {
 }
 
 // ============================================
+// Provider capability attributes — 3-tier discovery (LOTE AZ, 2026-09-23)
+// ============================================
+
+// Overlay for `ProviderCatalogEntry.capabilityAttributes` entries that were
+// NOT hand-authored into the static `providers.catalog.ts` literal — i.e.
+// everything Tier 1 (schema-parsed), Tier 2 (empirically-probed), or Tier 3
+// (LLM-drafted / human-promoted) writes. Read via
+// `capability-attribute-store.ts#resolveCapabilityAttributes`, which checks
+// the static catalog first and falls back to this table. Multiple rows can
+// exist for the same (provider_id, capability) with DIFFERENT sources at
+// once — e.g. a trusted `probed` row and a stale, disagreeing `llm_draft`
+// row both stay visible (see the design's Tier 3 promotion-disagreement
+// rule) — so there is deliberately no unique constraint narrower than `id`.
+model ProviderCapabilityAttributeRecord {
+  id                 String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  providerId         String    @map("provider_id") @db.VarChar(64)
+  capability         String    @db.VarChar(64) // ModelCapability value, e.g. 'video_generation'
+  source             String    @db.VarChar(16) // 'schema' | 'probed' | 'llm_draft' | 'human'
+  attributes         Json // the CapabilityAttributes object (minus source/attributesVerifiedAt, which are columns)
+  attributesVerifiedAt DateTime? @map("attributes_verified_at")
+  /** Set only for a promoted (`source` rewritten to 'human') Tier 3 draft — records the promotion reason. */
+  promotionNote      String?   @map("promotion_note")
+  createdAt          DateTime  @default(now()) @map("created_at")
+  updatedAt          DateTime  @updatedAt @map("updated_at")
+
+  @@index([providerId, capability])
+  @@index([source])
+  @@map("provider_capability_attribute_records")
+}
+
+// ============================================
 // Dynamic Model Selection System
 // ============================================
 

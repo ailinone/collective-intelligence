@@ -67,7 +67,14 @@ export function sanitizeForPromptContext(
   if (typeof value !== 'string') return '';
   if (value.length === 0) return '';
 
-  let sanitized = value;
+  // Bound the input BEFORE any regex runs. The marker/control-char/backtick
+  // replacements below all scan with the `g` flag, so an attacker-supplied
+  // string with no closing delimiter forces a full-length backtracking scan
+  // from every starting offset (O(n^2) work) before the length truncation
+  // further down ever gets a chance to run. Capping here first bounds that
+  // work to a small constant regardless of how long the raw input is.
+  let sanitized =
+    value.length > maxLength * 4 ? value.slice(0, maxLength * 4) : value;
 
   // Strip prompt-template markers BEFORE other replacements so the
   // collapse-to-space step does not split a marker across boundaries.

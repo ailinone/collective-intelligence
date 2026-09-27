@@ -228,7 +228,7 @@ describe('Collective Intelligence Integration Tests', () => {
       expect([200, 201, 400, 404, 503]).toContain(response.statusCode);
     });
 
-    it('should execute a workflow', async () => {
+    it('allows a non-platform-admin key to execute an llm_call-only workflow', async () => {
       const response = await server.inject({
         method: 'POST',
         url: '/v1/workflows/execute',
@@ -256,7 +256,58 @@ describe('Collective Intelligence Integration Tests', () => {
         },
       });
 
-      expect([200, 201, 400, 404, 500]).toContain(response.statusCode);
+      // /v1/workflows/execute is the documented public API (see
+      // docs/reference/endpoints/collective-intelligence.md and
+      // openapi-spec.json: "Bearer or API Key", no admin requirement) for
+      // tenants running plain llm_call workflows. It must stay reachable by
+      // a regular tenant key as long as the workflow carries no dangerous
+      // tool_call step (see the sibling test below, and
+      // workflowRequiresPlatformAdmin() in agentic-workflow-engine.ts).
+      expect(response.statusCode).toBe(200);
+    });
+
+    it('refuses workflow execution with a dangerous tool_call for a non-platform-admin key (403)', async () => {
+      const response = await server.inject({
+        method: 'POST',
+        url: '/v1/workflows/execute',
+        headers: {
+          'x-api-key': testApiKey,
+        },
+        payload: {
+          workflow: {
+            id: 'test-workflow-dangerous-tool',
+            name: 'Test Workflow With Dangerous Tool',
+            description: 'A workflow that tries to delete a file',
+            version: '1.0.0',
+            steps: [
+              {
+                id: 'step-1',
+                name: 'Delete a file',
+                type: 'tool_call',
+                config: {
+                  tools: [
+                    {
+                      name: 'delete_file',
+                      description: 'Delete a file',
+                      parameters: {},
+                    },
+                  ],
+                },
+              },
+            ],
+          },
+          input: {},
+        },
+      });
+
+      // SECURITY: /v1/workflows/execute dispatches tool_call steps
+      // (delete_file, file_search, ...) against the shared tools sandbox.
+      // This suite's key belongs to a freshly created tenant org, which can
+      // never be the platform org, so any workflow containing a dangerous
+      // tool_call (outside the auto-recommendable whitelist, or in the
+      // CHAT_AUTO_EXECUTE_BLOCKED_TOOLS blocklist), at any nesting depth,
+      // must still be refused.
+      expect(response.statusCode).toBe(403);
     });
   });
 

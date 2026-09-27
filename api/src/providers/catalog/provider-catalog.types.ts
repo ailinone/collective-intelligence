@@ -35,6 +35,8 @@
  *      ontology, not the enum, is the source of truth for capability URIs.
  */
 
+import type { ModelCapability } from '@/types';
+
 /**
  * Integration class — determines WHICH fetcher/adapter factory to use.
  *
@@ -296,7 +298,51 @@ export interface VideoCapabilityAttributes {
    *  own docs — mirrors `lastReviewedAt` at the entry level so a future audit
    *  can tell a live-verified row from a stale one. */
   readonly attributesVerifiedAt?: string;
+  /**
+   * Trust tier (LOTE AZ, 2026-09-23 — 3-tier discovery). `'human'` covers the
+   * 6 pre-existing hand-authored rows (byteplus, zai, venice, runwayml,
+   * siliconflow, aivideoapi) migrated in this same change — they were
+   * live-verified against vendor docs, which IS the human tier's bar.
+   * `'schema'`/`'probed'` are populated by the Tier 1/Tier 2 discovery jobs.
+   * `'llm_draft'` is excluded from `canSatisfyCapabilityAttributes` entirely
+   * — see `capability-attribute-matcher.ts`.
+   */
+  readonly source?: 'schema' | 'probed' | 'llm_draft' | 'human';
 }
+
+/**
+ * Image generation/editing limits — needed by section D's `edit` action gate
+ * as well as this section's image pre-filter. Same "absence = undocumented,
+ * never unsupported" contract as `VideoCapabilityAttributes`.
+ */
+export interface ImageCapabilityAttributes {
+  /** Documented output dimension ceiling, e.g. `'2048x2048'`. */
+  readonly maxDimensions?: string;
+  /** Documented output dimension floor, e.g. `'256x256'`. */
+  readonly minDimensions?: string;
+  /** Vendor's own enumerated supported output formats (e.g. `['png','jpeg','webp']`). */
+  readonly supportedFormats?: readonly string[];
+  readonly attributesVerifiedAt?: string;
+  readonly source?: 'schema' | 'probed' | 'llm_draft' | 'human';
+}
+
+/** Document/PDF understanding limits — used by `pdf-service.ts`'s pre-filter. */
+export interface DocumentCapabilityAttributes {
+  /** Documented maximum page count the model's context window can absorb. */
+  readonly maxPages?: number;
+  readonly attributesVerifiedAt?: string;
+  readonly source?: 'schema' | 'probed' | 'llm_draft' | 'human';
+}
+
+/**
+ * Discriminated by the `ModelCapability` key it's stored under in
+ * `ProviderCatalogEntry.capabilityAttributes` — there is no explicit
+ * `kind` tag because the map key already disambiguates which shape applies.
+ */
+export type CapabilityAttributes =
+  | VideoCapabilityAttributes
+  | ImageCapabilityAttributes
+  | DocumentCapabilityAttributes;
 
 /**
  * Provider catalog entry — the source of truth for one provider integration.
@@ -415,13 +461,18 @@ export interface ProviderCatalogEntry {
   /** Additional hints for the capability merger. May reference ontology URIs
    *  or plain strings that match preferredLabel/synonyms. */
   readonly capabilityHints?: readonly CapabilityHint[];
-  /** Real per-provider video-generation media limits (duration/resolution/
-   *  aspect-ratio/native-audio), additive to `supports.videoGeneration`. See
-   *  `VideoCapabilityAttributes` for field semantics and the "absence ≠
-   *  unsupported" contract. Unset on aggregator/gateway rows where limits
-   *  vary per underlying upstream model or are undocumented. Consumed by
-   *  `video-capability-matcher.ts#canSatisfyVideoAttributes`. */
-  readonly videoCapabilityAttributes?: VideoCapabilityAttributes;
+  /** Real per-capability, per-provider media limits (duration/resolution/
+   *  aspect-ratio/native-audio for video; dimensions/formats for image;
+   *  maxPages for document understanding). Every entry carries `source` and
+   *  `attributesVerifiedAt`. See `CapabilityAttributes` for the per-capability
+   *  shapes and `capability-attribute-matcher.ts#canSatisfyCapabilityAttributes`
+   *  for the "absence ≠ unsupported" consuming contract. This field only
+   *  holds hand-authored (`source: 'human'`) rows — everything discovered by
+   *  the Tier 1/2/3 jobs lives in the `ProviderCapabilityAttributeRecord` DB
+   *  table and is merged in by `capability-attribute-store.ts#resolveCapabilityAttributes`,
+   *  since this array is a static, compiled TS literal that no runtime job
+   *  can write to. */
+  readonly capabilityAttributes?: Partial<Record<ModelCapability, CapabilityAttributes>>;
 
   // ─── Pricing ─────────────────────────────────────────────────────────────
   readonly pricingMode: PricingMode;

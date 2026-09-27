@@ -84,4 +84,15 @@ describe('database/client.ts pg.Pool sizing — config.database.poolMax/poolMin 
 
     expect(options.connectionString).toBe(FAKE_CONNECTION_STRING);
   });
+
+  it('tags connections with a per-pool application_name and enables TCP keepalive', async () => {
+    const { buildPgPoolOptions } = await import('../client');
+    const { pgPoolIdentityOptions } = await import('../pg-pool-identity');
+    const options = buildPgPoolOptions(FAKE_CONNECTION_STRING);
+
+    expect(options.application_name).toBe(pgPoolIdentityOptions('prisma').application_name);
+    expect(options.application_name).toMatch(/-prisma(@|$)/);
+    expect(options.keepAlive).toBe(true);
+    expect(options.keepAliveInitialDelayMillis).toBeGreaterThan(0);
+  });
 });

@@ -19,7 +19,9 @@ export class ArchiveProjectCommand {
   constructor(
     public readonly projectId: string,
     public readonly requesterUserId: string,
-    public readonly requesterOrganizationId: string
+    public readonly requesterOrganizationId: string,
+    /** Admin/owner role check result, resolved upstream by the route. */
+    public readonly requesterIsAdmin: boolean = false
   ) {}
 }
 
@@ -27,6 +29,8 @@ export class RestoreProjectCommand {
   constructor(
     public readonly projectId: string,
     public readonly requesterUserId: string,
-    public readonly requesterOrganizationId: string
+    public readonly requesterOrganizationId: string,
+    /** Admin/owner role check result, resolved upstream by the route. */
+    public readonly requesterIsAdmin: boolean = false
   ) {}
 }

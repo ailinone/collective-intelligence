@@ -1336,6 +1336,18 @@ export interface OrchestrationContext extends RequestUserContext {
   };
 
   /**
+   * ADR-026: the REAL result of running a detected code snippet in the
+   * isolated Docker sandbox for THIS request, when
+   * `CODE_EXECUTION_SANDBOX_ENABLED=true` and
+   * `code-execution-orchestration.ts`'s pre-step actually executed it.
+   * Absent whenever the flag is off (the default), no genuine execution
+   * intent/extractable snippet was found, or the pre-step was never invoked
+   * at this call site — `execution-system-prompt.ts` treats absence as
+   * "fall back to the honesty directive", never as an error.
+   */
+  codeExecutionResult?: import('../core/sandbox/code-execution.js').CodeExecutionResult;
+
+  /**
    * Best-of-N verification (#2, the thesis lever): objective checker for verifiable
    * tasks. Returns true iff a candidate's extracted final answer satisfies the task's
    * checkable property (plug it back into the constraints — no intended-answer peeking).
@@ -1874,11 +1886,20 @@ export interface AppConfig {
  * `maxTurns` and `costCeilingMultiplier` are PROVISIONAL defaults per the
  * architecture's §8 — each is a real product/cost decision still pending,
  * exposed here purely so it can be tuned without a code change.
+ *
+ * `judgeEnabled` (Section A of the completion spec, 2026-09-23) is the
+ * field that will gate real MediaJudgeEvaluator critics getting wired into
+ * MediaConsensusStrategy at its production call sites — defaults false,
+ * since the config surface exists ahead of that wiring.
  */
 export interface MediaPlannerConfig {
   enabled: boolean;
   maxTurns: number;
   costCeilingMultiplier: number;
+  judgeEnabled: boolean;
+  judgeMaxCostUsd: number;
+  judgeTimeoutMs: number;
+  judgeRubricVersion: string;
 }
 
 export interface ApiConfig {

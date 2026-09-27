@@ -41,12 +41,18 @@
  *    triage-service.ts) are real, selectable strategies; a request can ask
  *    for one explicitly (the `strategy` field) even when the current turn
  *    is running as a single model.
- *  - There is NO live, connected code-interpreter/sandbox that executes
- *    arbitrary user code in this conversation today — confirmed by
- *    `code-execution-honesty.ts`'s incident writeup. `run_command` and the
- *    dev-workflow tools (git/refactor/testing categories) operate on the
- *    server's own repo/filesystem for agentic coding tasks; neither is a
- *    general "run this snippet, return stdout" primitive for chat users.
+ *  - Whether there is a live, connected code-interpreter/sandbox that
+ *    executes arbitrary user code depends on `CODE_EXECUTION_SANDBOX_ENABLED`
+ *    (ADR-026, default off): OFF (the default, and current production state)
+ *    — confirmed by `code-execution-honesty.ts`'s incident writeup — there is
+ *    none; `run_command` and the dev-workflow tools (git/refactor/testing
+ *    categories) operate on the server's own repo/filesystem for agentic
+ *    coding tasks, neither is a general "run this snippet, return stdout"
+ *    primitive for chat users. ON, `code-execution-orchestration.ts` actually
+ *    runs a detected Python/JS snippet in the isolated Docker sandbox
+ *    (`core/sandbox/code-execution.ts`) before this prompt is built, and
+ *    `execution-system-prompt.ts` reports the REAL result instead of this
+ *    manifest's honest-denial sentence for that one turn.
  *  - The tool CATEGORY list is derived live from `toolRegistry.listCategories()`
  *    (not a hardcoded name list), so it reflects reality even as tools are
  *    added, renamed, or removed.
@@ -65,6 +71,7 @@
  * out of an already multi-section system prompt.
  */
 import { toolRegistry } from '@/core/tools/tool-registry';
+import { isCodeExecutionSandboxEnabled } from '@/core/sandbox/sandbox-policy';
 import type { ChatRequest, OrchestrationContext } from '@/types';
 
 /** Requests below this max_tokens cap are treated as latency-sensitive pings — mirrors
@@ -91,9 +98,12 @@ export function shouldIncludeSystemCapabilityManifest(
 }
 
 /**
- * Builds the manifest text. Pure function of live registry state — no
- * request/context parameters, since its content does not vary per-request
+ * Builds the manifest text. Pure function of live, process-wide state — no
+ * request/context parameters, since its content does not vary PER-REQUEST
  * (only whether it's included does, via `shouldIncludeSystemCapabilityManifest`).
+ * `CODE_EXECUTION_SANDBOX_ENABLED` (ADR-026) is one such process-wide input:
+ * a deployment-level flag, not a per-request one, so reading it here keeps
+ * that invariant rather than breaking it.
  */
 export function buildSystemCapabilityManifest(): string {
   const categories = toolRegistry.listCategories();
@@ -101,6 +111,19 @@ export function buildSystemCapabilityManifest(): string {
     categories.length > 0
       ? ` Tool categories registered system-wide (a different turn may attach tools from any of these even when absent above): ${categories.join(', ')}.`
       : '';
+
+  // ADR-026: this sentence must stay in lockstep with what
+  // `code-execution-orchestration.ts` can actually do when the flag is on —
+  // see that module and `core/sandbox/code-execution.ts`. With the flag off
+  // (the default), the sentence is byte-for-byte what it was before ADR-026.
+  const codeExecutionNote = isCodeExecutionSandboxEnabled()
+    ? ' It DOES have a live, isolated code-execution sandbox (Python/JavaScript) for this ' +
+      "conversation — when the user's message shows genuine \"run this and show me the real " +
+      'output\" intent with a fenced code block in one of those languages, the platform runs it ' +
+      "for real before you answer and gives you the actual result to report, rather than you " +
+      'reasoning it out yourself.'
+    : ' It does NOT have a live, connected code-interpreter/sandbox that executes arbitrary user ' +
+      'code in this conversation today.';
 
   return (
     'SYSTEM CAPABILITY AWARENESS: beyond this turn\'s own tools, the platform can independently ' +
@@ -110,8 +133,8 @@ export function buildSystemCapabilityManifest(): string {
     'and others) on request or when the task warrants it, even when none of that is active on this ' +
     'call.' +
     categoryNote +
-    ' It does NOT have a live, connected code-interpreter/sandbox that executes arbitrary user ' +
-    "code in this conversation today. If asked for something outside this turn's own tools, say so " +
+    codeExecutionNote +
+    " If asked for something outside this turn's own tools, say so " +
     'honestly and point to what the platform can do a different way, instead of claiming you did ' +
     'something you did not or flatly denying a capability the system genuinely supports elsewhere.'
   );

@@ -29,6 +29,8 @@ import {
 } from '@/services/model-capability-inference';
 import { Readable } from 'node:stream';
 import { getAilinVirtualModelProfiles } from '@/services/ailin-virtual-model-service';
+import { createSingleFlightLastGood } from '@/utils/single-flight-last-good';
+import { buildModelsRouteErrorResponse } from './models-route-errors';
 // Serialization + pagination core. Extracted into a dependency-light module so
 // the row-shaping and pagination logic is unit-testable without the heavy
 // provider-registry/DB import chain. See models-list-serialization.ts for the
@@ -110,10 +112,27 @@ type ModelsListQuery = {
   modality?: string;
 };
 
-let runtimeSignalsCache: {
-  expiresAt: number;
-  value: Map<string, RuntimeModelSignal>;
-} | null = null;
+// Last-good bound and failure handling for the runtime-signals aggregate
+// (catalog load audit 2026-09-24, R10). The query scans 48 h of
+// request_logs; it used to run with no single-flight (every concurrent
+// request after expiry fired its own copy) and, on failure, returned a NEW
+// empty Map per request, which also defeated the ranked-catalog memo below
+// (keyed on the signals reference) and re-ranked the full catalog on every
+// request.
+const RUNTIME_SIGNAL_MAX_STALE_MS = Math.max(
+  0,
+  Number(process.env.MODEL_RUNTIME_SIGNAL_MAX_STALE_MS || 30 * 60_000)
+);
+const RUNTIME_SIGNAL_RETRY_BACKOFF_MS = Math.max(
+  1_000,
+  Number(process.env.MODEL_RUNTIME_SIGNAL_RETRY_BACKOFF_MS || 30_000)
+);
+const RUNTIME_SIGNAL_WAIT_TIMEOUT_MS = Math.max(
+  100,
+  Number(process.env.MODEL_RUNTIME_SIGNAL_WAIT_TIMEOUT_MS || 5_000)
+);
+// Stable reference: served whenever no usable signals exist. Never mutated.
+const NO_RUNTIME_SIGNALS: Map<string, RuntimeModelSignal> = new Map();
 
 function toNumber(value: bigint | number | null | undefined): number {
   if (typeof value === 'bigint') {
@@ -133,61 +152,65 @@ function modelRuntimeSignal(
   return runtimeSignals.get(modelLookupKey(model.name));
 }
 
-async function getRuntimeSignals(): Promise<Map<string, RuntimeModelSignal>> {
-  const now = Date.now();
-  if (runtimeSignalsCache && runtimeSignalsCache.expiresAt > now) {
-    return runtimeSignalsCache.value;
+async function loadRuntimeSignals(): Promise<Map<string, RuntimeModelSignal>> {
+  const rows = await prisma.$queryRaw<RuntimeSignalRow[]>`
+    SELECT
+      lower(trim(request->>'model')) AS model_name,
+      COUNT(*) FILTER (WHERE status = 'success') AS success_count,
+      COUNT(*) FILTER (
+        WHERE status = 'error'
+          AND (
+            COALESCE(error_message, '') ILIKE '%OpenRouter API error: 404%'
+            OR COALESCE(error_message, '') ILIKE '%No endpoints found matching your data policy%'
+            OR COALESCE(error_message, '') ILIKE '%model_not_found%'
+          )
+      ) AS provider_404_count,
+      COUNT(*) FILTER (
+        WHERE status = 'error'
+          AND COALESCE(error_message, '') ILIKE '%No endpoints found matching your data policy%'
+      ) AS policy_blocked_count
+    FROM request_logs
+    WHERE endpoint = '/v1/chat/completions'
+      AND created_at > NOW() - make_interval(hours => ${RUNTIME_SIGNAL_LOOKBACK_HOURS})
+      AND request ? 'model'
+      AND lower(trim(request->>'model')) <> 'auto'
+    GROUP BY lower(trim(request->>'model'))
+  `;
+
+  const value = new Map<string, RuntimeModelSignal>();
+  for (const row of rows) {
+    const key = modelLookupKey(row.model_name);
+    if (!key) continue;
+    value.set(key, {
+      successCount: toNumber(row.success_count),
+      provider404Count: toNumber(row.provider_404_count),
+      policyBlockedCount: toNumber(row.policy_blocked_count),
+    });
   }
+  return value;
+}
 
-  try {
-    const rows = await prisma.$queryRaw<RuntimeSignalRow[]>`
-      SELECT
-        lower(trim(request->>'model')) AS model_name,
-        COUNT(*) FILTER (WHERE status = 'success') AS success_count,
-        COUNT(*) FILTER (
-          WHERE status = 'error'
-            AND (
-              COALESCE(error_message, '') ILIKE '%OpenRouter API error: 404%'
-              OR COALESCE(error_message, '') ILIKE '%No endpoints found matching your data policy%'
-              OR COALESCE(error_message, '') ILIKE '%model_not_found%'
-            )
-        ) AS provider_404_count,
-        COUNT(*) FILTER (
-          WHERE status = 'error'
-            AND COALESCE(error_message, '') ILIKE '%No endpoints found matching your data policy%'
-        ) AS policy_blocked_count
-      FROM request_logs
-      WHERE endpoint = '/v1/chat/completions'
-        AND created_at > NOW() - make_interval(hours => ${RUNTIME_SIGNAL_LOOKBACK_HOURS})
-        AND request ? 'model'
-        AND lower(trim(request->>'model')) <> 'auto'
-      GROUP BY lower(trim(request->>'model'))
-    `;
-
-    const value = new Map<string, RuntimeModelSignal>();
-    for (const row of rows) {
-      const key = modelLookupKey(row.model_name);
-      if (!key) continue;
-      value.set(key, {
-        successCount: toNumber(row.success_count),
-        provider404Count: toNumber(row.provider_404_count),
-        policyBlockedCount: toNumber(row.policy_blocked_count),
-      });
-    }
-
-    runtimeSignalsCache = {
-      expiresAt: now + RUNTIME_SIGNAL_CACHE_TTL_MS,
-      value,
-    };
-    return value;
-  } catch (error: unknown) {
+// Single-flight, stale-while-revalidate, bounded last-good (R10). A failure
+// or a slow first load never fails /v1/models: ranking just runs without
+// signals (NO_RUNTIME_SIGNALS) until the aggregate is available again.
+const runtimeSignalsSource = createSingleFlightLastGood<Map<string, RuntimeModelSignal>>({
+  load: loadRuntimeSignals,
+  fallback: NO_RUNTIME_SIGNALS,
+  ttlMs: RUNTIME_SIGNAL_CACHE_TTL_MS,
+  maxStaleMs: RUNTIME_SIGNAL_MAX_STALE_MS,
+  retryBackoffMs: RUNTIME_SIGNAL_RETRY_BACKOFF_MS,
+  waitTimeoutMs: RUNTIME_SIGNAL_WAIT_TIMEOUT_MS,
+  onError: (error: unknown) => {
     const errorMessage = error instanceof Error ? error.message : String(error);
     logger.warn(
-      { error: errorMessage },
-      'Failed to load runtime model signals; continuing without signals'
+      { error: errorMessage, retryBackoffMs: RUNTIME_SIGNAL_RETRY_BACKOFF_MS },
+      'Failed to load runtime model signals; serving last-good or no signals'
     );
-    return new Map<string, RuntimeModelSignal>();
-  }
+  },
+});
+
+function getRuntimeSignals(): Promise<Map<string, RuntimeModelSignal>> {
+  return runtimeSignalsSource.get();
 }
 
 function computeCatalogRank(model: Model, signal?: RuntimeModelSignal): number {
@@ -874,14 +897,17 @@ export async function registerModelRoutes(
       });
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : String(error);
-      requestLog.error({ error: errorMessage }, 'Failed to fetch models');
+      const response = buildModelsRouteErrorResponse(error, 'Failed to list models');
+      // The internal message is logged only; the client gets a fixed body.
+      requestLog.error(
+        { error: errorMessage, statusCode: response.statusCode, requestId: request.id },
+        'Failed to fetch models'
+      );
 
-      return reply.status(500).send({
-        error: {
-          code: 'internal_error',
-          message: errorMessage,
-        },
-      });
+      if (response.retryAfterSeconds !== undefined) {
+        reply.header('Retry-After', String(response.retryAfterSeconds));
+      }
+      return reply.status(response.statusCode).send(response.body);
     }
   };
 
@@ -1062,14 +1088,17 @@ export async function registerModelRoutes(
         });
       } catch (error: unknown) {
         const errorMessage = error instanceof Error ? error.message : String(error);
-        requestLog.error({ error: errorMessage }, 'Failed to fetch model');
+        const response = buildModelsRouteErrorResponse(error, 'Failed to fetch model');
+        // The internal message is logged only; the client gets a fixed body.
+        requestLog.error(
+          { error: errorMessage, statusCode: response.statusCode, requestId: request.id },
+          'Failed to fetch model'
+        );
 
-        return reply.status(500).send({
-          error: {
-            code: 'internal_error',
-            message: errorMessage,
-          },
-        });
+        if (response.retryAfterSeconds !== undefined) {
+          reply.header('Retry-After', String(response.retryAfterSeconds));
+        }
+        return reply.status(response.statusCode).send(response.body);
       }
     }
   );

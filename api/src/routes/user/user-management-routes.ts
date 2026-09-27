@@ -1137,6 +1137,23 @@ export async function registerUserManagementRoutes(server: FastifyInstance): Pro
           });
         }
 
+        // SECURITY (privilege escalation): requireRole('admin', 'owner') only
+        // checks claims, so an admin could hard-delete a strictly higher-ranked
+        // owner. Same hierarchy rule as authorizeRoleChange and the
+        // member-removal route: rank comes from the AUTHORITATIVE `user_roles`
+        // grants, not the declared `users.role` hint.
+        const [actorDbRoles, targetDbRoles] = await Promise.all([
+          getUserRoles(currentUser.userId, user.organizationId),
+          getUserRoles(id, user.organizationId),
+        ]);
+        if (roleSetRank(targetDbRoles) > roleSetRank(actorDbRoles)) {
+          requestLog.warn('Forbidden: target outranks the caller');
+          return reply.code(403).send({
+            error: 'Forbidden',
+            message: 'Cannot delete a user who outranks you',
+          });
+        }
+
         // Delete user (cascade will delete API keys)
         await prisma.user.delete({
           where: { id },

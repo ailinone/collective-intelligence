@@ -194,15 +194,20 @@ export async function registerMetricsRoute(server: FastifyInstance): Promise<voi
         reply.header('Content-Type', 'text/plain; version=0.0.4; charset=utf-8');
 
         // Check if connection is still open before sending
+        // `return reply.send(...)`: this handler is async and @fastify/compress
+        // runs an async onSend hook. Resolving with undefined made Fastify treat
+        // the reply as unsent and send again, so a gzip scrape of the ~500 KB
+        // payload went out as `content-encoding: gzip` with content-length 0
+        // (Prometheus: "EOF") and every scrape logged ERR_HTTP_HEADERS_SENT.
         if (!reply.raw.destroyed && !reply.raw.writableEnded) {
-          reply.send(payload);
-        } else {
-          // Connection was closed by client (normal for scraping)
-          request.log.debug(
-            { requestId: request.id },
-            'Metrics endpoint: connection closed before send'
-          );
+          return reply.send(payload);
         }
+        // Connection was closed by client (normal for scraping)
+        request.log.debug(
+          { requestId: request.id },
+          'Metrics endpoint: connection closed before send'
+        );
+        return reply;
       } catch (error: unknown) {
         // Safely extract error message and code without type assertions
         const errorMessage = getErrorMessage(error);
@@ -217,7 +222,7 @@ export async function registerMetricsRoute(server: FastifyInstance): Promise<voi
             { requestId: request.id },
             'Metrics endpoint: client connection closed during metrics generation'
           );
-          return;
+          return reply;
         }
 
         // Re-throw other errors
@@ -242,7 +247,7 @@ export async function registerMetricsRoute(server: FastifyInstance): Promise<voi
       const { exportPromptMetricsAsPrometheus, PROMETHEUS_CONTENT_TYPE } =
         await import('@/core/orchestration/prompts/prompt-metrics-exporter.js');
       reply.header('Content-Type', PROMETHEUS_CONTENT_TYPE);
-      reply.send(exportPromptMetricsAsPrometheus());
+      return reply.send(exportPromptMetricsAsPrometheus());
     }
   );
 }

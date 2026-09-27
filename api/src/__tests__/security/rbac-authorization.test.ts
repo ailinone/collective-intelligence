@@ -951,6 +951,12 @@ describe('RBAC role hierarchy inversion', () => {
     await syncDefaultRoles();
     const { registerUserManagementRoutes } = await import('@/routes/user/user-management-routes');
     await registerUserManagementRoutes(server);
+    const { organizationRoutesClean } = await import(
+      '@/routes/organization/organization-routes-clean'
+    );
+    await organizationRoutesClean(server);
+    const { registerAdminRoutes } = await import('@/routes/admin/admin-routes');
+    await registerAdminRoutes(server);
     await server.listen({ port: 0, host: '127.0.0.1' });
 
     const org = await prisma.organization.create({
@@ -1015,6 +1021,72 @@ describe('RBAC role hierarchy inversion', () => {
     });
     expect(grants.map((grant) => grant.role.name)).toEqual(['owner']);
   });
+
+  it('refuses to let an admin remove an owner', async () => {
+    const response = await server.inject({
+      method: 'DELETE',
+      url: `/v1/organizations/${orgId}/members/${ownerAId}`,
+      headers: { 'x-api-key': adminKey },
+    });
+
+    expect(response.statusCode).toBe(403);
+    expect(JSON.parse(response.body).error).toContain('outranks you');
+
+    const stillMember = await prisma.user.findUnique({ where: { id: ownerAId } });
+    expect(stillMember).not.toBeNull();
+
+    const grants = await prisma.userRole.findMany({
+      where: { userId: ownerAId, organizationId: orgId },
+      include: { role: true },
+    });
+    expect(grants.map((grant) => grant.role.name)).toEqual(['owner']);
+  });
+
+  // Same vector as the member-removal route, through the two user-delete
+  // routes (a HARD delete, cascading the owner's API keys).
+  it.each(['/v1/users', '/v1/admin/users'])(
+    'refuses to let an admin hard-delete an owner via DELETE %s/:id',
+    async (basePath) => {
+      const response = await server.inject({
+        method: 'DELETE',
+        url: `${basePath}/${ownerAId}`,
+        headers: { 'x-api-key': adminKey },
+      });
+
+      expect(response.statusCode).toBe(403);
+      expect(JSON.parse(response.body).message).toContain('outranks you');
+
+      const stillThere = await prisma.user.findUnique({ where: { id: ownerAId } });
+      expect(stillThere).not.toBeNull();
+    }
+  );
+
+  it.each(['/v1/users', '/v1/admin/users'])(
+    'still lets an admin delete a lower-ranked user via DELETE %s/:id',
+    async (basePath) => {
+      const victim = await prisma.user.create({
+        data: {
+          email: `member-${nanoid(8)}@hierarchy.test`,
+          name: 'member',
+          passwordHash: await bcrypt.hash('test123', 12),
+          organizationId: orgId,
+          status: 'active',
+        },
+      });
+      const { assignRoleToUser, invalidateRbacCache } = await import('@/services/rbac-service');
+      await assignRoleToUser(victim.id, orgId, 'member');
+      invalidateRbacCache();
+
+      const response = await server.inject({
+        method: 'DELETE',
+        url: `${basePath}/${victim.id}`,
+        headers: { 'x-api-key': adminKey },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(await prisma.user.findUnique({ where: { id: victim.id } })).toBeNull();
+    }
+  );
 
   it('refuses to let an admin grant a role above its own rank', async () => {
     const response = await server.inject({

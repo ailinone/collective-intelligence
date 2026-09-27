@@ -76,6 +76,17 @@ export class ModelRepository {
   private static inFlightCompleteSearches = new Map<string, Promise<Model[]>>();
 
   /**
+   * In-flight dedup for `searchModels`, same contract as
+   * `inFlightCompleteSearches`: concurrent callers with identical criteria
+   * share one L2 lookup and at most one database query. Without it a cold
+   * cache turned one selection into a stampede: on 2026-09-24 the triage
+   * pre-warm's per-model scoring issued 39 identical `WITH page AS` queries
+   * within 277 ms (514-791 ms each), taking 66 pool connections at once.
+   * Static for the same reason as the map above.
+   */
+  private static inFlightSearches = new Map<string, Promise<Model[]>>();
+
+  /**
    * Busca modelos com critérios avançados
    *
    * Uses PostgreSQL native JSON queries with GIN indexes for efficient filtering/ordering
@@ -88,6 +99,24 @@ export class ModelRepository {
       return cached;
     }
 
+    const inFlight = ModelRepository.inFlightSearches.get(cacheKey);
+    if (inFlight) {
+      return inFlight;
+    }
+
+    const lookup = this.searchModelsThroughL2(criteria, cacheKey);
+    ModelRepository.inFlightSearches.set(cacheKey, lookup);
+    try {
+      return await lookup;
+    } finally {
+      ModelRepository.inFlightSearches.delete(cacheKey);
+    }
+  }
+
+  private async searchModelsThroughL2(
+    criteria: ModelSearchCriteria,
+    cacheKey: string
+  ): Promise<Model[]> {
     // L2: shared Redis cache so concurrent processes don't each hammer the DB
     // (hot-path for function_calling; DB storms here caused 57014 timeouts).
     // Criteria already carries limit/offset, so the hash covers pagination.

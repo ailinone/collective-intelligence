@@ -38,6 +38,7 @@ import {
   createSetupIntent as stripeCreateSetupIntent,
   attachPaymentMethod as stripeAttachPaymentMethod,
   detachPaymentMethod as stripeDetachPaymentMethod,
+  retrievePaymentMethod as stripeRetrievePaymentMethod,
   listPaymentMethods as stripeListPaymentMethods,
   createSubscription as stripeCreateSubscription,
   cancelSubscription as stripeCancelSubscription,
@@ -54,7 +55,7 @@ import {
 } from '@/services/billing-plan-service';
 import { toInputJson } from '@/utils/json';
 import { aggregateUsageCosts } from '@/services/billing-usage-aggregation';
-import { ApplicationError, ResourceNotFoundError } from '@/utils/custom-errors';
+import { ApplicationError, AuthorizationError, ResourceNotFoundError } from '@/utils/custom-errors';
 
 const log = logger.child({ component: 'billing-service' });
 type InvoiceWithItems = Prisma.InvoiceGetPayload<{ include: { items: true } }>;
@@ -512,13 +513,50 @@ function mapInvoiceRecord(invoice: InvoiceWithItems): Invoice {
   };
 }
 
-export async function markInvoicePaid(organizationId: string, invoiceId: string): Promise<void> {
+/**
+ * Returns the id of an existing (non-cancelled) invoice of this organization
+ * whose period overlaps [periodStart, periodEnd), or null when there is none.
+ */
+export async function findOverlappingInvoice(
+  organizationId: string,
+  periodStart: Date,
+  periodEnd: Date
+): Promise<string | null> {
+  const overlapping = await prisma.invoice.findFirst({
+    where: {
+      organizationId,
+      periodStart: { lt: periodEnd },
+      periodEnd: { gt: periodStart },
+      status: { not: 'cancelled' },
+    },
+    select: { id: true },
+  });
+  return overlapping?.id ?? null;
+}
+
+export async function markInvoicePaid(
+  organizationId: string,
+  invoiceId: string,
+  options: { allowManualMark?: boolean } = {}
+): Promise<void> {
   const invoice = await prisma.invoice.findFirst({
     where: { id: invoiceId, organizationId },
   });
 
   if (!invoice) {
     return;
+  }
+
+  // SECURITY (billing fraud): without a Stripe invoice to actually charge
+  // (Stripe disabled, or the saga left it `stripe_sync_failed`), this would
+  // flip the invoice to `paid` with no money moving, and the reconciliation
+  // job never looks at `paid` invoices again. Only a platform administrator
+  // may record an out-of-band payment that way.
+  const canChargeThroughStripe = isStripeEnabled() && Boolean(invoice.stripeInvoiceId);
+  if (!canChargeThroughStripe && !options.allowManualMark) {
+    throw new AuthorizationError(
+      'This invoice has no Stripe invoice to pay; only a platform administrator can mark it as paid manually'
+    );
   }
 
   let paidAt = new Date();
@@ -903,6 +941,20 @@ export async function attachPaymentMethodToOrganization(
     );
   }
 
+  // SECURITY (BOLA): Stripe's attach API takes no customer-ownership guard for
+  // a PaymentMethod that is already attached elsewhere on some object types,
+  // so verify it isn't already owned by a *different* Stripe customer before
+  // attaching it to this org. A PaymentMethod with no owner yet (created via a
+  // SetupIntent but not yet attached) is fine to attach.
+  const existingPaymentMethod = await stripeRetrievePaymentMethod(paymentMethodId);
+  const existingOwnerCustomerId =
+    typeof existingPaymentMethod.customer === 'string'
+      ? existingPaymentMethod.customer
+      : (existingPaymentMethod.customer?.id ?? undefined);
+  if (existingOwnerCustomerId && existingOwnerCustomerId !== customerId) {
+    throw new AuthorizationError('Payment method belongs to a different customer');
+  }
+
   const paymentMethod = await stripeAttachPaymentMethod({
     customerId,
     paymentMethodId,
@@ -932,6 +984,19 @@ export async function detachPaymentMethodFromOrganization(
   });
   if (!profile?.stripeCustomerId) {
     return;
+  }
+
+  // SECURITY (BOLA): Stripe's detach API takes no customer parameter and will
+  // detach whatever payment method ID it's given, regardless of who owns it.
+  // Verify the payment method actually belongs to the caller's own Stripe
+  // customer before detaching it.
+  const paymentMethod = await stripeRetrievePaymentMethod(paymentMethodId);
+  const ownerCustomerId =
+    typeof paymentMethod.customer === 'string'
+      ? paymentMethod.customer
+      : (paymentMethod.customer?.id ?? undefined);
+  if (ownerCustomerId !== profile.stripeCustomerId) {
+    throw new ResourceNotFoundError('PaymentMethod', paymentMethodId);
   }
 
   await stripeDetachPaymentMethod(paymentMethodId);

@@ -21,6 +21,7 @@ import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { getSemanticMemoryStore, type MemoryType } from '@/core/memory/semantic-memory-store';
 import {
   getAgenticWorkflowEngine,
+  workflowRequiresPlatformAdmin,
   type WorkflowDefinition,
 } from '@/core/agentic/agentic-workflow-engine';
 import { getReasoningTransparency } from '@/core/transparency/reasoning-transparency';
@@ -29,6 +30,8 @@ import { getErrorMessage } from '@/utils/type-guards';
 import type { ExtendedFastifyRequest } from '@/types/fastify-extended';
 import { rejectAnonymousGuestKeyPreHandler } from '@/services/anonymous-quota-gate';
 import { rejectChatFreeTierKeyPreHandler } from '@/services/free-tier-quota-gate';
+import { isPlatformAdminRequest } from '@/middleware/auth-middleware';
+import { recordSecurityEvent } from '@/services/security-audit-service';
 import { getLearningScopeConfig } from '@/config/learning-scope';
 
 const log = logger.child({ component: 'ci-routes' });
@@ -535,6 +538,21 @@ export async function registerCollectiveIntelligenceRoutes(server: FastifyInstan
         authenticatedServer.authenticate,
         rejectAnonymousGuestKeyPreHandler,
         rejectChatFreeTierKeyPreHandler,
+        // SECURITY (ci#652, scoped by the ci#652 follow-up): this route is
+        // publicly documented (docs/reference/endpoints/*.md,
+        // openapi-spec.json) as tenant-facing for `llm_call`-only workflows,
+        // so it CANNOT be gated behind platform-admin unconditionally here —
+        // that broke the documented contract. Instead,
+        // `workflowRequiresPlatformAdmin()` (agentic-workflow-engine.ts) is
+        // run in the handler below, against the RESOLVED workflow
+        // definition, and only denies (403) a non-platform-admin caller when
+        // the workflow reaches a `tool_call` step (at any nesting depth —
+        // parallel/loop/sub_workflow included) naming a tool outside the
+        // triage auto-recommendable set or inside
+        // `CHAT_AUTO_EXECUTE_BLOCKED_TOOLS`. Those tools (delete_file,
+        // file_search, heal_file, ...) still run sandboxed under
+        // `TOOLS_BASE_DIR`, never `process.cwd()` (see executeToolStep) —
+        // that part of ci#652 is unchanged.
       ],
       schema: {
         description: 'Execute an agentic workflow',
@@ -587,6 +605,34 @@ export async function registerCollectiveIntelligenceRoutes(server: FastifyInstan
           return reply
             .status(400)
             .send({ error: 'Either workflowId or workflow must be provided' });
+        }
+
+        // SECURITY: scoped platform-admin gate (see the preHandler comment
+        // above). Runs against the RESOLVED workflow — whether it came from
+        // `workflowId` or the inline body — since `/v1/workflows/create`
+        // (which registers a workflow for later execution by id) is not
+        // itself platform-admin gated.
+        if (workflowRequiresPlatformAdmin(workflow) && !isPlatformAdminRequest(request)) {
+          log.warn(
+            {
+              userId: userContext.userId,
+              organizationId: userContext.organizationId,
+              workflowId: workflowId || workflow.id,
+            },
+            'workflows/execute: denied — workflow reaches a tool_call outside the tenant-safe set and caller is not a platform admin'
+          );
+          await recordSecurityEvent({
+            eventType: 'platform_admin_check_failed',
+            severity: 'warning',
+            message: 'Non-platform-admin tenant attempted to execute a workflow with a gated tool_call',
+            userId: userContext.userId,
+            organizationId: userContext.organizationId,
+            metadata: { workflowId: workflowId || workflow.id, route: '/v1/workflows/execute' },
+          });
+          return reply.status(403).send({
+            error: 'Forbidden',
+            message: 'Platform administrator privileges required to execute this workflow',
+          });
         }
 
         const result = await workflowEngine.execute({

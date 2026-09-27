@@ -19,8 +19,8 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { buildDockerArgs } from '../container-sandbox';
-import { resolveSandboxLimits } from '../sandbox-policy';
+import { buildDockerArgs, execInSandbox } from '../container-sandbox';
+import { resolveCodeExecutionAllowlist, resolveSandboxLimits } from '../sandbox-policy';
 
 const ENV_KEYS = [
   'SANDBOX_NETWORK_MODE',
@@ -149,5 +149,75 @@ describe('docker argv — the isolation contract', () => {
   it('collapses an attempt to configure bridge networking back to none', () => {
     process.env.SANDBOX_NETWORK_MODE = 'bridge';
     expectFlagValue(build(), '--network', 'none');
+  });
+});
+
+// ── ADR-026: stdin support + per-call allowlist/image override ─────────────
+
+describe('buildDockerArgs — interactive (-i) flag for stdin-fed code execution', () => {
+  it('omits -i by default — every existing (non-stdin) caller is unaffected', () => {
+    expect(build()).not.toContain('-i');
+  });
+
+  it('adds -i only when interactive is explicitly requested', () => {
+    const argv = buildDockerArgs({
+      containerName: 'ci-sbx-test',
+      scopePath: '/tmp/scope',
+      limits: resolveSandboxLimits(),
+      command: 'python3',
+      args: ['-'],
+      interactive: true,
+    });
+    expect(argv).toContain('-i');
+    // Still keeps the full isolation contract — -i changes stdin handling only.
+    expect(argv).toContain('--read-only');
+    expect(argv).toContain('--cap-drop');
+    expectFlagValue(argv, '--network', 'none');
+  });
+
+  it('places -i before the image/command, never after (so it cannot be read as an argv element)', () => {
+    const argv = buildDockerArgs({
+      containerName: 'ci-sbx-test',
+      scopePath: '/tmp/scope',
+      limits: resolveSandboxLimits(),
+      command: 'python3',
+      args: ['-'],
+      interactive: true,
+    });
+    const limits = resolveSandboxLimits();
+    expect(argv.indexOf('-i')).toBeLessThan(argv.indexOf(limits.image));
+  });
+});
+
+describe('execInSandbox — per-call commandAllowlist override reaches the policy gate (ADR-026)', () => {
+  // Fully hermetic: a plain literal satisfies SandboxSession's shape, and the
+  // policy gate runs and returns before session.scopePath or Docker is ever
+  // touched for an arg that fails validation — see execInSandbox's own
+  // "policy gate, BEFORE anything is spawned" comment.
+  const fakeSession = { sessionId: 'test-session', scopePath: '/tmp/does-not-matter' };
+
+  it('WITHOUT an override, an interpreter command is blocked at the COMMAND check', async () => {
+    const result = await execInSandbox(fakeSession, 'python3', ['bad\0arg']);
+    expect(result.outcome).toBe('blocked');
+    expect(result.reason).toContain('not in the sandbox allowlist');
+  });
+
+  it('WITH a per-call override, the same command clears the COMMAND check (only the bad arg still fails)', async () => {
+    const result = await execInSandbox(fakeSession, 'python3', ['bad\0arg'], {
+      commandAllowlist: resolveCodeExecutionAllowlist('python'),
+    });
+    expect(result.outcome).toBe('blocked');
+    // Proves the command itself was accepted — the block below is now the
+    // ARGUMENT, not the command.
+    expect(result.reason).toContain('NUL byte');
+    expect(result.reason).not.toContain('not in the sandbox allowlist');
+  });
+
+  it('an override for one language does not implicitly allow the other', async () => {
+    const result = await execInSandbox(fakeSession, 'node', ['bad\0arg'], {
+      commandAllowlist: resolveCodeExecutionAllowlist('python'),
+    });
+    expect(result.outcome).toBe('blocked');
+    expect(result.reason).toContain("Command 'node' is not in the sandbox allowlist");
   });
 });

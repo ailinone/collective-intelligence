@@ -250,6 +250,11 @@ export type SecurityAuditLog = $Result.DefaultSelection<Prisma.$SecurityAuditLog
  */
 export type DiscoveryLog = $Result.DefaultSelection<Prisma.$DiscoveryLogPayload>
 /**
+ * Model ProviderCapabilityAttributeRecord
+ * 
+ */
+export type ProviderCapabilityAttributeRecord = $Result.DefaultSelection<Prisma.$ProviderCapabilityAttributeRecordPayload>
+/**
  * Model TaskPreference
  * 
  */
@@ -1013,6 +1018,16 @@ export class PrismaClient<
     * ```
     */
   get discoveryLog(): Prisma.DiscoveryLogDelegate<ExtArgs, ClientOptions>;
+
+  /**
+   * `prisma.providerCapabilityAttributeRecord`: Exposes CRUD operations for the **ProviderCapabilityAttributeRecord** model.
+    * Example usage:
+    * ```ts
+    * // Fetch zero or more ProviderCapabilityAttributeRecords
+    * const providerCapabilityAttributeRecords = await prisma.providerCapabilityAttributeRecord.findMany()
+    * ```
+    */
+  get providerCapabilityAttributeRecord(): Prisma.ProviderCapabilityAttributeRecordDelegate<ExtArgs, ClientOptions>;
 
   /**
    * `prisma.taskPreference`: Exposes CRUD operations for the **TaskPreference** model.
@@ -1922,6 +1937,7 @@ export namespace Prisma {
     UserRole: 'UserRole',
     SecurityAuditLog: 'SecurityAuditLog',
     DiscoveryLog: 'DiscoveryLog',
+    ProviderCapabilityAttributeRecord: 'ProviderCapabilityAttributeRecord',
     TaskPreference: 'TaskPreference',
     ModelPerformanceMetric: 'ModelPerformanceMetric',
     ModelSelectionStrategy: 'ModelSelectionStrategy',
@@ -1979,7 +1995,7 @@ export namespace Prisma {
       omit: GlobalOmitOptions
     }
     meta: {
-      modelProps: "organization" | "project" | "moderationPolicy" | "user" | "organizationInvite" | "authDeviceFlow" | "apiKey" | "apiKeyRotationLog" | "provider" | "model" | "modelConfig" | "modelHealth" | "requestLog" | "collectiveRun" | "collectiveSignal" | "learningData" | "shardConfig" | "usageQuota" | "codebaseProject" | "codebaseFile" | "codebaseSymbol" | "codebaseDependency" | "codebaseCheckpoint" | "billingProfile" | "invoice" | "invoiceItem" | "billingSubscription" | "billingPlan" | "billingPrice" | "usageEvent" | "authLoginChallenge" | "learningBucket" | "strategyWeight" | "cacheEntry" | "secretAccessLog" | "managedSecret" | "role" | "permission" | "rolePermission" | "userRole" | "securityAuditLog" | "discoveryLog" | "taskPreference" | "modelPerformanceMetric" | "modelSelectionStrategy" | "file" | "batch" | "fineTuningJob" | "assistant" | "assistantFile" | "thread" | "threadMessage" | "threadRun" | "threadRunCheckpoint" | "threadRunStep" | "vectorStore" | "vectorStoreFile" | "vectorStoreChunk" | "cachedContext" | "semanticMemory" | "semanticCacheEntry" | "broadcastTraceOutbox" | "broadcastDestination" | "broadcastDelivery" | "broadcastDlqEntry" | "decisionAudit" | "knowledgeEdge" | "workflowExecution" | "executionOutcome" | "shadowEvaluation" | "strategyPerformanceSnapshot" | "driftEvent" | "rollbackEvent" | "learningValidationReport" | "experiment" | "experimentExecution" | "feedbackExtractionState" | "domainEventOutbox" | "processedWebhookEvent" | "feedbackExtractionLog" | "organizationBalance" | "creditTransaction" | "anonymousChatLog" | "providerOperabilitySnapshot"
+      modelProps: "organization" | "project" | "moderationPolicy" | "user" | "organizationInvite" | "authDeviceFlow" | "apiKey" | "apiKeyRotationLog" | "provider" | "model" | "modelConfig" | "modelHealth" | "requestLog" | "collectiveRun" | "collectiveSignal" | "learningData" | "shardConfig" | "usageQuota" | "codebaseProject" | "codebaseFile" | "codebaseSymbol" | "codebaseDependency" | "codebaseCheckpoint" | "billingProfile" | "invoice" | "invoiceItem" | "billingSubscription" | "billingPlan" | "billingPrice" | "usageEvent" | "authLoginChallenge" | "learningBucket" | "strategyWeight" | "cacheEntry" | "secretAccessLog" | "managedSecret" | "role" | "permission" | "rolePermission" | "userRole" | "securityAuditLog" | "discoveryLog" | "providerCapabilityAttributeRecord" | "taskPreference" | "modelPerformanceMetric" | "modelSelectionStrategy" | "file" | "batch" | "fineTuningJob" | "assistant" | "assistantFile" | "thread" | "threadMessage" | "threadRun" | "threadRunCheckpoint" | "threadRunStep" | "vectorStore" | "vectorStoreFile" | "vectorStoreChunk" | "cachedContext" | "semanticMemory" | "semanticCacheEntry" | "broadcastTraceOutbox" | "broadcastDestination" | "broadcastDelivery" | "broadcastDlqEntry" | "decisionAudit" | "knowledgeEdge" | "workflowExecution" | "executionOutcome" | "shadowEvaluation" | "strategyPerformanceSnapshot" | "driftEvent" | "rollbackEvent" | "learningValidationReport" | "experiment" | "experimentExecution" | "feedbackExtractionState" | "domainEventOutbox" | "processedWebhookEvent" | "feedbackExtractionLog" | "organizationBalance" | "creditTransaction" | "anonymousChatLog" | "providerOperabilitySnapshot"
       txIsolationLevel: Prisma.TransactionIsolationLevel
     }
     model: {
@@ -5088,6 +5104,80 @@ export namespace Prisma {
           count: {
             args: Prisma.DiscoveryLogCountArgs<ExtArgs>
             result: $Utils.Optional<DiscoveryLogCountAggregateOutputType> | number
+          }
+        }
+      }
+      ProviderCapabilityAttributeRecord: {
+        payload: Prisma.$ProviderCapabilityAttributeRecordPayload<ExtArgs>
+        fields: Prisma.ProviderCapabilityAttributeRecordFieldRefs
+        operations: {
+          findUnique: {
+            args: Prisma.ProviderCapabilityAttributeRecordFindUniqueArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$ProviderCapabilityAttributeRecordPayload> | null
+          }
+          findUniqueOrThrow: {
+            args: Prisma.ProviderCapabilityAttributeRecordFindUniqueOrThrowArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$ProviderCapabilityAttributeRecordPayload>
+          }
+          findFirst: {
+            args: Prisma.ProviderCapabilityAttributeRecordFindFirstArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$ProviderCapabilityAttributeRecordPayload> | null
+          }
+          findFirstOrThrow: {
+            args: Prisma.ProviderCapabilityAttributeRecordFindFirstOrThrowArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$ProviderCapabilityAttributeRecordPayload>
+          }
+          findMany: {
+            args: Prisma.ProviderCapabilityAttributeRecordFindManyArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$ProviderCapabilityAttributeRecordPayload>[]
+          }
+          create: {
+            args: Prisma.ProviderCapabilityAttributeRecordCreateArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$ProviderCapabilityAttributeRecordPayload>
+          }
+          createMany: {
+            args: Prisma.ProviderCapabilityAttributeRecordCreateManyArgs<ExtArgs>
+            result: BatchPayload
+          }
+          createManyAndReturn: {
+            args: Prisma.ProviderCapabilityAttributeRecordCreateManyAndReturnArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$ProviderCapabilityAttributeRecordPayload>[]
+          }
+          delete: {
+            args: Prisma.ProviderCapabilityAttributeRecordDeleteArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$ProviderCapabilityAttributeRecordPayload>
+          }
+          update: {
+            args: Prisma.ProviderCapabilityAttributeRecordUpdateArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$ProviderCapabilityAttributeRecordPayload>
+          }
+          deleteMany: {
+            args: Prisma.ProviderCapabilityAttributeRecordDeleteManyArgs<ExtArgs>
+            result: BatchPayload
+          }
+          updateMany: {
+            args: Prisma.ProviderCapabilityAttributeRecordUpdateManyArgs<ExtArgs>
+            result: BatchPayload
+          }
+          updateManyAndReturn: {
+            args: Prisma.ProviderCapabilityAttributeRecordUpdateManyAndReturnArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$ProviderCapabilityAttributeRecordPayload>[]
+          }
+          upsert: {
+            args: Prisma.ProviderCapabilityAttributeRecordUpsertArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$ProviderCapabilityAttributeRecordPayload>
+          }
+          aggregate: {
+            args: Prisma.ProviderCapabilityAttributeRecordAggregateArgs<ExtArgs>
+            result: $Utils.Optional<AggregateProviderCapabilityAttributeRecord>
+          }
+          groupBy: {
+            args: Prisma.ProviderCapabilityAttributeRecordGroupByArgs<ExtArgs>
+            result: $Utils.Optional<ProviderCapabilityAttributeRecordGroupByOutputType>[]
+          }
+          count: {
+            args: Prisma.ProviderCapabilityAttributeRecordCountArgs<ExtArgs>
+            result: $Utils.Optional<ProviderCapabilityAttributeRecordCountAggregateOutputType> | number
           }
         }
       }
@@ -8364,6 +8454,7 @@ export namespace Prisma {
     userRole?: UserRoleOmit
     securityAuditLog?: SecurityAuditLogOmit
     discoveryLog?: DiscoveryLogOmit
+    providerCapabilityAttributeRecord?: ProviderCapabilityAttributeRecordOmit
     taskPreference?: TaskPreferenceOmit
     modelPerformanceMetric?: ModelPerformanceMetricOmit
     modelSelectionStrategy?: ModelSelectionStrategyOmit
@@ -60318,6 +60409,1057 @@ export namespace Prisma {
 
 
   /**
+   * Model ProviderCapabilityAttributeRecord
+   */
+
+  export type AggregateProviderCapabilityAttributeRecord = {
+    _count: ProviderCapabilityAttributeRecordCountAggregateOutputType | null
+    _min: ProviderCapabilityAttributeRecordMinAggregateOutputType | null
+    _max: ProviderCapabilityAttributeRecordMaxAggregateOutputType | null
+  }
+
+  export type ProviderCapabilityAttributeRecordMinAggregateOutputType = {
+    id: string | null
+    providerId: string | null
+    capability: string | null
+    source: string | null
+    attributesVerifiedAt: Date | null
+    promotionNote: string | null
+    createdAt: Date | null
+    updatedAt: Date | null
+  }
+
+  export type ProviderCapabilityAttributeRecordMaxAggregateOutputType = {
+    id: string | null
+    providerId: string | null
+    capability: string | null
+    source: string | null
+    attributesVerifiedAt: Date | null
+    promotionNote: string | null
+    createdAt: Date | null
+    updatedAt: Date | null
+  }
+
+  export type ProviderCapabilityAttributeRecordCountAggregateOutputType = {
+    id: number
+    providerId: number
+    capability: number
+    source: number
+    attributes: number
+    attributesVerifiedAt: number
+    promotionNote: number
+    createdAt: number
+    updatedAt: number
+    _all: number
+  }
+
+
+  export type ProviderCapabilityAttributeRecordMinAggregateInputType = {
+    id?: true
+    providerId?: true
+    capability?: true
+    source?: true
+    attributesVerifiedAt?: true
+    promotionNote?: true
+    createdAt?: true
+    updatedAt?: true
+  }
+
+  export type ProviderCapabilityAttributeRecordMaxAggregateInputType = {
+    id?: true
+    providerId?: true
+    capability?: true
+    source?: true
+    attributesVerifiedAt?: true
+    promotionNote?: true
+    createdAt?: true
+    updatedAt?: true
+  }
+
+  export type ProviderCapabilityAttributeRecordCountAggregateInputType = {
+    id?: true
+    providerId?: true
+    capability?: true
+    source?: true
+    attributes?: true
+    attributesVerifiedAt?: true
+    promotionNote?: true
+    createdAt?: true
+    updatedAt?: true
+    _all?: true
+  }
+
+  export type ProviderCapabilityAttributeRecordAggregateArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Filter which ProviderCapabilityAttributeRecord to aggregate.
+     */
+    where?: ProviderCapabilityAttributeRecordWhereInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/sorting Sorting Docs}
+     * 
+     * Determine the order of ProviderCapabilityAttributeRecords to fetch.
+     */
+    orderBy?: ProviderCapabilityAttributeRecordOrderByWithRelationInput | ProviderCapabilityAttributeRecordOrderByWithRelationInput[]
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination#cursor-based-pagination Cursor Docs}
+     * 
+     * Sets the start position
+     */
+    cursor?: ProviderCapabilityAttributeRecordWhereUniqueInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Take `±n` ProviderCapabilityAttributeRecords from the position of the cursor.
+     */
+    take?: number
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Skip the first `n` ProviderCapabilityAttributeRecords.
+     */
+    skip?: number
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/aggregations Aggregation Docs}
+     * 
+     * Count returned ProviderCapabilityAttributeRecords
+    **/
+    _count?: true | ProviderCapabilityAttributeRecordCountAggregateInputType
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/aggregations Aggregation Docs}
+     * 
+     * Select which fields to find the minimum value
+    **/
+    _min?: ProviderCapabilityAttributeRecordMinAggregateInputType
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/aggregations Aggregation Docs}
+     * 
+     * Select which fields to find the maximum value
+    **/
+    _max?: ProviderCapabilityAttributeRecordMaxAggregateInputType
+  }
+
+  export type GetProviderCapabilityAttributeRecordAggregateType<T extends ProviderCapabilityAttributeRecordAggregateArgs> = {
+        [P in keyof T & keyof AggregateProviderCapabilityAttributeRecord]: P extends '_count' | 'count'
+      ? T[P] extends true
+        ? number
+        : GetScalarType<T[P], AggregateProviderCapabilityAttributeRecord[P]>
+      : GetScalarType<T[P], AggregateProviderCapabilityAttributeRecord[P]>
+  }
+
+
+
+
+  export type ProviderCapabilityAttributeRecordGroupByArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    where?: ProviderCapabilityAttributeRecordWhereInput
+    orderBy?: ProviderCapabilityAttributeRecordOrderByWithAggregationInput | ProviderCapabilityAttributeRecordOrderByWithAggregationInput[]
+    by: ProviderCapabilityAttributeRecordScalarFieldEnum[] | ProviderCapabilityAttributeRecordScalarFieldEnum
+    having?: ProviderCapabilityAttributeRecordScalarWhereWithAggregatesInput
+    take?: number
+    skip?: number
+    _count?: ProviderCapabilityAttributeRecordCountAggregateInputType | true
+    _min?: ProviderCapabilityAttributeRecordMinAggregateInputType
+    _max?: ProviderCapabilityAttributeRecordMaxAggregateInputType
+  }
+
+  export type ProviderCapabilityAttributeRecordGroupByOutputType = {
+    id: string
+    providerId: string
+    capability: string
+    source: string
+    attributes: JsonValue
+    attributesVerifiedAt: Date | null
+    promotionNote: string | null
+    createdAt: Date
+    updatedAt: Date
+    _count: ProviderCapabilityAttributeRecordCountAggregateOutputType | null
+    _min: ProviderCapabilityAttributeRecordMinAggregateOutputType | null
+    _max: ProviderCapabilityAttributeRecordMaxAggregateOutputType | null
+  }
+
+  type GetProviderCapabilityAttributeRecordGroupByPayload<T extends ProviderCapabilityAttributeRecordGroupByArgs> = Prisma.PrismaPromise<
+    Array<
+      PickEnumerable<ProviderCapabilityAttributeRecordGroupByOutputType, T['by']> &
+        {
+          [P in ((keyof T) & (keyof ProviderCapabilityAttributeRecordGroupByOutputType))]: P extends '_count'
+            ? T[P] extends boolean
+              ? number
+              : GetScalarType<T[P], ProviderCapabilityAttributeRecordGroupByOutputType[P]>
+            : GetScalarType<T[P], ProviderCapabilityAttributeRecordGroupByOutputType[P]>
+        }
+      >
+    >
+
+
+  export type ProviderCapabilityAttributeRecordSelect<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetSelect<{
+    id?: boolean
+    providerId?: boolean
+    capability?: boolean
+    source?: boolean
+    attributes?: boolean
+    attributesVerifiedAt?: boolean
+    promotionNote?: boolean
+    createdAt?: boolean
+    updatedAt?: boolean
+  }, ExtArgs["result"]["providerCapabilityAttributeRecord"]>
+
+  export type ProviderCapabilityAttributeRecordSelectCreateManyAndReturn<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetSelect<{
+    id?: boolean
+    providerId?: boolean
+    capability?: boolean
+    source?: boolean
+    attributes?: boolean
+    attributesVerifiedAt?: boolean
+    promotionNote?: boolean
+    createdAt?: boolean
+    updatedAt?: boolean
+  }, ExtArgs["result"]["providerCapabilityAttributeRecord"]>
+
+  export type ProviderCapabilityAttributeRecordSelectUpdateManyAndReturn<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetSelect<{
+    id?: boolean
+    providerId?: boolean
+    capability?: boolean
+    source?: boolean
+    attributes?: boolean
+    attributesVerifiedAt?: boolean
+    promotionNote?: boolean
+    createdAt?: boolean
+    updatedAt?: boolean
+  }, ExtArgs["result"]["providerCapabilityAttributeRecord"]>
+
+  export type ProviderCapabilityAttributeRecordSelectScalar = {
+    id?: boolean
+    providerId?: boolean
+    capability?: boolean
+    source?: boolean
+    attributes?: boolean
+    attributesVerifiedAt?: boolean
+    promotionNote?: boolean
+    createdAt?: boolean
+    updatedAt?: boolean
+  }
+
+  export type ProviderCapabilityAttributeRecordOmit<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetOmit<"id" | "providerId" | "capability" | "source" | "attributes" | "attributesVerifiedAt" | "promotionNote" | "createdAt" | "updatedAt", ExtArgs["result"]["providerCapabilityAttributeRecord"]>
+
+  export type $ProviderCapabilityAttributeRecordPayload<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    name: "ProviderCapabilityAttributeRecord"
+    objects: {}
+    scalars: $Extensions.GetPayloadResult<{
+      id: string
+      providerId: string
+      capability: string
+      source: string
+      attributes: Prisma.JsonValue
+      attributesVerifiedAt: Date | null
+      /**
+       * * Set only for a promoted (`source` rewritten to 'human') Tier 3 draft — records the promotion reason.
+       */
+      promotionNote: string | null
+      createdAt: Date
+      updatedAt: Date
+    }, ExtArgs["result"]["providerCapabilityAttributeRecord"]>
+    composites: {}
+  }
+
+  type ProviderCapabilityAttributeRecordGetPayload<S extends boolean | null | undefined | ProviderCapabilityAttributeRecordDefaultArgs> = $Result.GetResult<Prisma.$ProviderCapabilityAttributeRecordPayload, S>
+
+  type ProviderCapabilityAttributeRecordCountArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> =
+    Omit<ProviderCapabilityAttributeRecordFindManyArgs, 'select' | 'include' | 'distinct' | 'omit'> & {
+      select?: ProviderCapabilityAttributeRecordCountAggregateInputType | true
+    }
+
+  export interface ProviderCapabilityAttributeRecordDelegate<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs, GlobalOmitOptions = {}> {
+    [K: symbol]: { types: Prisma.TypeMap<ExtArgs>['model']['ProviderCapabilityAttributeRecord'], meta: { name: 'ProviderCapabilityAttributeRecord' } }
+    /**
+     * Find zero or one ProviderCapabilityAttributeRecord that matches the filter.
+     * @param {ProviderCapabilityAttributeRecordFindUniqueArgs} args - Arguments to find a ProviderCapabilityAttributeRecord
+     * @example
+     * // Get one ProviderCapabilityAttributeRecord
+     * const providerCapabilityAttributeRecord = await prisma.providerCapabilityAttributeRecord.findUnique({
+     *   where: {
+     *     // ... provide filter here
+     *   }
+     * })
+     */
+    findUnique<T extends ProviderCapabilityAttributeRecordFindUniqueArgs>(args: SelectSubset<T, ProviderCapabilityAttributeRecordFindUniqueArgs<ExtArgs>>): Prisma__ProviderCapabilityAttributeRecordClient<$Result.GetResult<Prisma.$ProviderCapabilityAttributeRecordPayload<ExtArgs>, T, "findUnique", GlobalOmitOptions> | null, null, ExtArgs, GlobalOmitOptions>
+
+    /**
+     * Find one ProviderCapabilityAttributeRecord that matches the filter or throw an error with `error.code='P2025'`
+     * if no matches were found.
+     * @param {ProviderCapabilityAttributeRecordFindUniqueOrThrowArgs} args - Arguments to find a ProviderCapabilityAttributeRecord
+     * @example
+     * // Get one ProviderCapabilityAttributeRecord
+     * const providerCapabilityAttributeRecord = await prisma.providerCapabilityAttributeRecord.findUniqueOrThrow({
+     *   where: {
+     *     // ... provide filter here
+     *   }
+     * })
+     */
+    findUniqueOrThrow<T extends ProviderCapabilityAttributeRecordFindUniqueOrThrowArgs>(args: SelectSubset<T, ProviderCapabilityAttributeRecordFindUniqueOrThrowArgs<ExtArgs>>): Prisma__ProviderCapabilityAttributeRecordClient<$Result.GetResult<Prisma.$ProviderCapabilityAttributeRecordPayload<ExtArgs>, T, "findUniqueOrThrow", GlobalOmitOptions>, never, ExtArgs, GlobalOmitOptions>
+
+    /**
+     * Find the first ProviderCapabilityAttributeRecord that matches the filter.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {ProviderCapabilityAttributeRecordFindFirstArgs} args - Arguments to find a ProviderCapabilityAttributeRecord
+     * @example
+     * // Get one ProviderCapabilityAttributeRecord
+     * const providerCapabilityAttributeRecord = await prisma.providerCapabilityAttributeRecord.findFirst({
+     *   where: {
+     *     // ... provide filter here
+     *   }
+     * })
+     */
+    findFirst<T extends ProviderCapabilityAttributeRecordFindFirstArgs>(args?: SelectSubset<T, ProviderCapabilityAttributeRecordFindFirstArgs<ExtArgs>>): Prisma__ProviderCapabilityAttributeRecordClient<$Result.GetResult<Prisma.$ProviderCapabilityAttributeRecordPayload<ExtArgs>, T, "findFirst", GlobalOmitOptions> | null, null, ExtArgs, GlobalOmitOptions>
+
+    /**
+     * Find the first ProviderCapabilityAttributeRecord that matches the filter or
+     * throw `PrismaKnownClientError` with `P2025` code if no matches were found.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {ProviderCapabilityAttributeRecordFindFirstOrThrowArgs} args - Arguments to find a ProviderCapabilityAttributeRecord
+     * @example
+     * // Get one ProviderCapabilityAttributeRecord
+     * const providerCapabilityAttributeRecord = await prisma.providerCapabilityAttributeRecord.findFirstOrThrow({
+     *   where: {
+     *     // ... provide filter here
+     *   }
+     * })
+     */
+    findFirstOrThrow<T extends ProviderCapabilityAttributeRecordFindFirstOrThrowArgs>(args?: SelectSubset<T, ProviderCapabilityAttributeRecordFindFirstOrThrowArgs<ExtArgs>>): Prisma__ProviderCapabilityAttributeRecordClient<$Result.GetResult<Prisma.$ProviderCapabilityAttributeRecordPayload<ExtArgs>, T, "findFirstOrThrow", GlobalOmitOptions>, never, ExtArgs, GlobalOmitOptions>
+
+    /**
+     * Find zero or more ProviderCapabilityAttributeRecords that matches the filter.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {ProviderCapabilityAttributeRecordFindManyArgs} args - Arguments to filter and select certain fields only.
+     * @example
+     * // Get all ProviderCapabilityAttributeRecords
+     * const providerCapabilityAttributeRecords = await prisma.providerCapabilityAttributeRecord.findMany()
+     * 
+     * // Get first 10 ProviderCapabilityAttributeRecords
+     * const providerCapabilityAttributeRecords = await prisma.providerCapabilityAttributeRecord.findMany({ take: 10 })
+     * 
+     * // Only select the `id`
+     * const providerCapabilityAttributeRecordWithIdOnly = await prisma.providerCapabilityAttributeRecord.findMany({ select: { id: true } })
+     * 
+     */
+    findMany<T extends ProviderCapabilityAttributeRecordFindManyArgs>(args?: SelectSubset<T, ProviderCapabilityAttributeRecordFindManyArgs<ExtArgs>>): Prisma.PrismaPromise<$Result.GetResult<Prisma.$ProviderCapabilityAttributeRecordPayload<ExtArgs>, T, "findMany", GlobalOmitOptions>>
+
+    /**
+     * Create a ProviderCapabilityAttributeRecord.
+     * @param {ProviderCapabilityAttributeRecordCreateArgs} args - Arguments to create a ProviderCapabilityAttributeRecord.
+     * @example
+     * // Create one ProviderCapabilityAttributeRecord
+     * const ProviderCapabilityAttributeRecord = await prisma.providerCapabilityAttributeRecord.create({
+     *   data: {
+     *     // ... data to create a ProviderCapabilityAttributeRecord
+     *   }
+     * })
+     * 
+     */
+    create<T extends ProviderCapabilityAttributeRecordCreateArgs>(args: SelectSubset<T, ProviderCapabilityAttributeRecordCreateArgs<ExtArgs>>): Prisma__ProviderCapabilityAttributeRecordClient<$Result.GetResult<Prisma.$ProviderCapabilityAttributeRecordPayload<ExtArgs>, T, "create", GlobalOmitOptions>, never, ExtArgs, GlobalOmitOptions>
+
+    /**
+     * Create many ProviderCapabilityAttributeRecords.
+     * @param {ProviderCapabilityAttributeRecordCreateManyArgs} args - Arguments to create many ProviderCapabilityAttributeRecords.
+     * @example
+     * // Create many ProviderCapabilityAttributeRecords
+     * const providerCapabilityAttributeRecord = await prisma.providerCapabilityAttributeRecord.createMany({
+     *   data: [
+     *     // ... provide data here
+     *   ]
+     * })
+     *     
+     */
+    createMany<T extends ProviderCapabilityAttributeRecordCreateManyArgs>(args?: SelectSubset<T, ProviderCapabilityAttributeRecordCreateManyArgs<ExtArgs>>): Prisma.PrismaPromise<BatchPayload>
+
+    /**
+     * Create many ProviderCapabilityAttributeRecords and returns the data saved in the database.
+     * @param {ProviderCapabilityAttributeRecordCreateManyAndReturnArgs} args - Arguments to create many ProviderCapabilityAttributeRecords.
+     * @example
+     * // Create many ProviderCapabilityAttributeRecords
+     * const providerCapabilityAttributeRecord = await prisma.providerCapabilityAttributeRecord.createManyAndReturn({
+     *   data: [
+     *     // ... provide data here
+     *   ]
+     * })
+     * 
+     * // Create many ProviderCapabilityAttributeRecords and only return the `id`
+     * const providerCapabilityAttributeRecordWithIdOnly = await prisma.providerCapabilityAttributeRecord.createManyAndReturn({
+     *   select: { id: true },
+     *   data: [
+     *     // ... provide data here
+     *   ]
+     * })
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * 
+     */
+    createManyAndReturn<T extends ProviderCapabilityAttributeRecordCreateManyAndReturnArgs>(args?: SelectSubset<T, ProviderCapabilityAttributeRecordCreateManyAndReturnArgs<ExtArgs>>): Prisma.PrismaPromise<$Result.GetResult<Prisma.$ProviderCapabilityAttributeRecordPayload<ExtArgs>, T, "createManyAndReturn", GlobalOmitOptions>>
+
+    /**
+     * Delete a ProviderCapabilityAttributeRecord.
+     * @param {ProviderCapabilityAttributeRecordDeleteArgs} args - Arguments to delete one ProviderCapabilityAttributeRecord.
+     * @example
+     * // Delete one ProviderCapabilityAttributeRecord
+     * const ProviderCapabilityAttributeRecord = await prisma.providerCapabilityAttributeRecord.delete({
+     *   where: {
+     *     // ... filter to delete one ProviderCapabilityAttributeRecord
+     *   }
+     * })
+     * 
+     */
+    delete<T extends ProviderCapabilityAttributeRecordDeleteArgs>(args: SelectSubset<T, ProviderCapabilityAttributeRecordDeleteArgs<ExtArgs>>): Prisma__ProviderCapabilityAttributeRecordClient<$Result.GetResult<Prisma.$ProviderCapabilityAttributeRecordPayload<ExtArgs>, T, "delete", GlobalOmitOptions>, never, ExtArgs, GlobalOmitOptions>
+
+    /**
+     * Update one ProviderCapabilityAttributeRecord.
+     * @param {ProviderCapabilityAttributeRecordUpdateArgs} args - Arguments to update one ProviderCapabilityAttributeRecord.
+     * @example
+     * // Update one ProviderCapabilityAttributeRecord
+     * const providerCapabilityAttributeRecord = await prisma.providerCapabilityAttributeRecord.update({
+     *   where: {
+     *     // ... provide filter here
+     *   },
+     *   data: {
+     *     // ... provide data here
+     *   }
+     * })
+     * 
+     */
+    update<T extends ProviderCapabilityAttributeRecordUpdateArgs>(args: SelectSubset<T, ProviderCapabilityAttributeRecordUpdateArgs<ExtArgs>>): Prisma__ProviderCapabilityAttributeRecordClient<$Result.GetResult<Prisma.$ProviderCapabilityAttributeRecordPayload<ExtArgs>, T, "update", GlobalOmitOptions>, never, ExtArgs, GlobalOmitOptions>
+
+    /**
+     * Delete zero or more ProviderCapabilityAttributeRecords.
+     * @param {ProviderCapabilityAttributeRecordDeleteManyArgs} args - Arguments to filter ProviderCapabilityAttributeRecords to delete.
+     * @example
+     * // Delete a few ProviderCapabilityAttributeRecords
+     * const { count } = await prisma.providerCapabilityAttributeRecord.deleteMany({
+     *   where: {
+     *     // ... provide filter here
+     *   }
+     * })
+     * 
+     */
+    deleteMany<T extends ProviderCapabilityAttributeRecordDeleteManyArgs>(args?: SelectSubset<T, ProviderCapabilityAttributeRecordDeleteManyArgs<ExtArgs>>): Prisma.PrismaPromise<BatchPayload>
+
+    /**
+     * Update zero or more ProviderCapabilityAttributeRecords.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {ProviderCapabilityAttributeRecordUpdateManyArgs} args - Arguments to update one or more rows.
+     * @example
+     * // Update many ProviderCapabilityAttributeRecords
+     * const providerCapabilityAttributeRecord = await prisma.providerCapabilityAttributeRecord.updateMany({
+     *   where: {
+     *     // ... provide filter here
+     *   },
+     *   data: {
+     *     // ... provide data here
+     *   }
+     * })
+     * 
+     */
+    updateMany<T extends ProviderCapabilityAttributeRecordUpdateManyArgs>(args: SelectSubset<T, ProviderCapabilityAttributeRecordUpdateManyArgs<ExtArgs>>): Prisma.PrismaPromise<BatchPayload>
+
+    /**
+     * Update zero or more ProviderCapabilityAttributeRecords and returns the data updated in the database.
+     * @param {ProviderCapabilityAttributeRecordUpdateManyAndReturnArgs} args - Arguments to update many ProviderCapabilityAttributeRecords.
+     * @example
+     * // Update many ProviderCapabilityAttributeRecords
+     * const providerCapabilityAttributeRecord = await prisma.providerCapabilityAttributeRecord.updateManyAndReturn({
+     *   where: {
+     *     // ... provide filter here
+     *   },
+     *   data: [
+     *     // ... provide data here
+     *   ]
+     * })
+     * 
+     * // Update zero or more ProviderCapabilityAttributeRecords and only return the `id`
+     * const providerCapabilityAttributeRecordWithIdOnly = await prisma.providerCapabilityAttributeRecord.updateManyAndReturn({
+     *   select: { id: true },
+     *   where: {
+     *     // ... provide filter here
+     *   },
+     *   data: [
+     *     // ... provide data here
+     *   ]
+     * })
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * 
+     */
+    updateManyAndReturn<T extends ProviderCapabilityAttributeRecordUpdateManyAndReturnArgs>(args: SelectSubset<T, ProviderCapabilityAttributeRecordUpdateManyAndReturnArgs<ExtArgs>>): Prisma.PrismaPromise<$Result.GetResult<Prisma.$ProviderCapabilityAttributeRecordPayload<ExtArgs>, T, "updateManyAndReturn", GlobalOmitOptions>>
+
+    /**
+     * Create or update one ProviderCapabilityAttributeRecord.
+     * @param {ProviderCapabilityAttributeRecordUpsertArgs} args - Arguments to update or create a ProviderCapabilityAttributeRecord.
+     * @example
+     * // Update or create a ProviderCapabilityAttributeRecord
+     * const providerCapabilityAttributeRecord = await prisma.providerCapabilityAttributeRecord.upsert({
+     *   create: {
+     *     // ... data to create a ProviderCapabilityAttributeRecord
+     *   },
+     *   update: {
+     *     // ... in case it already exists, update
+     *   },
+     *   where: {
+     *     // ... the filter for the ProviderCapabilityAttributeRecord we want to update
+     *   }
+     * })
+     */
+    upsert<T extends ProviderCapabilityAttributeRecordUpsertArgs>(args: SelectSubset<T, ProviderCapabilityAttributeRecordUpsertArgs<ExtArgs>>): Prisma__ProviderCapabilityAttributeRecordClient<$Result.GetResult<Prisma.$ProviderCapabilityAttributeRecordPayload<ExtArgs>, T, "upsert", GlobalOmitOptions>, never, ExtArgs, GlobalOmitOptions>
+
+
+    /**
+     * Count the number of ProviderCapabilityAttributeRecords.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {ProviderCapabilityAttributeRecordCountArgs} args - Arguments to filter ProviderCapabilityAttributeRecords to count.
+     * @example
+     * // Count the number of ProviderCapabilityAttributeRecords
+     * const count = await prisma.providerCapabilityAttributeRecord.count({
+     *   where: {
+     *     // ... the filter for the ProviderCapabilityAttributeRecords we want to count
+     *   }
+     * })
+    **/
+    count<T extends ProviderCapabilityAttributeRecordCountArgs>(
+      args?: Subset<T, ProviderCapabilityAttributeRecordCountArgs>,
+    ): Prisma.PrismaPromise<
+      T extends $Utils.Record<'select', any>
+        ? T['select'] extends true
+          ? number
+          : GetScalarType<T['select'], ProviderCapabilityAttributeRecordCountAggregateOutputType>
+        : number
+    >
+
+    /**
+     * Allows you to perform aggregations operations on a ProviderCapabilityAttributeRecord.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {ProviderCapabilityAttributeRecordAggregateArgs} args - Select which aggregations you would like to apply and on what fields.
+     * @example
+     * // Ordered by age ascending
+     * // Where email contains prisma.io
+     * // Limited to the 10 users
+     * const aggregations = await prisma.user.aggregate({
+     *   _avg: {
+     *     age: true,
+     *   },
+     *   where: {
+     *     email: {
+     *       contains: "prisma.io",
+     *     },
+     *   },
+     *   orderBy: {
+     *     age: "asc",
+     *   },
+     *   take: 10,
+     * })
+    **/
+    aggregate<T extends ProviderCapabilityAttributeRecordAggregateArgs>(args: Subset<T, ProviderCapabilityAttributeRecordAggregateArgs>): Prisma.PrismaPromise<GetProviderCapabilityAttributeRecordAggregateType<T>>
+
+    /**
+     * Group by ProviderCapabilityAttributeRecord.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {ProviderCapabilityAttributeRecordGroupByArgs} args - Group by arguments.
+     * @example
+     * // Group by city, order by createdAt, get count
+     * const result = await prisma.user.groupBy({
+     *   by: ['city', 'createdAt'],
+     *   orderBy: {
+     *     createdAt: true
+     *   },
+     *   _count: {
+     *     _all: true
+     *   },
+     * })
+     * 
+    **/
+    groupBy<
+      T extends ProviderCapabilityAttributeRecordGroupByArgs,
+      HasSelectOrTake extends Or<
+        Extends<'skip', Keys<T>>,
+        Extends<'take', Keys<T>>
+      >,
+      OrderByArg extends True extends HasSelectOrTake
+        ? { orderBy: ProviderCapabilityAttributeRecordGroupByArgs['orderBy'] }
+        : { orderBy?: ProviderCapabilityAttributeRecordGroupByArgs['orderBy'] },
+      OrderFields extends ExcludeUnderscoreKeys<Keys<MaybeTupleToUnion<T['orderBy']>>>,
+      ByFields extends MaybeTupleToUnion<T['by']>,
+      ByValid extends Has<ByFields, OrderFields>,
+      HavingFields extends GetHavingFields<T['having']>,
+      HavingValid extends Has<ByFields, HavingFields>,
+      ByEmpty extends T['by'] extends never[] ? True : False,
+      InputErrors extends ByEmpty extends True
+      ? `Error: "by" must not be empty.`
+      : HavingValid extends False
+      ? {
+          [P in HavingFields]: P extends ByFields
+            ? never
+            : P extends string
+            ? `Error: Field "${P}" used in "having" needs to be provided in "by".`
+            : [
+                Error,
+                'Field ',
+                P,
+                ` in "having" needs to be provided in "by"`,
+              ]
+        }[HavingFields]
+      : 'take' extends Keys<T>
+      ? 'orderBy' extends Keys<T>
+        ? ByValid extends True
+          ? {}
+          : {
+              [P in OrderFields]: P extends ByFields
+                ? never
+                : `Error: Field "${P}" in "orderBy" needs to be provided in "by"`
+            }[OrderFields]
+        : 'Error: If you provide "take", you also need to provide "orderBy"'
+      : 'skip' extends Keys<T>
+      ? 'orderBy' extends Keys<T>
+        ? ByValid extends True
+          ? {}
+          : {
+              [P in OrderFields]: P extends ByFields
+                ? never
+                : `Error: Field "${P}" in "orderBy" needs to be provided in "by"`
+            }[OrderFields]
+        : 'Error: If you provide "skip", you also need to provide "orderBy"'
+      : ByValid extends True
+      ? {}
+      : {
+          [P in OrderFields]: P extends ByFields
+            ? never
+            : `Error: Field "${P}" in "orderBy" needs to be provided in "by"`
+        }[OrderFields]
+    >(args: SubsetIntersection<T, ProviderCapabilityAttributeRecordGroupByArgs, OrderByArg> & InputErrors): {} extends InputErrors ? GetProviderCapabilityAttributeRecordGroupByPayload<T> : Prisma.PrismaPromise<InputErrors>
+  /**
+   * Fields of the ProviderCapabilityAttributeRecord model
+   */
+  readonly fields: ProviderCapabilityAttributeRecordFieldRefs;
+  }
+
+  /**
+   * The delegate class that acts as a "Promise-like" for ProviderCapabilityAttributeRecord.
+   * Why is this prefixed with `Prisma__`?
+   * Because we want to prevent naming conflicts as mentioned in
+   * https://github.com/prisma/prisma-client-js/issues/707
+   */
+  export interface Prisma__ProviderCapabilityAttributeRecordClient<T, Null = never, ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs, GlobalOmitOptions = {}> extends Prisma.PrismaPromise<T> {
+    readonly [Symbol.toStringTag]: "PrismaPromise"
+    /**
+     * Attaches callbacks for the resolution and/or rejection of the Promise.
+     * @param onfulfilled The callback to execute when the Promise is resolved.
+     * @param onrejected The callback to execute when the Promise is rejected.
+     * @returns A Promise for the completion of which ever callback is executed.
+     */
+    then<TResult1 = T, TResult2 = never>(onfulfilled?: ((value: T) => TResult1 | PromiseLike<TResult1>) | undefined | null, onrejected?: ((reason: any) => TResult2 | PromiseLike<TResult2>) | undefined | null): $Utils.JsPromise<TResult1 | TResult2>
+    /**
+     * Attaches a callback for only the rejection of the Promise.
+     * @param onrejected The callback to execute when the Promise is rejected.
+     * @returns A Promise for the completion of the callback.
+     */
+    catch<TResult = never>(onrejected?: ((reason: any) => TResult | PromiseLike<TResult>) | undefined | null): $Utils.JsPromise<T | TResult>
+    /**
+     * Attaches a callback that is invoked when the Promise is settled (fulfilled or rejected). The
+     * resolved value cannot be modified from the callback.
+     * @param onfinally The callback to execute when the Promise is settled (fulfilled or rejected).
+     * @returns A Promise for the completion of the callback.
+     */
+    finally(onfinally?: (() => void) | undefined | null): $Utils.JsPromise<T>
+  }
+
+
+
+
+  /**
+   * Fields of the ProviderCapabilityAttributeRecord model
+   */
+  interface ProviderCapabilityAttributeRecordFieldRefs {
+    readonly id: FieldRef<"ProviderCapabilityAttributeRecord", 'String'>
+    readonly providerId: FieldRef<"ProviderCapabilityAttributeRecord", 'String'>
+    readonly capability: FieldRef<"ProviderCapabilityAttributeRecord", 'String'>
+    readonly source: FieldRef<"ProviderCapabilityAttributeRecord", 'String'>
+    readonly attributes: FieldRef<"ProviderCapabilityAttributeRecord", 'Json'>
+    readonly attributesVerifiedAt: FieldRef<"ProviderCapabilityAttributeRecord", 'DateTime'>
+    readonly promotionNote: FieldRef<"ProviderCapabilityAttributeRecord", 'String'>
+    readonly createdAt: FieldRef<"ProviderCapabilityAttributeRecord", 'DateTime'>
+    readonly updatedAt: FieldRef<"ProviderCapabilityAttributeRecord", 'DateTime'>
+  }
+    
+
+  // Custom InputTypes
+  /**
+   * ProviderCapabilityAttributeRecord findUnique
+   */
+  export type ProviderCapabilityAttributeRecordFindUniqueArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the ProviderCapabilityAttributeRecord
+     */
+    select?: ProviderCapabilityAttributeRecordSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the ProviderCapabilityAttributeRecord
+     */
+    omit?: ProviderCapabilityAttributeRecordOmit<ExtArgs> | null
+    /**
+     * Filter, which ProviderCapabilityAttributeRecord to fetch.
+     */
+    where: ProviderCapabilityAttributeRecordWhereUniqueInput
+  }
+
+  /**
+   * ProviderCapabilityAttributeRecord findUniqueOrThrow
+   */
+  export type ProviderCapabilityAttributeRecordFindUniqueOrThrowArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the ProviderCapabilityAttributeRecord
+     */
+    select?: ProviderCapabilityAttributeRecordSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the ProviderCapabilityAttributeRecord
+     */
+    omit?: ProviderCapabilityAttributeRecordOmit<ExtArgs> | null
+    /**
+     * Filter, which ProviderCapabilityAttributeRecord to fetch.
+     */
+    where: ProviderCapabilityAttributeRecordWhereUniqueInput
+  }
+
+  /**
+   * ProviderCapabilityAttributeRecord findFirst
+   */
+  export type ProviderCapabilityAttributeRecordFindFirstArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the ProviderCapabilityAttributeRecord
+     */
+    select?: ProviderCapabilityAttributeRecordSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the ProviderCapabilityAttributeRecord
+     */
+    omit?: ProviderCapabilityAttributeRecordOmit<ExtArgs> | null
+    /**
+     * Filter, which ProviderCapabilityAttributeRecord to fetch.
+     */
+    where?: ProviderCapabilityAttributeRecordWhereInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/sorting Sorting Docs}
+     * 
+     * Determine the order of ProviderCapabilityAttributeRecords to fetch.
+     */
+    orderBy?: ProviderCapabilityAttributeRecordOrderByWithRelationInput | ProviderCapabilityAttributeRecordOrderByWithRelationInput[]
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination#cursor-based-pagination Cursor Docs}
+     * 
+     * Sets the position for searching for ProviderCapabilityAttributeRecords.
+     */
+    cursor?: ProviderCapabilityAttributeRecordWhereUniqueInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Take `±n` ProviderCapabilityAttributeRecords from the position of the cursor.
+     */
+    take?: number
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Skip the first `n` ProviderCapabilityAttributeRecords.
+     */
+    skip?: number
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/distinct Distinct Docs}
+     * 
+     * Filter by unique combinations of ProviderCapabilityAttributeRecords.
+     */
+    distinct?: ProviderCapabilityAttributeRecordScalarFieldEnum | ProviderCapabilityAttributeRecordScalarFieldEnum[]
+  }
+
+  /**
+   * ProviderCapabilityAttributeRecord findFirstOrThrow
+   */
+  export type ProviderCapabilityAttributeRecordFindFirstOrThrowArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the ProviderCapabilityAttributeRecord
+     */
+    select?: ProviderCapabilityAttributeRecordSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the ProviderCapabilityAttributeRecord
+     */
+    omit?: ProviderCapabilityAttributeRecordOmit<ExtArgs> | null
+    /**
+     * Filter, which ProviderCapabilityAttributeRecord to fetch.
+     */
+    where?: ProviderCapabilityAttributeRecordWhereInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/sorting Sorting Docs}
+     * 
+     * Determine the order of ProviderCapabilityAttributeRecords to fetch.
+     */
+    orderBy?: ProviderCapabilityAttributeRecordOrderByWithRelationInput | ProviderCapabilityAttributeRecordOrderByWithRelationInput[]
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination#cursor-based-pagination Cursor Docs}
+     * 
+     * Sets the position for searching for ProviderCapabilityAttributeRecords.
+     */
+    cursor?: ProviderCapabilityAttributeRecordWhereUniqueInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Take `±n` ProviderCapabilityAttributeRecords from the position of the cursor.
+     */
+    take?: number
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Skip the first `n` ProviderCapabilityAttributeRecords.
+     */
+    skip?: number
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/distinct Distinct Docs}
+     * 
+     * Filter by unique combinations of ProviderCapabilityAttributeRecords.
+     */
+    distinct?: ProviderCapabilityAttributeRecordScalarFieldEnum | ProviderCapabilityAttributeRecordScalarFieldEnum[]
+  }
+
+  /**
+   * ProviderCapabilityAttributeRecord findMany
+   */
+  export type ProviderCapabilityAttributeRecordFindManyArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the ProviderCapabilityAttributeRecord
+     */
+    select?: ProviderCapabilityAttributeRecordSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the ProviderCapabilityAttributeRecord
+     */
+    omit?: ProviderCapabilityAttributeRecordOmit<ExtArgs> | null
+    /**
+     * Filter, which ProviderCapabilityAttributeRecords to fetch.
+     */
+    where?: ProviderCapabilityAttributeRecordWhereInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/sorting Sorting Docs}
+     * 
+     * Determine the order of ProviderCapabilityAttributeRecords to fetch.
+     */
+    orderBy?: ProviderCapabilityAttributeRecordOrderByWithRelationInput | ProviderCapabilityAttributeRecordOrderByWithRelationInput[]
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination#cursor-based-pagination Cursor Docs}
+     * 
+     * Sets the position for listing ProviderCapabilityAttributeRecords.
+     */
+    cursor?: ProviderCapabilityAttributeRecordWhereUniqueInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Take `±n` ProviderCapabilityAttributeRecords from the position of the cursor.
+     */
+    take?: number
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Skip the first `n` ProviderCapabilityAttributeRecords.
+     */
+    skip?: number
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/distinct Distinct Docs}
+     * 
+     * Filter by unique combinations of ProviderCapabilityAttributeRecords.
+     */
+    distinct?: ProviderCapabilityAttributeRecordScalarFieldEnum | ProviderCapabilityAttributeRecordScalarFieldEnum[]
+  }
+
+  /**
+   * ProviderCapabilityAttributeRecord create
+   */
+  export type ProviderCapabilityAttributeRecordCreateArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the ProviderCapabilityAttributeRecord
+     */
+    select?: ProviderCapabilityAttributeRecordSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the ProviderCapabilityAttributeRecord
+     */
+    omit?: ProviderCapabilityAttributeRecordOmit<ExtArgs> | null
+    /**
+     * The data needed to create a ProviderCapabilityAttributeRecord.
+     */
+    data: XOR<ProviderCapabilityAttributeRecordCreateInput, ProviderCapabilityAttributeRecordUncheckedCreateInput>
+  }
+
+  /**
+   * ProviderCapabilityAttributeRecord createMany
+   */
+  export type ProviderCapabilityAttributeRecordCreateManyArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * The data used to create many ProviderCapabilityAttributeRecords.
+     */
+    data: ProviderCapabilityAttributeRecordCreateManyInput | ProviderCapabilityAttributeRecordCreateManyInput[]
+    skipDuplicates?: boolean
+  }
+
+  /**
+   * ProviderCapabilityAttributeRecord createManyAndReturn
+   */
+  export type ProviderCapabilityAttributeRecordCreateManyAndReturnArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the ProviderCapabilityAttributeRecord
+     */
+    select?: ProviderCapabilityAttributeRecordSelectCreateManyAndReturn<ExtArgs> | null
+    /**
+     * Omit specific fields from the ProviderCapabilityAttributeRecord
+     */
+    omit?: ProviderCapabilityAttributeRecordOmit<ExtArgs> | null
+    /**
+     * The data used to create many ProviderCapabilityAttributeRecords.
+     */
+    data: ProviderCapabilityAttributeRecordCreateManyInput | ProviderCapabilityAttributeRecordCreateManyInput[]
+    skipDuplicates?: boolean
+  }
+
+  /**
+   * ProviderCapabilityAttributeRecord update
+   */
+  export type ProviderCapabilityAttributeRecordUpdateArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the ProviderCapabilityAttributeRecord
+     */
+    select?: ProviderCapabilityAttributeRecordSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the ProviderCapabilityAttributeRecord
+     */
+    omit?: ProviderCapabilityAttributeRecordOmit<ExtArgs> | null
+    /**
+     * The data needed to update a ProviderCapabilityAttributeRecord.
+     */
+    data: XOR<ProviderCapabilityAttributeRecordUpdateInput, ProviderCapabilityAttributeRecordUncheckedUpdateInput>
+    /**
+     * Choose, which ProviderCapabilityAttributeRecord to update.
+     */
+    where: ProviderCapabilityAttributeRecordWhereUniqueInput
+  }
+
+  /**
+   * ProviderCapabilityAttributeRecord updateMany
+   */
+  export type ProviderCapabilityAttributeRecordUpdateManyArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * The data used to update ProviderCapabilityAttributeRecords.
+     */
+    data: XOR<ProviderCapabilityAttributeRecordUpdateManyMutationInput, ProviderCapabilityAttributeRecordUncheckedUpdateManyInput>
+    /**
+     * Filter which ProviderCapabilityAttributeRecords to update
+     */
+    where?: ProviderCapabilityAttributeRecordWhereInput
+    /**
+     * Limit how many ProviderCapabilityAttributeRecords to update.
+     */
+    limit?: number
+  }
+
+  /**
+   * ProviderCapabilityAttributeRecord updateManyAndReturn
+   */
+  export type ProviderCapabilityAttributeRecordUpdateManyAndReturnArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the ProviderCapabilityAttributeRecord
+     */
+    select?: ProviderCapabilityAttributeRecordSelectUpdateManyAndReturn<ExtArgs> | null
+    /**
+     * Omit specific fields from the ProviderCapabilityAttributeRecord
+     */
+    omit?: ProviderCapabilityAttributeRecordOmit<ExtArgs> | null
+    /**
+     * The data used to update ProviderCapabilityAttributeRecords.
+     */
+    data: XOR<ProviderCapabilityAttributeRecordUpdateManyMutationInput, ProviderCapabilityAttributeRecordUncheckedUpdateManyInput>
+    /**
+     * Filter which ProviderCapabilityAttributeRecords to update
+     */
+    where?: ProviderCapabilityAttributeRecordWhereInput
+    /**
+     * Limit how many ProviderCapabilityAttributeRecords to update.
+     */
+    limit?: number
+  }
+
+  /**
+   * ProviderCapabilityAttributeRecord upsert
+   */
+  export type ProviderCapabilityAttributeRecordUpsertArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the ProviderCapabilityAttributeRecord
+     */
+    select?: ProviderCapabilityAttributeRecordSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the ProviderCapabilityAttributeRecord
+     */
+    omit?: ProviderCapabilityAttributeRecordOmit<ExtArgs> | null
+    /**
+     * The filter to search for the ProviderCapabilityAttributeRecord to update in case it exists.
+     */
+    where: ProviderCapabilityAttributeRecordWhereUniqueInput
+    /**
+     * In case the ProviderCapabilityAttributeRecord found by the `where` argument doesn't exist, create a new ProviderCapabilityAttributeRecord with this data.
+     */
+    create: XOR<ProviderCapabilityAttributeRecordCreateInput, ProviderCapabilityAttributeRecordUncheckedCreateInput>
+    /**
+     * In case the ProviderCapabilityAttributeRecord was found with the provided `where` argument, update it with this data.
+     */
+    update: XOR<ProviderCapabilityAttributeRecordUpdateInput, ProviderCapabilityAttributeRecordUncheckedUpdateInput>
+  }
+
+  /**
+   * ProviderCapabilityAttributeRecord delete
+   */
+  export type ProviderCapabilityAttributeRecordDeleteArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the ProviderCapabilityAttributeRecord
+     */
+    select?: ProviderCapabilityAttributeRecordSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the ProviderCapabilityAttributeRecord
+     */
+    omit?: ProviderCapabilityAttributeRecordOmit<ExtArgs> | null
+    /**
+     * Filter which ProviderCapabilityAttributeRecord to delete.
+     */
+    where: ProviderCapabilityAttributeRecordWhereUniqueInput
+  }
+
+  /**
+   * ProviderCapabilityAttributeRecord deleteMany
+   */
+  export type ProviderCapabilityAttributeRecordDeleteManyArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Filter which ProviderCapabilityAttributeRecords to delete
+     */
+    where?: ProviderCapabilityAttributeRecordWhereInput
+    /**
+     * Limit how many ProviderCapabilityAttributeRecords to delete.
+     */
+    limit?: number
+  }
+
+  /**
+   * ProviderCapabilityAttributeRecord without action
+   */
+  export type ProviderCapabilityAttributeRecordDefaultArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the ProviderCapabilityAttributeRecord
+     */
+    select?: ProviderCapabilityAttributeRecordSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the ProviderCapabilityAttributeRecord
+     */
+    omit?: ProviderCapabilityAttributeRecordOmit<ExtArgs> | null
+  }
+
+
+  /**
    * Model TaskPreference
    */
 
@@ -110531,6 +111673,21 @@ export namespace Prisma {
   export type DiscoveryLogScalarFieldEnum = (typeof DiscoveryLogScalarFieldEnum)[keyof typeof DiscoveryLogScalarFieldEnum]
 
 
+  export const ProviderCapabilityAttributeRecordScalarFieldEnum: {
+    id: 'id',
+    providerId: 'providerId',
+    capability: 'capability',
+    source: 'source',
+    attributes: 'attributes',
+    attributesVerifiedAt: 'attributesVerifiedAt',
+    promotionNote: 'promotionNote',
+    createdAt: 'createdAt',
+    updatedAt: 'updatedAt'
+  };
+
+  export type ProviderCapabilityAttributeRecordScalarFieldEnum = (typeof ProviderCapabilityAttributeRecordScalarFieldEnum)[keyof typeof ProviderCapabilityAttributeRecordScalarFieldEnum]
+
+
   export const TaskPreferenceScalarFieldEnum: {
     id: 'id',
     organizationId: 'organizationId',
@@ -115588,6 +116745,78 @@ export namespace Prisma {
     message?: StringWithAggregatesFilter<"DiscoveryLog"> | string
     details?: JsonWithAggregatesFilter<"DiscoveryLog">
     createdAt?: DateTimeWithAggregatesFilter<"DiscoveryLog"> | Date | string
+  }
+
+  export type ProviderCapabilityAttributeRecordWhereInput = {
+    AND?: ProviderCapabilityAttributeRecordWhereInput | ProviderCapabilityAttributeRecordWhereInput[]
+    OR?: ProviderCapabilityAttributeRecordWhereInput[]
+    NOT?: ProviderCapabilityAttributeRecordWhereInput | ProviderCapabilityAttributeRecordWhereInput[]
+    id?: UuidFilter<"ProviderCapabilityAttributeRecord"> | string
+    providerId?: StringFilter<"ProviderCapabilityAttributeRecord"> | string
+    capability?: StringFilter<"ProviderCapabilityAttributeRecord"> | string
+    source?: StringFilter<"ProviderCapabilityAttributeRecord"> | string
+    attributes?: JsonFilter<"ProviderCapabilityAttributeRecord">
+    attributesVerifiedAt?: DateTimeNullableFilter<"ProviderCapabilityAttributeRecord"> | Date | string | null
+    promotionNote?: StringNullableFilter<"ProviderCapabilityAttributeRecord"> | string | null
+    createdAt?: DateTimeFilter<"ProviderCapabilityAttributeRecord"> | Date | string
+    updatedAt?: DateTimeFilter<"ProviderCapabilityAttributeRecord"> | Date | string
+  }
+
+  export type ProviderCapabilityAttributeRecordOrderByWithRelationInput = {
+    id?: SortOrder
+    providerId?: SortOrder
+    capability?: SortOrder
+    source?: SortOrder
+    attributes?: SortOrder
+    attributesVerifiedAt?: SortOrderInput | SortOrder
+    promotionNote?: SortOrderInput | SortOrder
+    createdAt?: SortOrder
+    updatedAt?: SortOrder
+  }
+
+  export type ProviderCapabilityAttributeRecordWhereUniqueInput = Prisma.AtLeast<{
+    id?: string
+    AND?: ProviderCapabilityAttributeRecordWhereInput | ProviderCapabilityAttributeRecordWhereInput[]
+    OR?: ProviderCapabilityAttributeRecordWhereInput[]
+    NOT?: ProviderCapabilityAttributeRecordWhereInput | ProviderCapabilityAttributeRecordWhereInput[]
+    providerId?: StringFilter<"ProviderCapabilityAttributeRecord"> | string
+    capability?: StringFilter<"ProviderCapabilityAttributeRecord"> | string
+    source?: StringFilter<"ProviderCapabilityAttributeRecord"> | string
+    attributes?: JsonFilter<"ProviderCapabilityAttributeRecord">
+    attributesVerifiedAt?: DateTimeNullableFilter<"ProviderCapabilityAttributeRecord"> | Date | string | null
+    promotionNote?: StringNullableFilter<"ProviderCapabilityAttributeRecord"> | string | null
+    createdAt?: DateTimeFilter<"ProviderCapabilityAttributeRecord"> | Date | string
+    updatedAt?: DateTimeFilter<"ProviderCapabilityAttributeRecord"> | Date | string
+  }, "id">
+
+  export type ProviderCapabilityAttributeRecordOrderByWithAggregationInput = {
+    id?: SortOrder
+    providerId?: SortOrder
+    capability?: SortOrder
+    source?: SortOrder
+    attributes?: SortOrder
+    attributesVerifiedAt?: SortOrderInput | SortOrder
+    promotionNote?: SortOrderInput | SortOrder
+    createdAt?: SortOrder
+    updatedAt?: SortOrder
+    _count?: ProviderCapabilityAttributeRecordCountOrderByAggregateInput
+    _max?: ProviderCapabilityAttributeRecordMaxOrderByAggregateInput
+    _min?: ProviderCapabilityAttributeRecordMinOrderByAggregateInput
+  }
+
+  export type ProviderCapabilityAttributeRecordScalarWhereWithAggregatesInput = {
+    AND?: ProviderCapabilityAttributeRecordScalarWhereWithAggregatesInput | ProviderCapabilityAttributeRecordScalarWhereWithAggregatesInput[]
+    OR?: ProviderCapabilityAttributeRecordScalarWhereWithAggregatesInput[]
+    NOT?: ProviderCapabilityAttributeRecordScalarWhereWithAggregatesInput | ProviderCapabilityAttributeRecordScalarWhereWithAggregatesInput[]
+    id?: UuidWithAggregatesFilter<"ProviderCapabilityAttributeRecord"> | string
+    providerId?: StringWithAggregatesFilter<"ProviderCapabilityAttributeRecord"> | string
+    capability?: StringWithAggregatesFilter<"ProviderCapabilityAttributeRecord"> | string
+    source?: StringWithAggregatesFilter<"ProviderCapabilityAttributeRecord"> | string
+    attributes?: JsonWithAggregatesFilter<"ProviderCapabilityAttributeRecord">
+    attributesVerifiedAt?: DateTimeNullableWithAggregatesFilter<"ProviderCapabilityAttributeRecord"> | Date | string | null
+    promotionNote?: StringNullableWithAggregatesFilter<"ProviderCapabilityAttributeRecord"> | string | null
+    createdAt?: DateTimeWithAggregatesFilter<"ProviderCapabilityAttributeRecord"> | Date | string
+    updatedAt?: DateTimeWithAggregatesFilter<"ProviderCapabilityAttributeRecord"> | Date | string
   }
 
   export type TaskPreferenceWhereInput = {
@@ -124369,6 +125598,90 @@ export namespace Prisma {
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
   }
 
+  export type ProviderCapabilityAttributeRecordCreateInput = {
+    id?: string
+    providerId: string
+    capability: string
+    source: string
+    attributes: JsonNullValueInput | InputJsonValue
+    attributesVerifiedAt?: Date | string | null
+    promotionNote?: string | null
+    createdAt?: Date | string
+    updatedAt?: Date | string
+  }
+
+  export type ProviderCapabilityAttributeRecordUncheckedCreateInput = {
+    id?: string
+    providerId: string
+    capability: string
+    source: string
+    attributes: JsonNullValueInput | InputJsonValue
+    attributesVerifiedAt?: Date | string | null
+    promotionNote?: string | null
+    createdAt?: Date | string
+    updatedAt?: Date | string
+  }
+
+  export type ProviderCapabilityAttributeRecordUpdateInput = {
+    id?: StringFieldUpdateOperationsInput | string
+    providerId?: StringFieldUpdateOperationsInput | string
+    capability?: StringFieldUpdateOperationsInput | string
+    source?: StringFieldUpdateOperationsInput | string
+    attributes?: JsonNullValueInput | InputJsonValue
+    attributesVerifiedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    promotionNote?: NullableStringFieldUpdateOperationsInput | string | null
+    createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
+    updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
+  }
+
+  export type ProviderCapabilityAttributeRecordUncheckedUpdateInput = {
+    id?: StringFieldUpdateOperationsInput | string
+    providerId?: StringFieldUpdateOperationsInput | string
+    capability?: StringFieldUpdateOperationsInput | string
+    source?: StringFieldUpdateOperationsInput | string
+    attributes?: JsonNullValueInput | InputJsonValue
+    attributesVerifiedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    promotionNote?: NullableStringFieldUpdateOperationsInput | string | null
+    createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
+    updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
+  }
+
+  export type ProviderCapabilityAttributeRecordCreateManyInput = {
+    id?: string
+    providerId: string
+    capability: string
+    source: string
+    attributes: JsonNullValueInput | InputJsonValue
+    attributesVerifiedAt?: Date | string | null
+    promotionNote?: string | null
+    createdAt?: Date | string
+    updatedAt?: Date | string
+  }
+
+  export type ProviderCapabilityAttributeRecordUpdateManyMutationInput = {
+    id?: StringFieldUpdateOperationsInput | string
+    providerId?: StringFieldUpdateOperationsInput | string
+    capability?: StringFieldUpdateOperationsInput | string
+    source?: StringFieldUpdateOperationsInput | string
+    attributes?: JsonNullValueInput | InputJsonValue
+    attributesVerifiedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    promotionNote?: NullableStringFieldUpdateOperationsInput | string | null
+    createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
+    updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
+  }
+
+  export type ProviderCapabilityAttributeRecordUncheckedUpdateManyInput = {
+    id?: StringFieldUpdateOperationsInput | string
+    providerId?: StringFieldUpdateOperationsInput | string
+    capability?: StringFieldUpdateOperationsInput | string
+    source?: StringFieldUpdateOperationsInput | string
+    attributes?: JsonNullValueInput | InputJsonValue
+    attributesVerifiedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    promotionNote?: NullableStringFieldUpdateOperationsInput | string | null
+    createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
+    updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
+  }
+
   export type TaskPreferenceCreateInput = {
     id?: string
     taskType: string
@@ -132367,6 +133680,40 @@ export namespace Prisma {
     source?: SortOrder
     message?: SortOrder
     createdAt?: SortOrder
+  }
+
+  export type ProviderCapabilityAttributeRecordCountOrderByAggregateInput = {
+    id?: SortOrder
+    providerId?: SortOrder
+    capability?: SortOrder
+    source?: SortOrder
+    attributes?: SortOrder
+    attributesVerifiedAt?: SortOrder
+    promotionNote?: SortOrder
+    createdAt?: SortOrder
+    updatedAt?: SortOrder
+  }
+
+  export type ProviderCapabilityAttributeRecordMaxOrderByAggregateInput = {
+    id?: SortOrder
+    providerId?: SortOrder
+    capability?: SortOrder
+    source?: SortOrder
+    attributesVerifiedAt?: SortOrder
+    promotionNote?: SortOrder
+    createdAt?: SortOrder
+    updatedAt?: SortOrder
+  }
+
+  export type ProviderCapabilityAttributeRecordMinOrderByAggregateInput = {
+    id?: SortOrder
+    providerId?: SortOrder
+    capability?: SortOrder
+    source?: SortOrder
+    attributesVerifiedAt?: SortOrder
+    promotionNote?: SortOrder
+    createdAt?: SortOrder
+    updatedAt?: SortOrder
   }
 
   export type TaskPreferenceCountOrderByAggregateInput = {

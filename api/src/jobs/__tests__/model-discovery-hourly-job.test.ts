@@ -164,6 +164,7 @@ describe('model-discovery-hourly scheduled job registration', () => {
     await processor({ data: { jobName: 'model-discovery-hourly' }, id: 'test-job-1' });
 
     expect(h.runScheduledModelDiscovery).toHaveBeenCalledTimes(1);
+    expect(h.runScheduledModelDiscovery).toHaveBeenCalledWith(expect.any(AbortSignal));
   });
 
   it('fires exactly once per tick even when two "processes" race the SAME job invocation (BullMQ Redis-lock single-execution contract)', async () => {
@@ -188,5 +189,118 @@ describe('model-discovery-hourly scheduled job registration', () => {
     for (const call of calls) {
       expect(call[1]).toEqual({ pattern: '0 * * * *' });
     }
+  });
+});
+
+/**
+ * 2026-09-24: BullMQ ignores the `timeout` job option, so the 30 min timeout
+ * of this job was never applied; the job stayed active for hours, blocked
+ * worker shutdown until SIGKILL (exit 137) and was then re-dispatched by the
+ * stalled-job check to another process mid-rollout. The processor now
+ * enforces the timeout and fails the job at once on graceful shutdown.
+ */
+describe('model-discovery-hourly: enforced timeout and graceful shutdown', () => {
+  type Processor = (job: { data: { jobName: string }; id: string }) => Promise<void>;
+
+  async function startProcessor(): Promise<Processor> {
+    const { registerScheduledJobs, startScheduledTasksWorker } = await loadModule();
+    await registerScheduledJobs();
+    await startScheduledTasksWorker();
+    return h.WorkerCtor.mock.calls[0]?.[1] as Processor;
+  }
+
+  function hangingDiscovery(): { signals: AbortSignal[] } {
+    const signals: AbortSignal[] = [];
+    h.runScheduledModelDiscovery.mockImplementation((signal: AbortSignal) => {
+      signals.push(signal);
+      return new Promise(() => undefined);
+    });
+    return { signals };
+  }
+
+  // The processor lazily imports the handler module before it calls it.
+  async function untilHandlerStarted(signals: AbortSignal[]): Promise<void> {
+    for (let i = 0; i < 200 && signals.length === 0; i++) {
+      await new Promise((resolve) => setImmediate(resolve));
+    }
+    expect(signals).toHaveLength(1);
+  }
+
+  afterEach(() => {
+    vi.useRealTimers();
+    h.runScheduledModelDiscovery.mockReset();
+    h.runScheduledModelDiscovery.mockResolvedValue(undefined);
+  });
+
+  it('fails the job when its 30 min timeout passes and aborts the handler signal', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    const { signals } = hangingDiscovery();
+    const processor = await startProcessor();
+
+    const run = processor({ data: { jobName: 'model-discovery-hourly' }, id: 'job-timeout' });
+    const settled = run.then(
+      () => 'resolved',
+      (err: Error) => err
+    );
+    await untilHandlerStarted(signals);
+    await vi.advanceTimersByTimeAsync(30 * 60 * 1000 - 1);
+    expect(signals[0]?.aborted).toBe(false);
+    await vi.advanceTimersByTimeAsync(1);
+
+    const outcome = await settled;
+    expect(outcome).toBeInstanceOf(Error);
+    expect(outcome).toMatchObject({ name: 'ScheduledJobDeadlineError', kind: 'timeout' });
+    expect(signals[0]?.aborted).toBe(true);
+  });
+
+  it('graceful shutdown fails an active job at once instead of waiting for it', async () => {
+    const { signals } = hangingDiscovery();
+    const processor = await startProcessor();
+    const { shutdownScheduledTasks } = await loadModule();
+
+    const run = processor({ data: { jobName: 'model-discovery-hourly' }, id: 'job-shutdown' });
+    const settled = run.then(
+      () => 'resolved',
+      (err: Error) => err
+    );
+    await untilHandlerStarted(signals);
+
+    await shutdownScheduledTasks();
+
+    const outcome = await settled;
+    expect(outcome).toMatchObject({ name: 'ScheduledJobDeadlineError', kind: 'shutdown' });
+    expect(signals[0]?.aborted).toBe(true);
+  });
+
+  it('a job that finishes in time completes normally and its signal is never aborted', async () => {
+    const signals: AbortSignal[] = [];
+    h.runScheduledModelDiscovery.mockImplementation(async (signal: AbortSignal) => {
+      signals.push(signal);
+    });
+    const processor = await startProcessor();
+
+    await expect(
+      processor({ data: { jobName: 'model-discovery-hourly' }, id: 'job-ok' })
+    ).resolves.toBeUndefined();
+    expect(signals[0]?.aborted).toBe(false);
+  });
+
+  it('jobs without enforceTimeout are not raced (their declared timeout stays advisory)', async () => {
+    const { runScheduledJobHandler } = await loadModule();
+    const shutdown = new AbortController();
+    let signal: AbortSignal | undefined;
+
+    const run = runScheduledJobHandler(
+      'some-other-job',
+      async (ctx) => {
+        signal = ctx.signal;
+        await new Promise((resolve) => setTimeout(resolve, 30));
+      },
+      { timeoutMs: 5, shutdownSignal: shutdown.signal }
+    );
+    shutdown.abort();
+
+    await expect(run).resolves.toBeUndefined();
+    expect(signal?.aborted).toBe(false);
   });
 });

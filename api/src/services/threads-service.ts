@@ -578,6 +578,18 @@ export class ThreadsService {
         throw new Error(`Thread ${threadId} not found`);
       }
 
+      // Verify assistant exists and belongs to organization
+      const assistant = await prisma.assistant.findFirst({
+        where: {
+          id: assistant_id,
+          organizationId: userContext.organizationId,
+        },
+      });
+
+      if (!assistant) {
+        throw new Error(`Assistant ${assistant_id} not found`);
+      }
+
       // Create run record in database
       const run = await prisma.threadRun.create({
         data: {
@@ -1167,8 +1179,11 @@ export class ThreadsService {
       // Re-enqueue run for continued processing
       if (threadRunQueueService.isAvailable()) {
         try {
-          const assistant = await prisma.assistant.findUnique({
-            where: { id: run.assistantId },
+          const assistant = await prisma.assistant.findFirst({
+            where: {
+              id: run.assistantId,
+              organizationId: userContext.organizationId,
+            },
           });
 
           if (!assistant) {
@@ -1409,14 +1424,16 @@ export class ThreadsService {
       const where: { runId: string; createdAt?: { gt?: Date; lt?: Date } } = { runId };
 
       if (after) {
-        const afterStep = await prisma.threadRunStep.findUnique({ where: { id: after } });
+        // Resolved against THIS run only, so a step id from another tenant's
+        // run cannot be used to probe its timestamp (same rule as listMessages).
+        const afterStep = await prisma.threadRunStep.findFirst({ where: { id: after, runId } });
         if (afterStep) {
           where.createdAt = { gt: afterStep.createdAt };
         }
       }
 
       if (before) {
-        const beforeStep = await prisma.threadRunStep.findUnique({ where: { id: before } });
+        const beforeStep = await prisma.threadRunStep.findFirst({ where: { id: before, runId } });
         if (beforeStep) {
           where.createdAt = where.createdAt
             ? { ...where.createdAt, lt: beforeStep.createdAt }

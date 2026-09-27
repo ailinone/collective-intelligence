@@ -8,18 +8,26 @@
 // Source: https://github.com/ailinone/collective-intelligence
 
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
+import { config } from '@/config';
 import { logger } from '@/utils/logger';
-import { authenticate as authenticateRequest } from '@/middleware/auth-middleware';
+import {
+  authenticate as authenticateRequest,
+  isPlatformAdminRequest,
+} from '@/middleware/auth-middleware';
 import { requireTenantContext } from '@/api/middleware/tenant-isolation-middleware';
 import { rejectAnonymousGuestKeyPreHandler } from '@/services/anonymous-quota-gate';
 import { rejectChatFreeTierKeyPreHandler } from '@/services/free-tier-quota-gate';
 import type { ExtendedFastifyRequest } from '@/types/fastify-extended';
 import type { ChatMessage, ChatRequest, ModelCapability } from '@/types';
 import { createOrchestrationContext, extractSemanticQueryFromMessages } from '@/utils/orchestration-context';
-import { config } from '@/config';
 import { MediaPlannerStrategy } from '@/core/orchestration/strategies/media-planner-strategy';
 import { MediaConsensusStrategy } from '@/core/orchestration/strategies/media-consensus-strategy';
-import { resolveMediaPlanRouting } from '@/core/orchestration/strategies/media-planner-gate';
+import {
+  resolveMediaPlanRouting,
+  resolveEffectiveMediaPlannerEnabled,
+} from '@/core/orchestration/strategies/media-planner-gate';
+import { buildMediaCritics } from '@/core/orchestration/strategies/media-critics-factory';
+import { DocumentReviewStrategy } from '@/core/orchestration/strategies/document-review-strategy';
 import { AudioOrchestrationService } from '@/services/audio-orchestration-service';
 import { MusicOrchestrationService } from '@/services/music-orchestration-service';
 import { ImagesOrchestrationService } from '@/services/images-orchestration-service';
@@ -57,13 +65,24 @@ import {
 } from '@/providers/provider-operability';
 import { isModelCapability } from '@/types';
 import { executeRouteWithRetry } from '@/utils/route-retry';
-import { toolRegistry } from '@/core/tools/tool-registry';
+import {
+  isExternalEffectCategory,
+  toolRegistry,
+  CHAT_AUTO_EXECUTE_BLOCKED_TOOLS,
+} from '@/core/tools/tool-registry';
 import type { ToolExecutionContext } from '@/services/advanced-tool-execution-service';
+import { getToolsBaseDir } from '@/utils/tools-workspace-guard';
 import {
   isComputerUseEnabled,
   isAgentsEnabled,
   isMcpClientEnabled,
+  isCodeExecutionSandboxEnabled,
 } from '@/core/sandbox/sandbox-policy';
+import {
+  executeCode,
+  CodeExecutionDisabledError,
+  CodeExecutionValidationError,
+} from '@/core/sandbox/code-execution';
 
 const log = logger.child({ module: 'capabilities-routes' });
 
@@ -166,6 +185,33 @@ const AGENTIC_SANDBOX_CAPABILITIES = new Set<ModelCapability>([
   'mcp',
 ]);
 
+/**
+ * Capabilities served by `executeCodeExecutionSandboxMode` (ADR-026) — the
+ * SAME isolated Docker sandbox primitive as `AGENTIC_SANDBOX_CAPABILITIES`
+ * above, via a purpose-built caller (`core/sandbox/code-execution.ts`)
+ * rather than `executeAgenticSandboxMode`'s tool-call dispatch, because code
+ * execution's request/response shape (language + source, stdin-delivered) is
+ * different from computer_use/agents/mcp's. Gated by its own flag
+ * (`CODE_EXECUTION_SANDBOX_ENABLED`, default off); with it off,
+ * `executeCodeExecutionSandboxMode` throws before creating a session or
+ * touching Docker, and `executeCapabilityByPlan`'s try/catch-and-continue
+ * loop falls through to `sandbox_workflow` (`CODE_CAPABILITIES` above)
+ * exactly as it did before this ADR — see `code_interpreter`'s
+ * `executionPath` override in `capability-registry.ts`.
+ */
+const CODE_EXECUTION_SANDBOX_CAPABILITIES = new Set<ModelCapability>(['code_interpreter']);
+
+/** Languages `executeCodeExecutionSandboxMode` accepts in the request body's `language` field. */
+const CODE_EXECUTION_LANGUAGE_ALIASES: Record<string, 'python' | 'javascript'> = {
+  python: 'python',
+  python3: 'python',
+  py: 'python',
+  javascript: 'javascript',
+  js: 'javascript',
+  node: 'javascript',
+  nodejs: 'javascript',
+};
+
 const AUDIO_TRANSCRIPTION_CAPABILITIES = new Set<ModelCapability>([
   'speech_to_text',
   'transcription',
@@ -258,6 +304,14 @@ function decodeBase64Payload(value: unknown, fieldName: string): Buffer {
   const raw = value.includes(',') ? (value.split(',').pop() ?? value) : value;
   return Buffer.from(raw, 'base64');
 }
+
+/**
+ * Code of an authorization refusal raised by an execution mode itself (e.g.
+ * the platform-admin check in `executeAgenticSandboxMode`). Like a 400, it is
+ * never a reason to try the next mode: `executeCapabilityByPlan` propagates it
+ * as-is instead of folding it into `capability_dependency_unavailable`.
+ */
+const CAPABILITY_FORBIDDEN_CODE = 'platform_admin_required';
 
 function buildCapabilityError(
   capability: string,
@@ -557,6 +611,19 @@ async function resolveRuntimeDependencies(
       detail: enabled
         ? `${capability} runs inside the isolated Docker sandbox (ADR-024).`
         : `${capability} is implemented but disabled by default (ADR-024). Set ${flagName}=true to enable it.`,
+    });
+  }
+
+  if (CODE_EXECUTION_SANDBOX_CAPABILITIES.has(capability)) {
+    const enabled = isCodeExecutionSandboxEnabled();
+    reports.push({
+      dependency: 'code_execution_sandbox_runtime',
+      satisfied: enabled,
+      detail: enabled
+        ? `${capability} runs real Python/JavaScript inside the isolated Docker sandbox (ADR-026).`
+        : `${capability} falls back to the pre-existing sandbox_workflow path (ADR-024's ` +
+          'documented open follow-up). Set CODE_EXECUTION_SANDBOX_ENABLED=true to run it on the ' +
+          'isolated Docker sandbox instead (ADR-026).',
     });
   }
 
@@ -1448,8 +1515,15 @@ async function executeAgenticSandboxMode(
   requestId: string
 ): Promise<CapabilityModeResult> {
   const userContext = getUserContext(request);
+  // SECURITY (2026-09-25, issue #664 finding 3): `process.cwd()` is the API
+  // container's own source tree, not a tenant workspace. `getToolsBaseDir()`
+  // is the SAME server-controlled base `/v1/tools/*` (tools-routes.ts) and
+  // the chat-completions auto-dispatch path already trust for every other
+  // tool-execution entry point — a no-op fallback to `process.cwd()` when
+  // the operator leaves `TOOLS_BASE_DIR` unset, and a real narrowing
+  // whenever it is configured.
   const toolCtx: ToolExecutionContext = {
-    workingDirectory: process.cwd(),
+    workingDirectory: getToolsBaseDir(),
     log,
     organizationId: userContext.organizationId,
     userId: userContext.userId,
@@ -1489,15 +1563,63 @@ async function executeAgenticSandboxMode(
 
   if (capability === 'mcp') {
     // Body shape: { tool: string, arguments?: object } — `tool` is an
-    // already-registered `mcp_<server>_<tool>` name from toolRegistry.
+    // `mcp_<server>_<tool>` name the MCP client itself registered.
+    //
+    // SECURITY (2026-09-24): this branch used to accept ANY name for which
+    // `toolRegistry.has()` was true and never read `MCP_CLIENT_ENABLED`, so
+    // any tenant API key could run the native `write_file`/`read_file`/
+    // `search_replace` (all `safeForStrategies: true`) against the API
+    // container's `process.cwd()`, flag on or off. Three checks now, in order:
+    //  1. the flag, read per call, before anything is resolved;
+    //  2. the tool must be one the MCP client registered (its own list, not a
+    //     name prefix), so no native tool is reachable here for anyone;
+    //  3. an MCP tool whose operator-set category may touch the API host
+    //     (anything outside the registry's external-effect categories) needs
+    //     a platform admin, the same bar `/v1/tools/*` sets.
+    if (!isMcpClientEnabled()) {
+      throw buildCapabilityError(
+        capability,
+        'mcp is disabled (set MCP_CLIENT_ENABLED=true and configure a server)',
+        { flag: 'MCP_CLIENT_ENABLED' }
+      );
+    }
+    const { mcpClientService } = await import('@/core/mcp/mcp-client-service');
+    const mcpToolNames = new Set(
+      mcpClientService.getConnectedServers().flatMap((server) => server.tools)
+    );
     const toolName = asString(body.tool);
-    if (!toolName || !toolRegistry.has(toolName)) {
+    const registration = toolName ? toolRegistry.get(toolName) : undefined;
+    if (
+      !toolName ||
+      !registration ||
+      registration.name !== toolName ||
+      !mcpToolNames.has(toolName)
+    ) {
       throw buildCapabilityError(
         capability,
         toolName
           ? `Unknown or unregistered MCP tool: ${toolName}`
-          : 'mcp is disabled or no server is configured (set MCP_CLIENT_ENABLED=true and configure a server)',
-        { availableTools: toolRegistry.listNames().filter((name) => name.startsWith('mcp_')) }
+          : 'tool is required (an mcp_<server>_<tool> name registered by the MCP client)',
+        { availableTools: [...mcpToolNames] }
+      );
+    }
+    if (!isExternalEffectCategory(registration.category) && !isPlatformAdminRequest(request)) {
+      log.warn(
+        {
+          toolName,
+          category: registration.category,
+          organizationId: userContext.organizationId,
+          userId: userContext.userId,
+          requestId,
+        },
+        'mcp execute denied: tool category may touch the API host and caller is not a platform admin'
+      );
+      throw buildCapabilityError(
+        capability,
+        `MCP tool ${toolName} (category '${registration.category}') requires platform administrator privileges`,
+        { toolName, category: registration.category },
+        CAPABILITY_FORBIDDEN_CODE,
+        403
       );
     }
     const args =
@@ -1520,7 +1642,26 @@ async function executeAgenticSandboxMode(
     role: m.role as 'system' | 'user' | 'assistant' | 'tool',
     content: typeof m.content === 'string' ? m.content : JSON.stringify(m.content),
   }));
-  const requestedTools = asStringArray(body.allowed_tools).filter((name) => toolRegistry.has(name));
+  // SECURITY (2026-09-25, issue #664 finding 3): `allowed_tools` used to be
+  // filtered ONLY by `toolRegistry.has(name)` — any registered name passed,
+  // including `write_file`/`delete_file`/`run_command`/etc. `agent-loop.ts`'s
+  // `runBoundedAgent` then executes via `toolRegistry.executeForStrategy()`,
+  // which only re-checks the registry's own `safeForStrategies` flag, NOT
+  // this blocklist — so a client explicitly naming `write_file` in
+  // `allowed_tools` got it added to the bounded agent's real tool set and
+  // could have it write to the API container's filesystem. Filter through
+  // the SAME `CHAT_AUTO_EXECUTE_BLOCKED_TOOLS` blocklist every other
+  // tenant-facing tool-execution surface in this file enforces — resolved to
+  // each tool's canonical registry name first, so a blocked tool's alias
+  // (e.g. grep_search's `grep_tool`/`grep`) cannot slip through either.
+  const requestedTools = asStringArray(body.allowed_tools).filter((name) => {
+    const reg = toolRegistry.get(name);
+    if (!reg) return false;
+    if (CHAT_AUTO_EXECUTE_BLOCKED_TOOLS.has(name) || CHAT_AUTO_EXECUTE_BLOCKED_TOOLS.has(reg.name)) {
+      return false;
+    }
+    return true;
+  });
   const allowedTools =
     requestedTools.length > 0
       ? requestedTools
@@ -1550,6 +1691,110 @@ async function executeAgenticSandboxMode(
     },
     executionPath: 'agentic_sandbox',
   };
+}
+
+/**
+ * `code_interpreter` on the isolated Docker sandbox (ADR-026). Deliberately
+ * separate from `executeAgenticSandboxMode` above — code execution's
+ * request/response shape (a language + a source string, run over stdin) is
+ * different from computer_use/agents/mcp's tool-call shape — and from
+ * `executeSandboxWorkflowMode`, which stays the untouched, pre-existing
+ * `CodeExecutionService` path this mode is tried BEFORE (see
+ * `code_interpreter`'s `executionPath` in `capability-registry.ts`).
+ *
+ * Body shape: `{ code: string, language?: 'python'|'py'|'python3'|
+ * 'javascript'|'js'|'node'|'nodejs' (default 'python'), timeoutMs?: number }`.
+ * `code` may also arrive via the generic envelope (`input`/`prompt`/etc. —
+ * see `deriveTextInput`), matching how other capabilities in this file accept
+ * either shape.
+ *
+ * With `CODE_EXECUTION_SANDBOX_ENABLED` off (default), this function checks
+ * the flag itself, BEFORE ever calling `executeCode` — a deliberate
+ * defense-in-depth duplicate of the check `executeCode` also performs
+ * internally (throwing `CodeExecutionDisabledError` before creating a session
+ * or touching Docker). Either check failing is converted to
+ * `capability_dependency_unavailable` so `executeCapabilityByPlan`'s
+ * try/catch-and-continue loop falls through to `sandbox_workflow` exactly as
+ * it did before this ADR.
+ */
+async function executeCodeExecutionSandboxMode(
+  capability: ModelCapability,
+  body: CapabilityRequestBody,
+  envelope: CapabilityExecutionEnvelope,
+  request: FastifyRequest,
+  requestId: string
+): Promise<CapabilityModeResult> {
+  // Defense-in-depth: check the flag HERE too, not only inside `executeCode()`.
+  // `executeCode()` already fails closed on its own (see its own
+  // `isCodeExecutionSandboxEnabled()` check), but this mode function must not
+  // depend on that being the ONLY gate — a caller that reaches this function
+  // through any path that mocks or otherwise bypasses `executeCode()` (as
+  // route-level dispatch tests legitimately do) would otherwise skip the
+  // check entirely. Checked before request validation, same order as
+  // `executeCode()` itself: disabled is a property of the CAPABILITY, not of
+  // this particular request, so it must win regardless of what the body
+  // contains.
+  if (!isCodeExecutionSandboxEnabled()) {
+    throw buildCapabilityError(capability, new CodeExecutionDisabledError().message, {
+      flag: 'CODE_EXECUTION_SANDBOX_ENABLED',
+    });
+  }
+
+  const userContext = getUserContext(request);
+  const code = asString(body.code) ?? asString(body.input) ?? asString(envelope.input);
+  if (!code) {
+    throw buildCapabilityError(capability, 'code is required for code execution', {}, 'invalid_request', 400);
+  }
+
+  const languageRaw = (asString(body.language) ?? 'python').toLowerCase();
+  const language = CODE_EXECUTION_LANGUAGE_ALIASES[languageRaw];
+  if (!language) {
+    throw buildCapabilityError(
+      capability,
+      `Unsupported language '${languageRaw}'. Supported: ${[...new Set(Object.values(CODE_EXECUTION_LANGUAGE_ALIASES))].join(', ')}`,
+      {},
+      'invalid_request',
+      400
+    );
+  }
+
+  try {
+    const result = await executeCode({
+      code,
+      language,
+      timeoutMs: asNumber(body.timeoutMs) ?? envelope.execution?.timeoutMs,
+      organizationId: userContext.organizationId,
+      userId: userContext.userId,
+      runId: requestId,
+    });
+    return {
+      data: {
+        success: result.outcome === 'ok',
+        outcome: result.outcome,
+        exit_code: result.exitCode,
+        stdout: result.stdout,
+        stderr: result.stderr,
+        duration_ms: result.durationMs,
+        truncated: result.truncated,
+        language: result.language,
+        ...(result.reason ? { reason: result.reason } : {}),
+      },
+      executionPath: 'code_execution_sandbox',
+    };
+  } catch (err) {
+    if (err instanceof CodeExecutionDisabledError) {
+      throw buildCapabilityError(capability, err.message, {
+        flag: 'CODE_EXECUTION_SANDBOX_ENABLED',
+      });
+    }
+    if (err instanceof CodeExecutionValidationError) {
+      throw buildCapabilityError(capability, err.message, {}, 'invalid_request', 400);
+    }
+    // SandboxUnavailableError (no Docker reachable) and anything else — the
+    // dispatcher's catch-and-continue loop treats this exactly like any
+    // other failed mode and falls through to sandbox_workflow.
+    throw err;
+  }
 }
 
 async function executeOrchestrationMode(
@@ -1699,6 +1944,14 @@ export async function executeCapabilityByPlan(
         );
       } else if (mode === 'agentic_sandbox') {
         modeResult = await executeAgenticSandboxMode(plan.id, body, envelope, request, requestId);
+      } else if (mode === 'code_execution_sandbox') {
+        modeResult = await executeCodeExecutionSandboxMode(
+          plan.id,
+          body,
+          envelope,
+          request,
+          requestId
+        );
       } else {
         modeResult = await executeOrchestrationMode(plan.id, body, envelope, request);
       }
@@ -1708,7 +1961,24 @@ export async function executeCapabilityByPlan(
         fallbackUsed: index > 0,
       };
     } catch (error) {
-      const err = error as { message?: string };
+      const err = error as { message?: string; statusCode?: number; code?: string };
+      // A validation error (400) means the REQUEST ITSELF is malformed — e.g.
+      // `executeCodeExecutionSandboxMode` rejecting an unsupported language or
+      // missing code before ever touching the sandbox. That is never a
+      // reason to try the next mode: every other mode would receive the
+      // exact same malformed body, so falling through either fails again for
+      // an unrelated reason (masking the real 400 behind a generic
+      // `capability_dependency_unavailable` 422 — the failure this branch
+      // exists to prevent) or, worse, silently accepts input the plan's own
+      // contract just rejected. Propagate it immediately, unlike a genuine
+      // mode-availability failure (Docker unreachable, a provider down, a
+      // missing dependency), which is NOT a validation error and keeps
+      // falling through exactly as before. The same goes for an authorization
+      // refusal a mode raised on purpose (CAPABILITY_FORBIDDEN_CODE): the
+      // caller must see the 403, not a generic 422.
+      if (err.statusCode === 400 || err.code === CAPABILITY_FORBIDDEN_CODE) {
+        throw error;
+      }
       attempts.push({
         mode,
         reason: err.message || 'execution_failed',
@@ -2226,21 +2496,46 @@ export async function registerCapabilitiesRoutes(server: FastifyInstance): Promi
         semanticQuery: extractSemanticQueryFromMessages(messages),
       });
 
-      const gate = resolveMediaPlanRouting(chatRequest, orchestrationContext, config.mediaPlanner.enabled);
+      const mediaPlannerEnabled = await resolveEffectiveMediaPlannerEnabled(
+        orchestrationContext.organizationId
+      );
+      const gate = resolveMediaPlanRouting(chatRequest, orchestrationContext, mediaPlannerEnabled);
       if (!gate.route) {
         return reply.code(422).send({
           error: {
             code: 'media_planner_not_applicable',
             type: 'capability_error',
-            message: config.mediaPlanner.enabled
+            message: mediaPlannerEnabled
               ? `Request does not meet the media-planner routing heuristic: ${gate.reason}`
-              : 'MEDIA_PLANNER_ENABLED is false',
+              : 'MEDIA_PLANNER_ENABLED is false and no canary override is set for this organization',
             details: { reason: gate.reason, detectedCapabilities: gate.detectedCapabilities },
           },
         });
       }
 
       const envelope = parseEnvelope(body as CapabilityRequestBody);
+
+      // Section A (2026-09-23): real judge critics, gated behind
+      // `config.mediaPlanner.judgeEnabled` (MEDIA_PLANNER_JUDGE_ENABLED,
+      // default false). With the flag off — the default in every
+      // environment until deliberately turned on — `critics` stays `[]`
+      // exactly as before, so `MediaConsensusStrategy` keeps degrading to
+      // scoringMode:'unavailable'/verdict:'uncertain' and
+      // pickBestCandidate() deterministically picking the first
+      // gate-passing candidate (see media-consensus-strategy.ts's own
+      // documented degrade path). With the flag on, `buildMediaCritics()`
+      // resolves a real vision-capable judge model and returns 3
+      // role-differentiated critics, or degrades gracefully (empty
+      // critics + a labeled `qualityJudgingUnavailableReason`) when none
+      // resolves.
+      let critics: Awaited<ReturnType<typeof buildMediaCritics>>['critics'] = [];
+      let qualityJudgingUnavailableReason: string | undefined;
+      if (config.mediaPlanner.judgeEnabled) {
+        const built = await buildMediaCritics({ providerRegistry: getProviderRegistry() });
+        critics = built.critics;
+        qualityJudgingUnavailableReason = built.qualityJudgingUnavailableReason;
+      }
+
       const strategy = new MediaPlannerStrategy({
         capabilityDispatcher: (plan, capabilityBody) =>
           executeCapabilityByPlan(plan, capabilityBody, envelope, request, requestId, {
@@ -2259,19 +2554,32 @@ export async function registerCapabilitiesRoutes(server: FastifyInstance): Promi
         // merged 2026-09-06 (PR #443), so `generate` actions now really
         // generate N candidates via the same video/image services this
         // route already constructs above, instead of degrading to an
-        // `unmetConstraints` entry. Critics are intentionally NOT wired yet
-        // (empty array) — MediaJudgeEvaluator needs a real judge-model
-        // client injected, which is a separate piece of work; with zero
-        // critics, reconcileCriticResults() degrades to
-        // scoringMode:'unavailable'/verdict:'uncertain' and
-        // pickBestCandidate() deterministically picks the first
-        // gate-passing candidate (see media-consensus-strategy.ts's own
-        // documented degrade path) — a real generation path, just without
-        // critic-based ranking yet.
+        // `unmetConstraints` entry.
         mediaConsensusExecutor: new MediaConsensusStrategy({
           videoService,
           imagesService: imageService,
+          critics,
+          qualityJudgingUnavailableReason,
         }),
+        // TODO(section-A-dependency, section-D-image-edit-verify-plan): once
+        // Section A wires a real vision-capable judge model via
+        // ModelRoleResolver, pass a MediaJudgeEvaluator(criticRole:
+        // 'spec_compliance') here as `imageEditJudge` so edit actions get a
+        // subjective before/after check on top of the deterministic gate.
+        // Absent, edits are still gated deterministically (dimensions/
+        // format) — this is a strictly additive quality improvement, not a
+        // correctness gap. (Section A itself has since merged -- this
+        // wiring is now actionable, left as a follow-up rather than done
+        // as part of this merge.)
+        // Document/PDF generalization (Section C). Same safe-by-default
+        // posture as mediaConsensusExecutor above: critics intentionally
+        // NOT wired yet (empty array) — DocumentJudgeEvaluator needs a real
+        // judge-model id per critic role, a separate piece of work. With
+        // zero critics, DocumentReviewStrategy degrades explicitly
+        // (degradedReason: 'no_document_critics_configured') instead of
+        // silently doing nothing — pdf_understanding still returns its raw
+        // extraction via the unchanged capability_result fallback path.
+        documentReviewExecutor: new DocumentReviewStrategy({ critics: [] }),
       });
 
       const result = await strategy.execute(chatRequest, orchestrationContext);

@@ -123,3 +123,6 @@ api/.env.test
 
 # git worktree checkouts (see using-git-worktrees convention)
 ci-worktrees/
+
+# Superpowers git worktrees (isolated feature workspaces)
+.worktrees/

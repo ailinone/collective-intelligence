@@ -122,6 +122,30 @@ export interface SandboxExecOptions {
   userId?: string;
   /** Per-call override, still clamped by the resolved policy ceiling. */
   timeoutMs?: number;
+  /**
+   * Text piped to the container's stdin (ADR-026, code execution). When set,
+   * the container is run with `-i` so the interpreter can actually read it,
+   * and the caller's `command`/`args` are expected to read the program from
+   * stdin (e.g. `python3 -`) rather than take it as an argv element — argv
+   * has no room for an arbitrary-length program and would additionally have
+   * to pass `assertArgAllowed`'s 4096-byte cap.
+   */
+  stdin?: string;
+  /**
+   * Per-call command allowlist, checked INSTEAD of the shared
+   * `resolveCommandAllowlist()` for this one exec. Code execution uses this
+   * to allow exactly `python3`/`node` (ADR-026) without touching or widening
+   * the computer_use default allowlist, which deliberately excludes every
+   * interpreter (see `sandbox-policy.ts`'s `DEFAULT_COMMAND_ALLOWLIST` doc).
+   */
+  commandAllowlist?: ReadonlySet<string>;
+  /**
+   * Per-call image override. Code execution runs a different,
+   * language-specific image (one that actually ships `python3`/`node`)
+   * instead of the shared `SANDBOX_IMAGE` default (a minimal `alpine` with
+   * neither).
+   */
+  image?: string;
 }
 
 /** Cached Docker probe. `null` = not probed yet. */
@@ -221,14 +245,22 @@ export function buildDockerArgs(params: {
   limits: SandboxLimits;
   command: string;
   args: readonly string[];
+  /**
+   * Keep stdin open (`docker run -i`) so a program can be piped into the
+   * container (ADR-026, code execution). Omitted/false for every existing
+   * caller — without it `docker run` closes stdin immediately, which is
+   * exactly right for commands that never read from it.
+   */
+  interactive?: boolean;
 }): string[] {
-  const { containerName, scopePath, limits, command, args } = params;
+  const { containerName, scopePath, limits, command, args, interactive } = params;
   const network =
     limits.networkMode === 'allowlist' ? resolveAllowlistNetworkName() : 'none';
 
   return [
     'run',
     '--rm',
+    ...(interactive ? ['-i'] : []),
     '--name',
     containerName,
     '--network',
@@ -594,7 +626,12 @@ export async function execInSandbox(
   args: readonly string[] = [],
   options: SandboxExecOptions = {}
 ): Promise<SandboxExecResult> {
-  const limits = resolveSandboxLimits();
+  // `options.image` overrides only the image (ADR-026, code execution runs a
+  // language-specific image instead of the shared default) — every other
+  // limit (memory/cpu/timeout/network/output cap) stays the one shared,
+  // centrally-tuned envelope every sandboxed exec is bound by.
+  const baseLimits = resolveSandboxLimits();
+  const limits: SandboxLimits = options.image ? { ...baseLimits, image: options.image } : baseLimits;
   const auditId = newAuditId();
   const started = Date.now();
 
@@ -621,7 +658,7 @@ export async function execInSandbox(
 
   // ── Policy gate, BEFORE anything is spawned ──────────────────────────
   try {
-    assertCommandAllowed(command);
+    assertCommandAllowed(command, options.commandAllowlist);
     for (const arg of args) assertArgAllowed(arg);
   } catch (err) {
     if (err instanceof SandboxPolicyError) {
@@ -665,12 +702,14 @@ export async function execInSandbox(
     limits,
     command,
     args,
+    interactive: options.stdin !== undefined,
   });
 
   let killedByUs = false;
   try {
     const result = await runHostProcess('docker', dockerArgs, timeoutMs, {
       maxOutputBytes: limits.maxOutputBytes,
+      input: options.stdin,
       onTimeout: () => {
         killedByUs = true;
         // Kill the CONTAINER, not just the local `docker run` client: killing
@@ -787,17 +826,22 @@ function runHostProcess(
     //
     // stdin is only opened (`'pipe'`) when the caller has content to send —
     // `writeFileInSandbox` pipes file content to `docker run -i … cat > …`
-    // this way, so that content never has to pass through argv (no length
-    // limit, no shell-escaping concerns). Every other caller keeps stdin
-    // `'ignore'`d, matching the previous behaviour exactly.
+    // this way, and code execution (ADR-026) pipes the program text to
+    // `python3 -` / `node -` the same way, so neither ever has to pass
+    // through argv (no length limit, no shell-escaping concerns). Every
+    // other caller keeps stdin `'ignore'`d, matching the previous behaviour
+    // exactly.
     const child = spawn(cmd, [...args], {
       stdio: [opts.input !== undefined ? 'pipe' : 'ignore', 'pipe', 'pipe'],
     });
 
     if (opts.input !== undefined) {
       // A container that exits before reading all of stdin (e.g. because the
-      // fixed write/read script itself failed) closes the pipe from its end,
-      // which would otherwise surface as an unhandled EPIPE `error` event.
+      // fixed write/read script itself failed, or a syntax error aborts the
+      // interpreter immediately) closes the pipe from its end, which would
+      // otherwise surface as an unhandled EPIPE `error` event. That is a
+      // normal outcome reflected in the exit code below, not a process-level
+      // fault — swallow it here.
       child.stdin?.on('error', () => undefined);
       child.stdin?.end(opts.input, 'utf8');
     }

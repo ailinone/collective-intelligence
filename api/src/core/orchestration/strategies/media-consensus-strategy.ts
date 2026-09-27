@@ -177,11 +177,21 @@ export interface MediaConsensusResult {
    *  fallback rather than a validated winner. */
   readonly degraded: boolean;
   readonly degradedReason?: string;
+  /** Section A (2026-09-23) non-silent-degradation requirement: set by the
+   *  caller (`buildMediaCritics`) when it could not resolve a
+   *  vision-capable judge model to wire critics with. Independent of
+   *  `degraded` — this can be set even when candidates pass gating and one
+   *  is still picked (deterministically, without judge input); it exists so
+   *  the persisted plan audit trail can say WHY quality judging didn't run,
+   *  rather than a caller having to infer it from an empty `criticResults`
+   *  array on every candidate. */
+  readonly qualityJudgingUnavailableReason?: string;
 }
 
 export class MediaConsensusStrategy {
   private readonly critics: readonly MediaCriticConfig[];
   private readonly candidateCount: number;
+  private readonly qualityJudgingUnavailableReason?: string;
 
   constructor(
     private readonly deps: {
@@ -189,10 +199,12 @@ export class MediaConsensusStrategy {
       readonly imagesService?: ImagesOrchestrationService;
       readonly critics?: readonly MediaCriticConfig[];
       readonly candidateCount?: number;
+      readonly qualityJudgingUnavailableReason?: string;
     } = {}
   ) {
     this.critics = deps.critics ?? [];
     this.candidateCount = deps.candidateCount ?? MEDIA_CONSENSUS_DEFAULT_CANDIDATE_COUNT;
+    this.qualityJudgingUnavailableReason = deps.qualityJudgingUnavailableReason;
   }
 
   async execute(request: MediaConsensusRequest): Promise<MediaConsensusResult> {
@@ -262,6 +274,7 @@ export class MediaConsensusStrategy {
       totalDurationMs: Date.now() - startTime,
       degraded,
       degradedReason: degraded ? 'all_candidates_outliers' : undefined,
+      qualityJudgingUnavailableReason: this.qualityJudgingUnavailableReason,
     };
   }
 

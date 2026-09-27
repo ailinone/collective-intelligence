@@ -69,6 +69,22 @@ function getEnvNumber(key: string, defaultValue: number): number {
 }
 
 /**
+ * Get floating-point number from environment variable. Use this instead of
+ * `getEnvNumber` for values that are legitimately fractional (e.g. sub-unit
+ * USD ceilings) — `getEnvNumber` uses `parseInt` and silently truncates
+ * fractional values to 0.
+ */
+function getEnvFloat(key: string, defaultValue: number): number {
+  const value = process.env[key];
+  if (!value) return defaultValue;
+  const parsed = parseFloat(value);
+  if (isNaN(parsed)) {
+    throw new Error(`Invalid number for environment variable ${key}: ${value}`);
+  }
+  return parsed;
+}
+
+/**
  * Get boolean from environment variable
  */
 function getEnvBoolean(key: string, defaultValue: boolean): boolean {
@@ -1116,10 +1132,24 @@ export const config: AppConfig = deepFreeze({
   // PROVISIONAL defaults per the architecture's §8 — real product/cost
   // decisions still pending; exposed as env vars so they can be tuned
   // without a code change.
+  //
+  // `judgeEnabled` (Section A of the completion spec, 2026-09-23) gates
+  // whether real MediaJudgeEvaluator critics get wired into
+  // MediaConsensusStrategy at BOTH production call sites
+  // (capabilities-routes.ts's media-plan/execute route AND
+  // chat-request-processor.ts's generate_media tool). Defaults false: the
+  // generate_media tool is NOT gated by `enabled` above (it's a standalone
+  // chat tool, reachable regardless of the planner flag), so this is the
+  // only switch standing between merging this code and it making real,
+  // paid judge-model calls in production — must be turned on deliberately.
   mediaPlanner: {
     enabled: getEnvBoolean('MEDIA_PLANNER_ENABLED', false),
     maxTurns: getEnvNumber('MEDIA_PLANNER_MAX_TURNS', 3),
     costCeilingMultiplier: getEnvNumber('MEDIA_PLANNER_COST_CEILING_MULTIPLIER', 3),
+    judgeEnabled: getEnvBoolean('MEDIA_PLANNER_JUDGE_ENABLED', false),
+    judgeMaxCostUsd: getEnvFloat('MEDIA_PLANNER_JUDGE_MAX_COST_USD', 0.02),
+    judgeTimeoutMs: getEnvNumber('MEDIA_PLANNER_JUDGE_TIMEOUT_MS', 15000),
+    judgeRubricVersion: getEnv('MEDIA_PLANNER_JUDGE_RUBRIC_VERSION', 'media-judge-v1'),
   },
 
   security: {
@@ -1222,7 +1252,9 @@ export const config: AppConfig = deepFreeze({
     serviceName: getEnv('OTEL_SERVICE_NAME', defaultServiceIdentifier),
     jaegerEndpoint: process.env.OTEL_EXPORTER_JAEGER_ENDPOINT,
     prometheusPort: getEnvNumber('OTEL_EXPORTER_PROMETHEUS_PORT', 9464),
-    prometheusToken: process.env.PROMETHEUS_SCRAPE_TOKEN,
+    // Trimmed: a CR/LF or space left in the secret made every scrape fail the
+    // exact comparison in authorizeScrape (2026-09-23).
+    prometheusToken: process.env.PROMETHEUS_SCRAPE_TOKEN?.trim() || undefined,
   },
 
   payments: {

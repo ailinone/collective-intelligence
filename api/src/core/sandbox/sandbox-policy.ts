@@ -61,6 +61,22 @@ export function isMcpClientEnabled(): boolean {
   return process.env.MCP_CLIENT_ENABLED === 'true';
 }
 
+/**
+ * Whether the `code_interpreter` capability (aliased `code_execution` in the
+ * ontology) may run real, sandboxed interpreter code (ADR-026).
+ *
+ * Same posture as the three ADR-024 flags above and deliberately its OWN,
+ * independent flag rather than reuse of `AGENTIC_*`: enabling agentic system
+ * control does not imply consent to running arbitrary Python/JS, and vice
+ * versa. Default OFF. With this off, `code_interpreter` keeps its existing
+ * behaviour byte-for-byte: the chat path's honesty directive
+ * (`execution-system-prompt.ts`) and the REST route's pre-existing
+ * `sandbox_workflow` fallback (`CodeExecutionService`) are both unchanged.
+ */
+export function isCodeExecutionSandboxEnabled(): boolean {
+  return process.env.CODE_EXECUTION_SANDBOX_ENABLED === 'true';
+}
+
 // ── Numeric limits ────────────────────────────────────────────────────────
 
 function clampEnvNumber(key: string, fallback: number, min: number, max: number): number {
@@ -121,6 +137,94 @@ export function resolveSandboxLimits(): SandboxLimits {
     user: (process.env.SANDBOX_USER || '').trim() || '65534:65534',
     maxOutputBytes: clampEnvNumber('SANDBOX_MAX_OUTPUT_BYTES', 64_000, 1_000, 1_000_000),
   };
+}
+
+// ── Code execution (ADR-026) ────────────────────────────────────────────────
+//
+// `code_interpreter` (`code_execution` alias) needs to run an actual
+// interpreter, which is exactly the "shell / interpreter" class of command
+// `DEFAULT_COMMAND_ALLOWLIST` above deliberately excludes for computer_use —
+// see that allowlist's own doc comment. Rather than weaken the shared
+// allowlist (which would also hand `python`/`node` to computer_use's
+// shell tool), code execution gets its OWN fixed, non-configurable
+// command-per-language map, enforced through the same `assertCommandAllowed`
+// choke point via a per-call allowlist override (see `container-sandbox.ts`'s
+// `SandboxExecOptions.commandAllowlist`). There is no
+// `CODE_EXECUTION_COMMAND_ALLOWLIST` env var: unlike the computer_use
+// allowlist, an operator has no legitimate reason to widen this one, and a
+// fixed map removes an entire class of misconfiguration.
+
+/** Languages the sandbox can execute. Intentionally small — see `capability-inference.ts`. */
+export type CodeExecutionLanguage = 'python' | 'javascript';
+
+interface CodeExecutionLanguageConfig {
+  /** Bare program name, validated through the same `assertCommandAllowed` choke point. */
+  readonly command: string;
+  /** Fixed args: `-` tells both interpreters to read the program from stdin. */
+  readonly args: readonly string[];
+  /** Env var an operator may use to pin a specific image digest/tag. */
+  readonly imageEnvVar: string;
+  /** Default image when the env var is unset. Must ship the interpreter above. */
+  readonly defaultImage: string;
+}
+
+const CODE_EXECUTION_LANGUAGES: Record<CodeExecutionLanguage, CodeExecutionLanguageConfig> = {
+  python: {
+    command: 'python3',
+    args: ['-'],
+    imageEnvVar: 'CODE_EXECUTION_PYTHON_IMAGE',
+    defaultImage: 'python:3.12-alpine',
+  },
+  javascript: {
+    command: 'node',
+    args: ['-'],
+    imageEnvVar: 'CODE_EXECUTION_NODE_IMAGE',
+    defaultImage: 'node:20-alpine',
+  },
+};
+
+export function isSupportedCodeExecutionLanguage(value: string): value is CodeExecutionLanguage {
+  return value === 'python' || value === 'javascript';
+}
+
+export function listCodeExecutionLanguages(): CodeExecutionLanguage[] {
+  return Object.keys(CODE_EXECUTION_LANGUAGES) as CodeExecutionLanguage[];
+}
+
+/** The bare interpreter binary for `language`. Never caller-controlled. */
+export function resolveCodeExecutionCommand(language: CodeExecutionLanguage): string {
+  return CODE_EXECUTION_LANGUAGES[language].command;
+}
+
+/** Fixed argv for `language`. Never caller-controlled — the program itself travels over stdin. */
+export function resolveCodeExecutionArgs(language: CodeExecutionLanguage): readonly string[] {
+  return CODE_EXECUTION_LANGUAGES[language].args;
+}
+
+/**
+ * A one-command allowlist scoped to exactly the interpreter `language` needs.
+ * Passed as `SandboxExecOptions.commandAllowlist` so `execInSandbox` never
+ * consults (or widens) the shared, computer_use-oriented default allowlist.
+ */
+export function resolveCodeExecutionAllowlist(language: CodeExecutionLanguage): ReadonlySet<string> {
+  return new Set([CODE_EXECUTION_LANGUAGES[language].command]);
+}
+
+/** The Docker image for `language`. Operator-pinnable; must ship the matching interpreter. */
+export function resolveCodeExecutionImage(language: CodeExecutionLanguage): string {
+  const config = CODE_EXECUTION_LANGUAGES[language];
+  const raw = (process.env[config.imageEnvVar] || '').trim();
+  return raw.length > 0 ? raw : config.defaultImage;
+}
+
+/**
+ * Max bytes of source code accepted. This gates STDIN, not an argv element —
+ * `assertArgAllowed`'s 4096-byte cap does not apply to it (the whole point of
+ * sending code over stdin instead of argv), so it needs its own ceiling to
+ * stop a pathological payload from being buffered and piped indefinitely.
+ */
+export function resolveMaxCodeExecutionBytes(): number {
+  return clampEnvNumber('CODE_EXECUTION_MAX_SOURCE_BYTES', 200_000, 1_000, 2_000_000);
 }
 
 // ── Command allowlist ─────────────────────────────────────────────────────
@@ -189,14 +293,24 @@ export class SandboxPolicyError extends Error {
 }
 
 /**
- * Validate a command against the allowlist.
+ * Validate a command against an allowlist.
  *
  * The command must be a bare program name. A path (`/bin/sh`, `./x`,
  * `../../bin/sh`) is rejected outright, because allowing paths would let
  * `/usr/bin/env sh` and friends smuggle a non-allowlisted binary past a
  * basename check.
+ *
+ * `allowlist` defaults to the shared, operator-configurable
+ * `resolveCommandAllowlist()` (the computer_use contract, unchanged). Callers
+ * with their own fixed, narrower allowlist — code execution's one-command-
+ * per-language map — pass it explicitly, so they never inherit (or widen) the
+ * shared default. The default is evaluated per call, matching this module's
+ * "read env per call" rule.
  */
-export function assertCommandAllowed(command: string): void {
+export function assertCommandAllowed(
+  command: string,
+  allowlist: ReadonlySet<string> = resolveCommandAllowlist()
+): void {
   const trimmed = command.trim();
   if (trimmed.length === 0) {
     throw new SandboxPolicyError('blocked_command', 'Empty command is not permitted');
@@ -213,7 +327,6 @@ export function assertCommandAllowed(command: string): void {
       `Command contains characters that are not permitted: '${trimmed}'`
     );
   }
-  const allowlist = resolveCommandAllowlist();
   if (!allowlist.has(trimmed)) {
     throw new SandboxPolicyError(
       'blocked_command',

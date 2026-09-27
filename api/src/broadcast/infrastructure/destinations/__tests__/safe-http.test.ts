@@ -17,7 +17,7 @@
 
 import { describe, it, expect } from 'vitest';
 
-import { isForbiddenIp } from '../safe-http';
+import { EgressBlockedError, isForbiddenIp, safeFetch } from '../safe-http';
 
 describe('isForbiddenIp — IPv4', () => {
   it.each([
@@ -81,7 +81,47 @@ describe('isForbiddenIp — IPv6', () => {
     ['2001:4860:4860::8888'], // Google DNS
     ['2606:4700:4700::1111'], // Cloudflare
     ['::ffff:1.1.1.1'], // v4-mapped public
+    ['::ffff:101:101'], // v4-mapped public, hex form (1.1.1.1)
   ])('allows %s', (ip) => {
     expect(isForbiddenIp(ip)).toBe(false);
+  });
+
+  // SSRF regression: the WHATWG URL parser canonicalizes
+  // `http://[::ffff:169.254.169.254]/` to hostname `[::ffff:a9fe:a9fe]`, so the
+  // literal-IP and redirect-hop paths see the HEX form, never the dotted one.
+  it.each([
+    ['::ffff:7f00:1'], // 127.0.0.1
+    ['::ffff:a9fe:a9fe'], // 169.254.169.254 (cloud metadata)
+    ['::ffff:a00:5'], // 10.0.0.5
+    ['::ffff:c0a8:101'], // 192.168.1.1
+    ['0:0:0:0:0:ffff:7f00:1'], // uncompressed
+    ['0000:0000:0000:0000:0000:ffff:7f00:0001'], // leading zeros
+    ['::ffff:0:7f00:1'], // IPv4-translated
+    ['::7f00:1'], // deprecated IPv4-compatible
+    ['64:ff9b::a9fe:a9fe'], // NAT64 well-known prefix -> metadata
+    ['fe90::1'], // link-local is fe80::/10, not only fe80:
+    ['febf::1'],
+    ['fec0::1'], // deprecated site-local
+    ['fe80::1%eth0'], // zone id
+    ['1:2:3'], // malformed -> fail closed
+    ['1::2::3'],
+  ])('blocks %s', (ip) => {
+    expect(isForbiddenIp(ip)).toBe(true);
+  });
+
+  it('does not over-block a public prefix that merely starts with fc/fd hex digits', () => {
+    expect(isForbiddenIp('fc::1')).toBe(false); // 00fc::/16, not ULA
+  });
+});
+
+describe('safeFetch: literal IPv4-mapped IPv6 URL', () => {
+  it.each([
+    ['http://[::ffff:169.254.169.254]/latest/meta-data'],
+    ['http://[::ffff:127.0.0.1]:6379/'],
+    ['http://[0:0:0:0:0:ffff:a00:5]/'],
+  ])('refuses %s before connecting', async (url) => {
+    const err = await safeFetch(url, { method: 'GET', timeoutMs: 1000 }).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(EgressBlockedError);
+    expect((err as EgressBlockedError).reason).toBe('ip_blocked');
   });
 });

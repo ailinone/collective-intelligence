@@ -47,6 +47,15 @@ export class ArchiveProjectHandler {
         };
       }
 
+      // Permission model: admin OR creator can archive (see file header).
+      if (!command.requesterIsAdmin && project.createdBy !== command.requesterUserId) {
+        return {
+          success: false,
+          error: 'only the project creator or an admin can archive this project',
+          errorCode: 'forbidden',
+        };
+      }
+
       try {
         project.archive();
       } catch (e: unknown) {
@@ -84,6 +93,15 @@ export class RestoreProjectHandler {
           success: false,
           error: 'project not found',
           errorCode: 'not_found',
+        };
+      }
+
+      // Permission model: admin OR creator can restore (see file header).
+      if (!command.requesterIsAdmin && project.createdBy !== command.requesterUserId) {
+        return {
+          success: false,
+          error: 'only the project creator or an admin can restore this project',
+          errorCode: 'forbidden',
         };
       }
 

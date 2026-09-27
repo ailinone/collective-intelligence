@@ -116,6 +116,13 @@ export async function detachPaymentMethod(paymentMethodId: string): Promise<Stri
   return stripe.paymentMethods.detach(paymentMethodId);
 }
 
+export async function retrievePaymentMethod(
+  paymentMethodId: string
+): Promise<Stripe.PaymentMethod> {
+  const stripe = ensureStripeClient();
+  return stripe.paymentMethods.retrieve(paymentMethodId);
+}
+
 export interface StripeSubscriptionParams {
   customerId: string;
   priceId: string;

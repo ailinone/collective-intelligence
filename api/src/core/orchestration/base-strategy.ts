@@ -2899,7 +2899,22 @@ export abstract class BaseStrategy {
       //    `computeQuorumToolCall()`. This lets a billable/slow generation
       //    tool (`generate_video`, `generate_media`) be server-owned without
       //    letting one hallucinating voter fire a real generation.
-      const { toolRegistry } = await import('@/core/tools/tool-registry');
+      //
+      // SECURITY (2026-09-24, layer 1 of the #653 fix): before either path,
+      // a tool on the shared chat blocklist (`CHAT_AUTO_EXECUTE_BLOCKED_TOOLS`,
+      // tool-registry.ts) is NEVER server-owned here unless triage could have
+      // attached it (`isAutoRecommendable`). Every tenant key reaches this
+      // loop whenever `request.tools` is non-empty, and the tool context below
+      // runs against `process.cwd()`: a client sending its own `write_file`
+      // with a forced `tool_choice` used to get the file written on the
+      // server. Such a call is handed back to the caller unexecuted, exactly
+      // like any other client-owned tool and like layer 2
+      // (`executeToolCallsAutomatically`) does; that is also what a client
+      // whose own tool merely shares the name (the chat product's terminal
+      // tools) needs.
+      const { toolRegistry, isBlockedFromStrategyAutoExecution } = await import(
+        '@/core/tools/tool-registry'
+      );
       const { computeQuorumToolCall, toolCallsMatch } = await import(
         '@/core/aggregation/response-aggregator'
       );
@@ -2908,7 +2923,15 @@ export abstract class BaseStrategy {
       const serverOwnsEveryToolCall =
         toolRegistry.isInitialized() &&
         toolCalls.every((toolCall) => {
-          const reg = toolRegistry.get(toolCall.function?.name ?? '');
+          const toolName = toolCall.function?.name ?? '';
+          const reg = toolRegistry.get(toolName);
+          if (isBlockedFromStrategyAutoExecution(toolName, reg)) {
+            this.log.warn(
+              { toolName, model: model.id, role },
+              'Refusing server-side execution of a tenant-unsafe tool call; returning it to the caller'
+            );
+            return false;
+          }
           if (reg?.safeForStrategies === true) {
             executionMode.set(toolCall, 'safe');
             return true;

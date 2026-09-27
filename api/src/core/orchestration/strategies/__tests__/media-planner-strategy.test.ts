@@ -21,6 +21,7 @@ import type { AilinArtifact, ChatRequest, Model, OrchestrationContext } from '@/
 import type { CapabilityInvoker } from '@/core/orchestration/capability-invoker';
 import type { CapabilityModeResult } from '@/routes/capabilities/capabilities-routes';
 import type { MediaConsensusExecutor, MediaConsensusResultLike } from '../media-planner-types';
+import type { DocumentReviewExecutor, DocumentReviewResult } from '../document-review-strategy';
 
 const persistMediaPlanRunMock = vi.fn().mockResolvedValue(undefined);
 vi.mock('../media-planner-repository', () => ({
@@ -120,7 +121,7 @@ describe('MediaPlannerStrategy — metadata', () => {
 });
 
 describe('MediaPlannerStrategy — happy path (30s/4K/audio+soundtrack example)', () => {
-  it('generates via MediaConsensusExecutor, then reports an unmet soundtrack constraint (no music_generation capability)', async () => {
+  it('generates via MediaConsensusExecutor, then reports whatever unmet constraint the planner LLM returns', async () => {
     const invokerChat = vi
       .fn()
       // Turn 0: decompose into a video-generation action with constraints.
@@ -136,12 +137,25 @@ describe('MediaPlannerStrategy — happy path (30s/4K/audio+soundtrack example)'
           },
         })
       )
-      // Turn 1: no music_generation capability exists — final with unmetConstraints.
+      // Turn 1: the mocked planner LLM reports an unmet constraint. The
+      // capability name below ("holographic_soundtrack_generation") is
+      // deliberately fictional and must never be added to
+      // `capability-ontology.ts` for real — this test only verifies that
+      // MediaPlannerStrategy propagates whatever `unmetConstraints` the
+      // planner returns, not that any specific capability is unavailable.
+      // (Previously this used `music_generation`, which was accurate when
+      // written but has been a real, fully wired capability — see
+      // `music-orchestration-service.ts` and the ElevenLabs adapter's
+      // `generateMusic` — since LOTE AX (2026-09-06); using a real
+      // capability name here made the test's premise go stale once that
+      // capability shipped.)
       .mockResolvedValueOnce(
         chatJson({
           kind: 'final',
           content: 'Here is your 30s 4K video. A musical soundtrack could not be added.',
-          unmetConstraints: ['musical soundtrack — no music_generation capability exists'],
+          unmetConstraints: [
+            'musical soundtrack — no holographic_soundtrack_generation capability exists',
+          ],
         })
       );
 
@@ -181,11 +195,19 @@ describe('MediaPlannerStrategy — happy path (30s/4K/audio+soundtrack example)'
     expect(result.artifacts).toHaveLength(1);
     expect(result.artifacts?.[0]).toEqual(bestArtifact);
     expect(result.metadata.unmetConstraints).toEqual([
-      'musical soundtrack — no music_generation capability exists',
+      'musical soundtrack — no holographic_soundtrack_generation capability exists',
     ]);
     expect(result.metadata.stopReason).toBe('final');
     expect(result.metadata.degraded).toBeUndefined();
     expect(persistMediaPlanRunMock).toHaveBeenCalledTimes(1);
+
+    // No qualityJudgingUnavailableReason on the mocked consensusResult — the
+    // key must be genuinely absent from the persisted outcome, not just
+    // present-with-value-undefined.
+    const plan = result.metadata.plan as Array<{ outcome: { type: string } }>;
+    const generationTurn = plan.find((t) => t.outcome.type === 'generation_result');
+    expect(generationTurn).toBeDefined();
+    expect('qualityJudgingUnavailableReason' in generationTurn!.outcome).toBe(false);
   });
 
   it('rejects a final action missing unmetConstraints (structurally enforced by zod)', async () => {
@@ -234,6 +256,91 @@ describe('MediaPlannerStrategy — turn-cap / budget exhaustion', () => {
   });
 });
 
+describe('MediaPlannerStrategy — pdf_understanding routes through DocumentReviewStrategy', () => {
+  function makeReviewResult(overrides: Partial<DocumentReviewResult> = {}): DocumentReviewResult {
+    return {
+      criticResults: [],
+      reportByPage: [{ page: 2, issues: [{ severity: 'critical', description: 'total does not sum', sourceCritics: ['factual_accuracy'] }] }],
+      totalIssueCount: 1,
+      reportText: 'Page 2: [critical] total does not sum (flagged by: factual_accuracy)',
+      totalCostUsd: 0.01,
+      totalDurationMs: 5,
+      degraded: false,
+      ...overrides,
+    };
+  }
+
+  it('intercepts a pdf_understanding capability_call and reports the page-grouped review', async () => {
+    const invokerChat = vi
+      .fn()
+      .mockResolvedValueOnce(chatJson({ kind: 'capability_call', capability: 'pdf_understanding', body: {} }))
+      .mockResolvedValueOnce(
+        chatJson({ kind: 'final', content: 'Found 1 issue on page 2.', unmetConstraints: [] })
+      );
+    const invoker = makeInvoker({ chat: invokerChat });
+    const context = makeContext([], invoker);
+
+    const capabilityDispatcher = vi.fn().mockResolvedValue({
+      result: {
+        data: { text: '[page 1]\nfoo\n\n[page 2]\nbar', metadata: { pageCount: 2 }, extraction: {} },
+        executionPath: 'tool_pipeline',
+      },
+      fallbackUsed: false,
+    });
+    const documentReviewExecutor: DocumentReviewExecutor = { execute: vi.fn().mockResolvedValue(makeReviewResult()) };
+
+    const strategy = new MediaPlannerStrategy({ capabilityDispatcher, documentReviewExecutor, maxTurns: 2 });
+    const result = await strategy.execute(makeRequest('review this contract'), context);
+
+    expect(documentReviewExecutor.execute).toHaveBeenCalledTimes(1);
+    const calledWith = (documentReviewExecutor.execute as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(calledWith.documentText).toBe('[page 1]\nfoo\n\n[page 2]\nbar');
+    expect(calledWith.pageCount).toBe(2);
+
+    const plan = result.metadata.plan as Array<{ outcome: { type: string } }>;
+    expect(plan[0].outcome.type).toBe('document_review_result');
+    expect(result.metadata.stopReason).toBe('final');
+  });
+
+  it('falls back to the plain capability_result outcome when documentReviewExecutor is not wired (no regression)', async () => {
+    const invokerChat = vi.fn().mockResolvedValue(
+      chatJson({ kind: 'capability_call', capability: 'pdf_understanding', body: {} })
+    );
+    const invoker = makeInvoker({ chat: invokerChat });
+    const context = makeContext([], invoker);
+    const capabilityDispatcher = vi.fn().mockResolvedValue({
+      result: { data: { text: '[page 1]\nfoo', metadata: { pageCount: 1 }, extraction: {} }, executionPath: 'tool_pipeline' },
+      fallbackUsed: false,
+    });
+
+    const strategy = new MediaPlannerStrategy({ maxTurns: 1, capabilityDispatcher });
+    const result = await strategy.execute(makeRequest('summarize this pdf'), context);
+
+    const plan = result.metadata.plan as Array<{ outcome: { type: string } }>;
+    expect(plan[0].outcome.type).toBe('capability_result');
+  });
+
+  it('folds document review cost into totalCost / cost-ceiling accounting', async () => {
+    const invokerChat = vi.fn().mockResolvedValue(
+      chatJson({ kind: 'capability_call', capability: 'pdf_understanding', body: {} })
+    );
+    const invoker = makeInvoker({ chat: invokerChat });
+    const context = makeContext([], invoker);
+    const capabilityDispatcher = vi.fn().mockResolvedValue({
+      result: { data: { text: '[page 1]\nfoo', metadata: { pageCount: 1 }, extraction: {} }, executionPath: 'tool_pipeline' },
+      fallbackUsed: false,
+    });
+    const documentReviewExecutor: DocumentReviewExecutor = {
+      execute: vi.fn().mockResolvedValue(makeReviewResult({ totalCostUsd: 0.05 })),
+    };
+
+    const strategy = new MediaPlannerStrategy({ maxTurns: 1, capabilityDispatcher, documentReviewExecutor });
+    const result = await strategy.execute(makeRequest('review this contract'), context);
+
+    expect(result.totalCost).toBeGreaterThanOrEqual(0.05);
+  });
+});
+
 describe('MediaPlannerStrategy — native joint-collapse (§3.3)', () => {
   it('short-circuits MediaConsensusStrategy when a catalog model natively satisfies every constraint', async () => {
     const invokerChat = vi
@@ -256,11 +363,14 @@ describe('MediaPlannerStrategy — native joint-collapse (§3.3)', () => {
       id: 'joint-audio-video-model',
       capabilities: ['video_generation'],
       metadata: {
+        // Real shape (capability-attribute-projection.ts): keyed by
+        // capability, field names/types match VideoCapabilityAttributes.
         capabilityAttributes: {
-          nativeAudioSupport: true,
-          supportsJointAudioVideo: true,
-          maxDurationSec: 60,
-          maxResolution: { width: 3840, height: 2160 },
+          video_generation: {
+            nativeAudioSupport: true,
+            maxDurationSeconds: 60,
+            maxResolution: '3840x2160',
+          },
         },
       },
     });
@@ -285,5 +395,130 @@ describe('MediaPlannerStrategy — native joint-collapse (§3.3)', () => {
 
     const plan = result.metadata.plan as Array<{ outcome: { type: string } }>;
     expect(plan[0].outcome.type).toBe('native_collapse');
+  });
+});
+
+describe('MediaPlannerStrategy — quality-judging-unavailable audit note', () => {
+  it('surfaces qualityJudgingUnavailableReason in the persisted turn log, not silently', async () => {
+    const invokerChat = vi
+      .fn()
+      .mockResolvedValueOnce(
+        chatJson({
+          kind: 'generate',
+          capability: 'image_generation',
+          prompt: 'a red bicycle leaning on a brick wall',
+        })
+      )
+      .mockResolvedValueOnce(
+        chatJson({ kind: 'final', content: 'Here is your image.', unmetConstraints: [] })
+      );
+
+    const invoker = makeInvoker({ chat: invokerChat });
+    const context = makeContext([], invoker);
+
+    const consensusResult: MediaConsensusResultLike = {
+      bestCandidateIndex: 0,
+      bestArtifact: {
+        modality: 'image',
+        stage_name: 'media-plan-turn-0',
+        stage_index: 0,
+        url: 'https://example.test/image.png',
+      },
+      candidates: [{}],
+      totalJudgeCostUsd: 0,
+      totalDurationMs: 10,
+      degraded: false,
+      qualityJudgingUnavailableReason:
+        'quality judging unavailable: no vision-capable judge model configured',
+    };
+    const mediaConsensusExecutor: MediaConsensusExecutor = {
+      execute: vi.fn().mockResolvedValue(consensusResult),
+    };
+
+    const strategy = new MediaPlannerStrategy({ mediaConsensusExecutor });
+    const result = await strategy.execute(
+      makeRequest('a red bicycle leaning on a brick wall'),
+      context
+    );
+
+    const plan = result.metadata.plan as Array<{
+      outcome: {
+        type: string;
+        capability?: string;
+        success?: boolean;
+        degraded?: boolean;
+        hasArtifact?: boolean;
+        summary: string;
+        qualityJudgingUnavailableReason?: string;
+      };
+    }>;
+    const generationTurn = plan.find((t) => t.outcome.type === 'generation_result');
+    expect(generationTurn).toBeDefined();
+    expect(generationTurn?.outcome).toMatchObject({
+      capability: 'image_generation',
+      success: true,
+      degraded: false,
+      hasArtifact: true,
+    });
+    expect(generationTurn?.outcome.qualityJudgingUnavailableReason).toBe(
+      'quality judging unavailable: no vision-capable judge model configured'
+    );
+    expect(generationTurn?.outcome.summary).toContain(
+      'quality judging unavailable: no vision-capable judge model configured'
+    );
+  });
+});
+
+describe('MediaPlannerStrategy — cost ceiling', () => {
+  it('stops with cost_ceiling_exhausted once judge cost exceeds costCeilingMultiplier × the first turn\'s cost', async () => {
+    const invokerChat = vi
+      .fn()
+      .mockResolvedValueOnce(
+        chatJson({ kind: 'generate', capability: 'image_generation', prompt: 'image one' })
+      )
+      .mockResolvedValueOnce(
+        chatJson({ kind: 'generate', capability: 'image_generation', prompt: 'image two' })
+      )
+      // A 3rd turn would only be reached if the ceiling failed to trip.
+      .mockResolvedValueOnce(
+        chatJson({ kind: 'final', content: 'done', unmetConstraints: [] })
+      );
+
+    const invoker = makeInvoker({ chat: invokerChat });
+    const context = makeContext([], invoker);
+
+    // Turn 0: baseline judge cost = $0.01. Turn 1: $0.05 — with the default
+    // costCeilingMultiplier of 3, total ($0.06) > 3 × $0.01 ($0.03), so the
+    // ceiling must trip AFTER turn 1, before a 3rd planner call happens.
+    const execute = vi
+      .fn()
+      .mockResolvedValueOnce({
+        bestCandidateIndex: 0,
+        bestArtifact: { modality: 'image', stage_name: 'media-plan-turn-0', stage_index: 0, url: 'https://example.test/1.png' },
+        candidates: [{}],
+        totalJudgeCostUsd: 0.01,
+        totalDurationMs: 5,
+        degraded: false,
+      } satisfies MediaConsensusResultLike)
+      .mockResolvedValueOnce({
+        bestCandidateIndex: 0,
+        bestArtifact: { modality: 'image', stage_name: 'media-plan-turn-1', stage_index: 1, url: 'https://example.test/2.png' },
+        candidates: [{}],
+        totalJudgeCostUsd: 0.05,
+        totalDurationMs: 5,
+        degraded: false,
+      } satisfies MediaConsensusResultLike);
+    const mediaConsensusExecutor: MediaConsensusExecutor = { execute };
+
+    const strategy = new MediaPlannerStrategy({ mediaConsensusExecutor, maxTurns: 5 });
+    const result = await strategy.execute(makeRequest('two images please'), context);
+
+    expect(execute).toHaveBeenCalledTimes(2);
+    expect(invokerChat).toHaveBeenCalledTimes(2);
+    expect(result.metadata.stopReason).toBe('cost_ceiling_exhausted');
+    expect(result.metadata.unmetConstraints).toContain(
+      'planner stopped: cost ceiling exhausted before a final response was produced'
+    );
+    expect(result.totalCost).toBeCloseTo(0.06, 5);
   });
 });

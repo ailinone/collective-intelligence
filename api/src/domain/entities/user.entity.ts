@@ -238,6 +238,13 @@ export class UserEntity {
   }
 
   /**
+   * Check if user is owner
+   */
+  isOwner(): boolean {
+    return this.props.role === UserRole.OWNER;
+  }
+
+  /**
    * Business Logic: Set / update password hash
    */
   setPasswordHash(hash: PasswordHash): void {

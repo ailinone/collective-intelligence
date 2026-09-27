@@ -140,6 +140,25 @@ export interface SubScores {
   readonly safetyFormat?: number;
 }
 
+/** Severity of a document-critic-flagged issue. */
+export type DocumentIssueSeverity = 'critical' | 'major' | 'minor';
+
+/**
+ * One page-anchored issue raised by a document critic (MediaPlanner
+ * completion, Section C — document/PDF generalization). `location` is a
+ * page number, taken from the `[page N]` marker `PDFService.assembleText`
+ * already stamps into extracted text (see `pdf-service.ts`) — never a
+ * synthetic/estimated position. Additive: every existing evaluator
+ * (structural, task-specific, llm_judge, composite, mock, heuristic, media)
+ * leaves `EvaluationResult.issues` undefined and is unaffected by its
+ * presence, exactly like `judgeCostUsd`/`candidate` before it.
+ */
+export interface DocumentCriticIssue {
+  readonly location: number;
+  readonly severity: DocumentIssueSeverity;
+  readonly description: string;
+}
+
 export interface EvaluationResult {
   readonly scoringMode: ScoringMode;
   readonly evaluatorId: string;
@@ -186,6 +205,12 @@ export interface EvaluationResult {
    * 0 for non-LLM evaluators or when the judge did not run.
    */
   readonly judgeCostUsd?: number;
+  /**
+   * Page-anchored issues raised by a document critic (Section C). Undefined
+   * for every evaluator except `DocumentJudgeEvaluator` — see
+   * `DocumentCriticIssue`.
+   */
+  readonly issues?: readonly DocumentCriticIssue[];
 }
 
 export interface StrategyEvaluationTask {

@@ -27,7 +27,9 @@
  * per-process and unchanged.
  *
  * Hermetic: central-model-discovery-service and model-equivalence-service
- * are fully mocked — no real discovery/network/DB I/O.
+ * are fully mocked, with no real discovery/network/DB I/O. The interaction with
+ * the REAL equivalence service is covered by
+ * model-discovery-runner-equivalence.test.ts.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
@@ -37,15 +39,34 @@ const h = vi.hoisted(() => {
     .mockResolvedValue([{ source: 'test', provider: 'test', modelsDiscovered: 1, errors: [] }]);
   const getDiscoveryHealth = vi.fn().mockReturnValue({ sources: [], criticalMissing: [] });
   const retryFailedSources = vi.fn().mockResolvedValue([]);
-  const service = { discoverAllModels, getDiscoveryHealth, retryFailedSources };
+  // Mirrors the real contract: the exclusive variant runs the same round
+  // (so every discoverAllModels call-count assertion below still holds) and
+  // wraps it in an outcome.
+  const discoverAllModelsExclusive = vi.fn(async () => ({
+    status: 'completed' as const,
+    results: await discoverAllModels(),
+    leaseEpoch: null,
+  }));
+  const refreshProviderBalances = vi.fn().mockResolvedValue(true);
+  const getProviderBalanceStatus = vi.fn(() => new Map());
+  const service = {
+    discoverAllModels,
+    discoverAllModelsExclusive,
+    getDiscoveryHealth,
+    retryFailedSources,
+    refreshProviderBalances,
+    getProviderBalanceStatus,
+  };
   const getCentralModelDiscoveryService = vi.fn().mockResolvedValue(service);
-  const buildIndex = vi.fn().mockResolvedValue({ groups: 0, models: 0, durationMs: 0 });
+  const scheduleModelEquivalenceIndexRebuild = vi.fn();
   return {
     discoverAllModels,
+    discoverAllModelsExclusive,
     getDiscoveryHealth,
     retryFailedSources,
     getCentralModelDiscoveryService,
-    buildIndex,
+    scheduleModelEquivalenceIndexRebuild,
+    refreshProviderBalances,
   };
 });
 
@@ -53,12 +74,13 @@ vi.mock('@/services/central-model-discovery-service', () => ({
   getCentralModelDiscoveryService: h.getCentralModelDiscoveryService,
 }));
 vi.mock('@/services/model-equivalence-service', () => ({
-  getModelEquivalenceService: () => ({ buildIndex: h.buildIndex }),
+  scheduleModelEquivalenceIndexRebuild: h.scheduleModelEquivalenceIndexRebuild,
 }));
 
 const ORIGINAL_AUTO_SYNC = process.env.MODEL_DISCOVERY_AUTO_SYNC;
 const ORIGINAL_RUN_ON_START = process.env.MODEL_DISCOVERY_RUN_ON_START;
 const ORIGINAL_RETRY_DELAY = process.env.DISCOVERY_RETRY_DELAY_MS;
+const ORIGINAL_BALANCE_INTERVAL = process.env.PROVIDER_BALANCE_REFRESH_INTERVAL_MS;
 
 async function loadModule() {
   return import('@/services/model-discovery-runner');
@@ -68,11 +90,14 @@ beforeEach(() => {
   vi.resetModules();
   vi.useFakeTimers();
   h.discoverAllModels.mockClear();
+  h.discoverAllModelsExclusive.mockClear();
   h.getDiscoveryHealth.mockClear();
   h.retryFailedSources.mockClear();
   h.getCentralModelDiscoveryService.mockClear();
-  h.buildIndex.mockClear();
+  h.scheduleModelEquivalenceIndexRebuild.mockClear();
+  h.refreshProviderBalances.mockReset().mockResolvedValue(true);
   delete process.env.MODEL_DISCOVERY_AUTO_SYNC;
+  delete process.env.PROVIDER_BALANCE_REFRESH_INTERVAL_MS;
   delete process.env.MODEL_DISCOVERY_RUN_ON_START;
   process.env.DISCOVERY_RETRY_DELAY_MS = '30000';
 });
@@ -85,6 +110,11 @@ afterEach(() => {
   else process.env.MODEL_DISCOVERY_RUN_ON_START = ORIGINAL_RUN_ON_START;
   if (ORIGINAL_RETRY_DELAY === undefined) delete process.env.DISCOVERY_RETRY_DELAY_MS;
   else process.env.DISCOVERY_RETRY_DELAY_MS = ORIGINAL_RETRY_DELAY;
+  if (ORIGINAL_BALANCE_INTERVAL === undefined) {
+    delete process.env.PROVIDER_BALANCE_REFRESH_INTERVAL_MS;
+  } else {
+    process.env.PROVIDER_BALANCE_REFRESH_INTERVAL_MS = ORIGINAL_BALANCE_INTERVAL;
+  }
 });
 
 describe('model-discovery-runner: per-process boot discovery (fleet-dedup fix)', () => {
@@ -138,7 +168,7 @@ describe('model-discovery-runner: per-process boot discovery (fleet-dedup fix)',
     expect(h.discoverAllModels).not.toHaveBeenCalled();
   });
 
-  it('stopModelDiscoveryRunner() is a safe no-op (no per-process timer left to stop)', async () => {
+  it('stopModelDiscoveryRunner() is safe to call (no discovery timer to stop)', async () => {
     const { startModelDiscoveryRunner, stopModelDiscoveryRunner } = await loadModule();
     await startModelDiscoveryRunner();
     await vi.advanceTimersByTimeAsync(0);
@@ -175,5 +205,233 @@ describe('model-discovery-runner: runScheduledModelDiscovery (fleet-elected Bull
     await runScheduledModelDiscovery();
 
     expect(h.discoverAllModels).toHaveBeenCalledTimes(2);
+  });
+
+  it('requests the equivalence rebuild in the background after a round this process ran (never on failure)', async () => {
+    const { runScheduledModelDiscovery } = await loadModule();
+
+    await runScheduledModelDiscovery();
+    expect(h.discoverAllModelsExclusive).toHaveBeenCalledTimes(1);
+    expect(h.scheduleModelEquivalenceIndexRebuild).toHaveBeenCalledTimes(1);
+    expect(h.scheduleModelEquivalenceIndexRebuild).toHaveBeenCalledWith('discovery');
+
+    h.discoverAllModels.mockRejectedValueOnce(new Error('provider API down'));
+    await runScheduledModelDiscovery();
+    expect(h.scheduleModelEquivalenceIndexRebuild).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not request the equivalence rebuild when another process holds the discovery lease, and a later tick still runs', async () => {
+    h.discoverAllModelsExclusive.mockResolvedValueOnce({
+      status: 'skipped',
+      reason: 'lease-held',
+      holder: '7|ci-worker:1:abcd',
+    } as never);
+    const { runScheduledModelDiscovery } = await loadModule();
+
+    await expect(runScheduledModelDiscovery()).resolves.toBeUndefined();
+    expect(h.scheduleModelEquivalenceIndexRebuild).not.toHaveBeenCalled();
+
+    // The skipped tick must not leave the in-flight guard stuck.
+    await runScheduledModelDiscovery();
+    expect(h.discoverAllModels).toHaveBeenCalledTimes(1);
+    expect(h.scheduleModelEquivalenceIndexRebuild).toHaveBeenCalledTimes(1);
+    expect(h.scheduleModelEquivalenceIndexRebuild).toHaveBeenCalledWith('discovery');
+  });
+
+  it('a tick skipped by the lease still refreshes the provider balances of this process (when stale)', async () => {
+    h.discoverAllModelsExclusive.mockResolvedValueOnce({
+      status: 'skipped',
+      reason: 'lease-held',
+      holder: '8|ci-api-2:1:abcd',
+    } as never);
+    const { runScheduledModelDiscovery } = await loadModule();
+
+    await runScheduledModelDiscovery();
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(h.refreshProviderBalances).toHaveBeenCalledTimes(1);
+    // Half the default hourly interval: a no-op when the map is fresh.
+    expect(h.refreshProviderBalances).toHaveBeenCalledWith({ maxAgeMs: 30 * 60 * 1000 });
+  });
+
+  it('a tick this process ran does not trigger an extra balance refresh (the round refreshes them)', async () => {
+    const { runScheduledModelDiscovery } = await loadModule();
+
+    await runScheduledModelDiscovery();
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(h.refreshProviderBalances).not.toHaveBeenCalled();
+  });
+
+  it('returns promptly when the job signal aborts, and the next tick is not skipped', async () => {
+    h.discoverAllModels.mockReturnValueOnce(new Promise(() => undefined));
+    const { runScheduledModelDiscovery } = await loadModule();
+    const controller = new AbortController();
+
+    const tick = runScheduledModelDiscovery(controller.signal);
+    controller.abort(new Error('job deadline'));
+    await expect(tick).resolves.toBeUndefined();
+
+    await runScheduledModelDiscovery();
+    expect(h.discoverAllModels).toHaveBeenCalledTimes(2);
+  });
+
+  it('a round abandoned at the job deadline requests the equivalence rebuild once it completes', async () => {
+    let finishRound!: (value: unknown) => void;
+    h.discoverAllModelsExclusive.mockReturnValueOnce(
+      new Promise((resolve) => (finishRound = resolve)) as never
+    );
+    const { runScheduledModelDiscovery } = await loadModule();
+    const controller = new AbortController();
+
+    const tick = runScheduledModelDiscovery(controller.signal);
+    controller.abort(new Error('job deadline'));
+    await expect(tick).resolves.toBeUndefined();
+    expect(h.scheduleModelEquivalenceIndexRebuild).not.toHaveBeenCalled();
+
+    finishRound({ status: 'completed', results: [], leaseEpoch: 3 });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(h.scheduleModelEquivalenceIndexRebuild).toHaveBeenCalledTimes(1);
+    expect(h.scheduleModelEquivalenceIndexRebuild).toHaveBeenCalledWith('discovery-after-abandon');
+  });
+
+  it('a round abandoned at the job deadline that the lease skipped never requests the equivalence rebuild', async () => {
+    let finishRound!: (value: unknown) => void;
+    h.discoverAllModelsExclusive.mockReturnValueOnce(
+      new Promise((resolve) => (finishRound = resolve)) as never
+    );
+    const { runScheduledModelDiscovery } = await loadModule();
+    const controller = new AbortController();
+
+    const tick = runScheduledModelDiscovery(controller.signal);
+    controller.abort(new Error('job deadline'));
+    await expect(tick).resolves.toBeUndefined();
+
+    finishRound({ status: 'skipped', reason: 'lease-held', holder: '9|ci-api-1:1:abcd' });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(h.scheduleModelEquivalenceIndexRebuild).not.toHaveBeenCalled();
+  });
+});
+
+describe('model-discovery-runner: per-process provider balance refresh (2026-09-24 review fix)', () => {
+  it('refreshes once at start and then once per interval, each skipped while fresh', async () => {
+    const { startProviderBalanceRefresh, stopProviderBalanceRefresh } = await loadModule();
+
+    startProviderBalanceRefresh();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(h.refreshProviderBalances).toHaveBeenCalledTimes(1);
+    expect(h.refreshProviderBalances).toHaveBeenLastCalledWith({ maxAgeMs: 30 * 60 * 1000 });
+
+    await vi.advanceTimersByTimeAsync(60 * 60 * 1000);
+    expect(h.refreshProviderBalances).toHaveBeenCalledTimes(2);
+    await vi.advanceTimersByTimeAsync(2 * 60 * 60 * 1000);
+    expect(h.refreshProviderBalances).toHaveBeenCalledTimes(4);
+
+    stopProviderBalanceRefresh();
+    await vi.advanceTimersByTimeAsync(6 * 60 * 60 * 1000);
+    expect(h.refreshProviderBalances).toHaveBeenCalledTimes(4);
+    // Never a discovery round.
+    expect(h.discoverAllModels).not.toHaveBeenCalled();
+  });
+
+  it('a second start replaces the timer instead of stacking a second one', async () => {
+    const { startProviderBalanceRefresh, stopModelDiscoveryRunner } = await loadModule();
+
+    startProviderBalanceRefresh();
+    startProviderBalanceRefresh();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(h.refreshProviderBalances).toHaveBeenCalledTimes(2); // one per start
+
+    await vi.advanceTimersByTimeAsync(60 * 60 * 1000);
+    expect(h.refreshProviderBalances).toHaveBeenCalledTimes(3); // one timer, not two
+
+    stopModelDiscoveryRunner();
+    await vi.advanceTimersByTimeAsync(6 * 60 * 60 * 1000);
+    expect(h.refreshProviderBalances).toHaveBeenCalledTimes(3);
+  });
+
+  it('honours PROVIDER_BALANCE_REFRESH_INTERVAL_MS', async () => {
+    process.env.PROVIDER_BALANCE_REFRESH_INTERVAL_MS = String(10 * 60 * 1000);
+    const { startProviderBalanceRefresh, stopProviderBalanceRefresh } = await loadModule();
+
+    startProviderBalanceRefresh();
+    await vi.advanceTimersByTimeAsync(30 * 60 * 1000);
+
+    expect(h.refreshProviderBalances).toHaveBeenCalledTimes(4); // start + 3 ticks
+    expect(h.refreshProviderBalances).toHaveBeenLastCalledWith({ maxAgeMs: 5 * 60 * 1000 });
+    stopProviderBalanceRefresh();
+  });
+
+  it.each([
+    ['PROVIDER_BALANCE_REFRESH_INTERVAL_MS=0', 'PROVIDER_BALANCE_REFRESH_INTERVAL_MS', '0'],
+    ['MODEL_DISCOVERY_AUTO_SYNC=false', 'MODEL_DISCOVERY_AUTO_SYNC', 'false'],
+  ])('is off with %s', async (_label, key, value) => {
+    process.env[key] = value;
+    const { startProviderBalanceRefresh } = await loadModule();
+
+    startProviderBalanceRefresh();
+    await vi.advanceTimersByTimeAsync(6 * 60 * 60 * 1000);
+
+    expect(h.refreshProviderBalances).not.toHaveBeenCalled();
+  });
+
+  it('is not started by startModelDiscoveryRunner (index.ts starts it after the provider catalog loads)', async () => {
+    process.env.MODEL_DISCOVERY_RUN_ON_START = 'false';
+    const { startModelDiscoveryRunner } = await loadModule();
+
+    await startModelDiscoveryRunner();
+    await vi.advanceTimersByTimeAsync(6 * 60 * 60 * 1000);
+
+    expect(h.refreshProviderBalances).not.toHaveBeenCalled();
+  });
+
+  it('a failing refresh is contained (the timer keeps running)', async () => {
+    h.refreshProviderBalances.mockRejectedValueOnce(new Error('registry exploded'));
+    const { startProviderBalanceRefresh, stopProviderBalanceRefresh } = await loadModule();
+
+    startProviderBalanceRefresh();
+    await vi.advanceTimersByTimeAsync(60 * 60 * 1000);
+
+    expect(h.refreshProviderBalances).toHaveBeenCalledTimes(2);
+    stopProviderBalanceRefresh();
+  });
+
+  it('resolveProviderBalanceRefreshIntervalMs: hourly default, 0 turns it off, floor of one minute', async () => {
+    const { resolveProviderBalanceRefreshIntervalMs, DEFAULT_PROVIDER_BALANCE_REFRESH_INTERVAL_MS } =
+      await loadModule();
+    const resolve = (raw: string) =>
+      resolveProviderBalanceRefreshIntervalMs({ PROVIDER_BALANCE_REFRESH_INTERVAL_MS: raw });
+
+    expect(DEFAULT_PROVIDER_BALANCE_REFRESH_INTERVAL_MS).toBe(60 * 60 * 1000);
+    expect(resolveProviderBalanceRefreshIntervalMs({})).toBe(60 * 60 * 1000);
+    expect(resolve('')).toBe(60 * 60 * 1000);
+    expect(resolve('0')).toBe(0);
+    expect(resolve('1000')).toBe(60 * 1000);
+    expect(resolve('900000')).toBe(15 * 60 * 1000);
+    expect(resolve('-1')).toBe(60 * 60 * 1000);
+    expect(resolve('abc')).toBe(60 * 60 * 1000);
+  });
+});
+
+describe('model-discovery-runner: isBootDiscoveryEnabled (shared by both boot entry points)', () => {
+  it('is on by default and off when either MODEL_DISCOVERY_RUN_ON_START or MODEL_DISCOVERY_AUTO_SYNC is "false"', async () => {
+    const { isBootDiscoveryEnabled } = await loadModule();
+
+    expect(isBootDiscoveryEnabled({})).toBe(true);
+    expect(isBootDiscoveryEnabled({ MODEL_DISCOVERY_RUN_ON_START: 'true' })).toBe(true);
+    expect(isBootDiscoveryEnabled({ MODEL_DISCOVERY_RUN_ON_START: 'false' })).toBe(false);
+    expect(isBootDiscoveryEnabled({ MODEL_DISCOVERY_AUTO_SYNC: 'false' })).toBe(false);
+    expect(
+      isBootDiscoveryEnabled({
+        MODEL_DISCOVERY_AUTO_SYNC: 'true',
+        MODEL_DISCOVERY_RUN_ON_START: 'false',
+      })
+    ).toBe(false);
+  });
+
+  it('reads process.env by default', async () => {
+    process.env.MODEL_DISCOVERY_RUN_ON_START = 'false';
+    const { isBootDiscoveryEnabled } = await loadModule();
+    expect(isBootDiscoveryEnabled()).toBe(false);
   });
 });

@@ -47,6 +47,8 @@ import {
   CATALOG_REDIS_META_KEY,
   parseCatalogSnapshotMeta,
 } from '@/services/catalog-hot-path';
+import { CATALOG_SNAPSHOT_STAGING_PREFIX } from '@/services/catalog-snapshot-publisher';
+import { runCatalogPublishScript } from './fake-catalog-redis';
 
 const findManyMock = vi.fn();
 
@@ -71,9 +73,14 @@ const redisDel = vi.fn(async (key: string) => {
   if (redisShouldThrow) throw new Error('redis unavailable (test)');
   return fakeRedisStore.delete(key) ? 1 : 0;
 });
+// Conditional publish (catalog-snapshot-publisher.ts): staging SET + one EVAL.
+const redisEval = vi.fn(async (script: unknown, numKeys: unknown, ...args: unknown[]) => {
+  if (redisShouldThrow) throw new Error('redis unavailable (test)');
+  return runCatalogPublishScript(fakeRedisStore, script, numKeys, ...args);
+});
 
 vi.mock('@/cache/redis-client', () => ({
-  getRedisClient: () => ({ get: redisGet, set: redisSet, del: redisDel }),
+  getRedisClient: () => ({ get: redisGet, set: redisSet, del: redisDel, eval: redisEval }),
 }));
 
 function makeRecord(id: string, providerName: string) {
@@ -102,6 +109,7 @@ beforeEach(() => {
   redisGet.mockClear();
   redisSet.mockClear();
   redisDel.mockClear();
+  redisEval.mockClear();
   vi.resetModules();
 });
 
@@ -282,14 +290,25 @@ describe('model-catalog-service snapshot fingerprint (skip unchanged snapshot)',
     return replica;
   }
 
-  it('publishes the snapshot BEFORE its meta, so a reader can never pair a new fingerprint with an old snapshot', async () => {
+  it('publishes snapshot and meta together through one conditional swap (staging SET + one EVAL), leaving no staging key behind', async () => {
     findManyMock.mockResolvedValue([makeRecord('model-a', 'provA')]);
     const svc = await import('@/services/model-catalog-service');
+    const before = Date.now();
     await svc.refreshCatalogCacheAhead();
 
+    // The only plain SET is the staging copy; the live keys are written by
+    // the script, atomically, so a reader never sees one without the other.
     const setKeys = redisSet.mock.calls.map(([key]) => key);
-    expect(setKeys).toEqual([CATALOG_REDIS_KEY, CATALOG_REDIS_META_KEY]);
+    expect(setKeys).toHaveLength(1);
+    expect(setKeys[0]?.startsWith(CATALOG_SNAPSHOT_STAGING_PREFIX)).toBe(true);
+    expect(redisEval).toHaveBeenCalledTimes(1);
+    expect([...fakeRedisStore.keys()].sort()).toEqual(
+      [CATALOG_REDIS_KEY, CATALOG_REDIS_META_KEY].sort()
+    );
     const meta = storedMeta();
+    // The publish version is the moment the Postgres read started.
+    expect(meta?.generatedAt).toBeGreaterThanOrEqual(before);
+    expect(meta?.generatedAt).toBeLessThanOrEqual(Date.now());
     expect(meta).not.toBeNull();
     expect(meta?.rowCount).toBe(1);
     expect(meta?.fingerprint).toMatch(/^[0-9a-f]{64}$/);
