@@ -968,6 +968,19 @@ ${
     const testFileName = `${baseName}${ext}`;
     const testFilePath = path.join(path.dirname(fullPath), testFileName);
 
+    // `path.dirname(fullPath)` escapes workingDirectory when fullPath resolves
+    // to workingDirectory itself (filePath === '.' or similar). The write
+    // below never reaches that case today only because fs.readFile(fullPath)
+    // above throws EISDIR first on a directory target — re-validate the
+    // actual write target directly instead of relying on that side effect.
+    if (!isPathWithinDirectory(workingDirectory, testFilePath)) {
+      return {
+        tool_call_id: toolCallId,
+        success: false,
+        error: 'Access denied: generated test file would be outside working directory',
+      };
+    }
+
     if (writeFile) {
       await fs.writeFile(testFilePath, testContent, 'utf-8');
       log.info(
