@@ -143,7 +143,7 @@
     "@prisma/client-runtime-utils": "^7.10.0",
     "@sendgrid/mail": "^8.1.0",
     "@sentry/node": "^10.75.0",
-    "@sentry/profiling-node": "^10.75.0",
+    "@sentry/profiling-node": "^11.0.0",
     "ajv": "^8.20.0",
     "ajv-formats": "^3.0.1",
     "bcrypt": "^6.0.0",
