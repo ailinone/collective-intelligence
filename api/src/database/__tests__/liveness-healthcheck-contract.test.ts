@@ -20,7 +20,7 @@
  * technique as queue-runner-secrets-wiring.test.ts) because the entrypoints
  * cannot be booted in a unit test.
  */
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import Fastify, { type FastifyInstance } from 'fastify';
@@ -53,7 +53,10 @@ const API_SRC = join(__dirname, '..', '..');
 const REPO_ROOT = join(API_SRC, '..', '..');
 const read = (...parts: string[]) => readFileSync(join(...parts), 'utf8');
 
-const compose = read(REPO_ROOT, 'docker', 'docker-compose.production.yml');
+// The public mirror does not export the production compose; modules under test that
+// parse it are gated below, so an absent file degrades to an empty string here.
+const COMPOSE_PATH = join(REPO_ROOT, 'docker', 'docker-compose.production.yml');
+const compose = existsSync(COMPOSE_PATH) ? readFileSync(COMPOSE_PATH, 'utf8') : '';
 
 /** Text of one top-level service block (`  <name>:` up to the next one). */
 function serviceBlock(name: string): string {
@@ -77,7 +80,9 @@ function healthcheckUrl(service: string): string {
   return match![1];
 }
 
-describe('docker-compose.production.yml healthchecks are liveness-only', () => {
+/** The production compose is not exported to the public mirror; parse-contract only applies where the file exists. */
+const describeCompose = existsSync(join(REPO_ROOT, 'docker', 'docker-compose.production.yml')) ? describe : describe.skip;
+describeCompose('docker-compose.production.yml healthchecks are liveness-only', () => {
   it('api probes /health/live', () => {
     expect(healthcheckUrl('api')).toBe('http://127.0.0.1:3000/health/live');
   });
