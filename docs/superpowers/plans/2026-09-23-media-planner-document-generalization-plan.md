@@ -209,8 +209,6 @@ just an overall score — no such field exists in the judge schema today
 (EvaluationResult/LLMJudgeRawResult have score/verdict/subScores only).
 Adds it the same additive way judgeCostUsd/candidate were added before:
 every existing evaluator ignores the new optional field unchanged.
-
-Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
 EOF
 )"
 ```
@@ -561,8 +559,6 @@ Mirrors LLMJudgeEvaluator's safety-gate order and timeout contract —
 not MediaJudgeEvaluator's, which exists only to add vision-frame
 dispatch that a text-only document critic never needs. Carries the new
 issues[] field through to EvaluationResult unchanged.
-
-Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
 EOF
 )"
 ```
@@ -984,8 +980,6 @@ for score/verdict/subScores, adding tolerant issues[] extraction on top
 (malformed entries dropped, never fabricated). Exports asObject from
 provider-llm-judge-client.ts so this new client can reuse it instead of
 duplicating object/string coercion.
-
-Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
 EOF
 )"
 ```
@@ -1313,8 +1307,6 @@ MediaConsensusStrategy's asymmetric-visibility pattern. Zero critics
 configured degrades explicitly (never silent) with the exact posture
 MediaConsensusStrategy uses in production today. Synthesis call lands
 in the next commit.
-
-Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
 EOF
 )"
 ```
@@ -1640,8 +1632,6 @@ issues into a single report, reusing PDFService.analyzeText's own
 getOrchestrationEngine().execute() dispatch — no new judge-client
 abstraction. A malformed/failed synthesis call never crashes or drops
 a finding: it falls back to a deterministic, LLM-free page-grouping.
-
-Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
 EOF
 )"
 ```
@@ -1693,8 +1683,6 @@ assembleText() already stamps [page N] markers (confirmed reading the
 current source — no extraction change needed for the document-critic
 fan-out to work). This test pins that contract so a future refactor of
 pdf-service.ts's assembly can't silently drop it without a red test.
-
-Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
 EOF
 )"
 ```
@@ -2012,8 +2000,6 @@ fan-out + synthesis instead of being returned untouched. Fails open
 capability result doesn't look like a PDF result — every other
 capability's dispatch, and every existing test that doesn't wire the
 new dependency, is unaffected.
-
-Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
 EOF
 )"
 ```
@@ -2256,8 +2242,6 @@ over a real pdfkit-built 3-page PDF through the real PDFService
 extraction (only the judge CLIENTS are mocked, zero real cost),
 proving a planted factual inconsistency's real page number survives
 extraction, fan-out, and synthesis end to end.
-
-Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
 EOF
 )"
 ```
@@ -2323,8 +2307,6 @@ critics: [], so pdf_understanding keeps returning raw extraction
 (via the explicit degrade path) until real document-critic instances
 are wired in a follow-up. Zero behavior change for any existing
 non-PDF capability_call.
-
-Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
 EOF
 )"
 ```
