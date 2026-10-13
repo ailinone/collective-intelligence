@@ -1,0 +1,81 @@
+# Copyright (C) 2026 Ailin One, Inc.
+#
+# This file is part of Collective Intelligence Engine (ci).
+# Licensed under the GNU Affero General Public License v3.0 or later.
+# See LICENSE in the repository root, or <https://www.gnu.org/licenses/>.
+#
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Source: https://github.com/ailinone/collective-intelligence
+
+name: No tool attribution
+
+# GitHub builds the contributor list from commit author emails and
+# Co-authored-by trailers, and it never forgets one: once a commit that names
+# an AI tool or the web-flow identity is reachable from any ref (including the
+# read-only refs/pull/* of closed PRs) the account stays in the sidebar, and a
+# history rewrite cannot remove it. This check stops such identities from
+# entering the repository in the first place.
+#
+# Rejects commits whose author/committer email is an Anthropic or claude[bot]
+# address, whose author email is GitHub's own noreply@github.com (web-flow),
+# or that carry a Co-authored-by trailer or "Generated with Claude Code" line
+# naming them. GitHub as *committer* (web merges) and Dependabot are allowed.
+# Implemented with plain git — no third-party action in the trust chain.
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  no-ai-attribution:
+    name: Commit identity check
+    runs-on: [self-hosted, linux, x64, collective-intelligence]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
+        with:
+          fetch-depth: 0
+
+      - name: Verify no tool or web-flow identity in commits
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+          # First push / new ref has an all-zero "before": check the tip only.
+          if [ -z "${BASE_SHA:-}" ] || [[ "$BASE_SHA" =~ ^0+$ ]]; then
+            range="$HEAD_SHA^!"
+          else
+            range="$BASE_SHA..$HEAD_SHA"
+          fi
+          bad=0
+          while read -r sha; do
+            [ -n "$sha" ] || continue
+            author_email=$(git log -1 --format=%ae "$sha")
+            committer_email=$(git log -1 --format=%ce "$sha")
+            trailers=$(git log -1 --format='%(trailers:key=Co-authored-by,valueonly)' "$sha")
+            body=$(git log -1 --format=%B "$sha")
+            reason=""
+            if grep -qiE '(@anthropic\.com|claude\[bot\]@users\.noreply\.github\.com)$' <<<"$author_email"$'\n'"$committer_email"; then
+              reason="author/committer email is an Anthropic or claude[bot] address"
+            elif [ "$author_email" = "noreply@github.com" ]; then
+              reason="author email is noreply@github.com (resolves to the web-flow account)"
+            elif grep -qiE 'anthropic\.com|claude\[bot\]|noreply@github\.com' <<<"$trailers"; then
+              reason="Co-authored-by trailer names a tool or web-flow identity"
+            elif grep -qiE 'Generated with \[?Claude Code' <<<"$body"; then
+              reason="message carries a 'Generated with Claude Code' line"
+            fi
+            if [ -n "$reason" ]; then
+              echo "::error::commit $sha rejected: $reason"
+              bad=$((bad + 1))
+            fi
+          done < <(git rev-list "$range")
+          if [ "$bad" -gt 0 ]; then
+            echo "✗ $bad commit(s) would add a tool/web-flow identity to the contributor list"
+            echo "  Fix: set git user.name/user.email to your own identity and remove the"
+            echo "  Co-authored-by / attribution lines, then amend or rebase before pushing."
+            exit 1
+          fi
+          echo "✓ no tool or web-flow identities in $range"

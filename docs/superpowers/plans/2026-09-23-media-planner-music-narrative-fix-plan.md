@@ -163,9 +163,7 @@ music_generation has been a real, fully wired capability since LOTE AX
 (2026-09-06) — MusicOrchestrationService + the ElevenLabs adapter's
 generateMusic are live. Swap the test fixture to an explicitly
 fictional capability name so the test keeps verifying unmetConstraints
-propagation without depending on a capability staying unimplemented.
-
-Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>"
+propagation without depending on a capability staying unimplemented."
 ```
 
 ---

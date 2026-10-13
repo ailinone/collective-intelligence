@@ -9,6 +9,17 @@ updates:
     directory: /api
     schedule: { interval: weekly }
     groups: { minor-and-patch: { update-types: [minor, patch] } }
+    ignore:
+      # Majors whose upgrade fails the typecheck/lint gate and needs a deliberate
+      # code migration; the maintainers apply them in a normal commit instead.
+      - dependency-name: typescript
+        update-types: ["version-update:semver-major"]
+      - dependency-name: stripe
+        update-types: ["version-update:semver-major"]
+      - dependency-name: zod
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "@sentry/profiling-node"
+        update-types: ["version-update:semver-major"]
   - package-ecosystem: npm
     directory: /
     schedule: { interval: weekly }
