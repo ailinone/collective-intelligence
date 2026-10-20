@@ -30,12 +30,9 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          # Without this, checkout wires up git's push credential to the
-          # ephemeral Actions bot token, which is not exempt from this
-          # branch's required-status-checks rule, so the later `git push`
-          # is rejected (GH006) even though the commit succeeds locally.
-          # A fine-grained PAT belonging to an exempted user lets the
-          # scheduled push land the same way an admin's own push does.
+          # Prefer a fine-grained PAT with Contents:Read-and-write on this
+          # repo (required by GitHub's stargazer-API restriction); fall back
+          # to the default Actions token.
           token: ${{ secrets.STARMAP_TOKEN || secrets.GITHUB_TOKEN }}
 
       - uses: actions/setup-node@v7
@@ -44,22 +41,45 @@ jobs:
 
       - name: Generate widgets
         env:
-          # Prefer a fine-grained PAT with Contents:Read-and-write on this repo
-          # (required by GitHub's stargazer-API restriction); fall back to the
-          # default Actions token, which may or may not satisfy that check.
           GITHUB_TOKEN: ${{ secrets.STARMAP_TOKEN || secrets.GITHUB_TOKEN }}
         run: |
           node scripts/star-history/generate-chart.mjs
           node scripts/contributors/generate-contributors.mjs
 
       - name: Commit if changed
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           if git diff --quiet -- .github/star-history/ .github/contributors/; then
             echo "No change in README widgets, nothing to commit."
             exit 0
           fi
+          # main carries required status checks, so a direct push of a fresh
+          # commit is always rejected (GH006): the pushed SHA has no check
+          # runs on it yet. Land widget refreshes through a PR instead — the
+          # required checks run against the PR head and auto-merge completes
+          # the update once they pass. The bot identity is allowed by the
+          # no-ai-attribution check; the DCO check needs a Signed-off-by
+          # trailer on every PR commit.
+          BR=chore/readme-widgets-auto
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
+          git checkout -B "$BR"
           git add .github/star-history/ .github/contributors/
-          git commit -m "chore(readme-widgets): regenerate star history and contributors from live GitHub data"
-          git push
+          git commit \
+            -m "chore(readme-widgets): regenerate star history and contributors from live GitHub data" \
+            -m "Signed-off-by: github-actions[bot] <github-actions[bot]@users.noreply.github.com>"
+          git push -f origin "$BR"
+          PR=$(gh pr list --head "$BR" --state open --json number --jq '.[0].number // empty')
+          if [ -z "$PR" ]; then
+            PR=$(gh pr create \
+              --head "$BR" \
+              --title "chore(readme-widgets): regenerate from live GitHub data" \
+              --body "Automated refresh of the star-history and contributors widgets (scheduled run ${GITHUB_RUN_ID:-manual}).")
+          fi
+          if ! gh pr merge "$PR" --squash --auto 2>/dev/null; then
+            # Repo-wide auto-merge may be disabled: wait for the checks and
+            # merge explicitly.
+            gh pr checks "$PR" --watch --fail-fast
+            gh pr merge "$PR" --squash
+          fi
