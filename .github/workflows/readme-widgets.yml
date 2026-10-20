@@ -78,9 +78,9 @@ jobs:
               --title "chore(readme-widgets): regenerate from live GitHub data" \
               --body "Automated refresh of the star-history and contributors widgets (scheduled run ${GITHUB_RUN_ID:-manual}).")
           fi
-          if ! gh pr merge "$PR" --squash --auto 2>/dev/null; then
-            # Repo-wide auto-merge may be disabled: wait for the checks and
-            # merge explicitly.
-            gh pr checks "$PR" --watch --fail-fast
-            gh pr merge "$PR" --squash
-          fi
+          # Repo-wide auto-merge is disabled, so merge explicitly: wait for
+          # the required checks (they take a few seconds to register on a
+          # freshly opened PR), then squash-merge once they pass.
+          sleep 30
+          gh pr checks "$PR" --watch --interval 30
+          gh pr merge "$PR" --squash
