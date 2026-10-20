@@ -124,7 +124,7 @@
     "@fastify/swagger-ui": "^6.1.1",
     "@fastify/under-pressure": "9.2.0",
     "@fastify/websocket": "^11.3.1",
-    "@google-cloud/secret-manager": "^6.3.0",
+    "@google-cloud/secret-manager": "^7.2.0",
     "@google-cloud/storage": "^8.2.0",
     "@google/generative-ai": "^0.24.1",
     "@modelcontextprotocol/sdk": "^1.31.0",
