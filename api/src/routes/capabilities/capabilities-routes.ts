@@ -18,7 +18,7 @@ import { requireTenantContext } from '@/api/middleware/tenant-isolation-middlewa
 import { rejectAnonymousGuestKeyPreHandler } from '@/services/anonymous-quota-gate';
 import { rejectChatFreeTierKeyPreHandler } from '@/services/free-tier-quota-gate';
 import type { ExtendedFastifyRequest } from '@/types/fastify-extended';
-import type { ChatMessage, ChatRequest, ModelCapability } from '@/types';
+import type { ChatMessage, ChatRequest, ModelCapability, OrchestrationContext } from '@/types';
 import { createOrchestrationContext, extractSemanticQueryFromMessages } from '@/utils/orchestration-context';
 import { MediaPlannerStrategy } from '@/core/orchestration/strategies/media-planner-strategy';
 import { MediaConsensusStrategy } from '@/core/orchestration/strategies/media-consensus-strategy';
@@ -27,7 +27,9 @@ import {
   resolveEffectiveMediaPlannerEnabled,
 } from '@/core/orchestration/strategies/media-planner-gate';
 import { buildMediaCritics } from '@/core/orchestration/strategies/media-critics-factory';
+import { buildDocumentCritics } from '@/core/orchestration/strategies/document-critics-factory';
 import { DocumentReviewStrategy } from '@/core/orchestration/strategies/document-review-strategy';
+import { withExecutionSystemPrompt } from '@/core/orchestration/execution-system-prompt';
 import { AudioOrchestrationService } from '@/services/audio-orchestration-service';
 import { MusicOrchestrationService } from '@/services/music-orchestration-service';
 import { ImagesOrchestrationService } from '@/services/images-orchestration-service';
@@ -312,6 +314,35 @@ function decodeBase64Payload(value: unknown, fieldName: string): Buffer {
  * as-is instead of folding it into `capability_dependency_unavailable`.
  */
 const CAPABILITY_FORBIDDEN_CODE = 'platform_admin_required';
+
+/**
+ * `proxy_route`/`sandbox_workflow`/`agentic_sandbox`/`code_execution_sandbox`
+ * are the only 4 execution modes that genuinely need a live `FastifyRequest`
+ * (auth-header forwarding, admin-request checks, raw body access) — every
+ * other mode only ever needed it to derive an `OrchestrationContext`, which
+ * `executeCapabilityByPlan`'s callers now resolve themselves (see its own
+ * doc comment). A caller with no live request (MediaPlannerStrategy's chat/
+ * triage safety-net dispatch) passes `request: undefined`; these 4 modes
+ * reject immediately with a specific, catchable error instead of throwing a
+ * raw `TypeError` on `undefined.headers` deep inside — `executeCapabilityByPlan`'s
+ * existing fallback-to-next-mode loop treats this exactly like any other
+ * mode-unavailable failure.
+ */
+function requireHttpRequest(
+  capability: string,
+  mode: CapabilityExecutionMode,
+  request: FastifyRequest | undefined
+): FastifyRequest {
+  if (!request) {
+    throw buildCapabilityError(
+      capability,
+      `${mode} requires an HTTP request context, not available from this dispatch path`,
+      { executionMode: mode },
+      'capability_requires_http_context'
+    );
+  }
+  return request;
+}
 
 function buildCapabilityError(
   capability: string,
@@ -743,7 +774,7 @@ async function executeNativeAdapterMode(
   capability: ModelCapability,
   body: CapabilityRequestBody,
   envelope: CapabilityExecutionEnvelope,
-  request: FastifyRequest,
+  userContext: OrchestrationContext,
   requestId: string,
   services: {
     audio: AudioOrchestrationService;
@@ -756,7 +787,6 @@ async function executeNativeAdapterMode(
     vision: VisionOrchestrationService;
   }
 ): Promise<CapabilityModeResult> {
-  const userContext = getUserContext(request);
   const envelopeInput =
     envelope.input && typeof envelope.input === 'object' && !Array.isArray(envelope.input)
       ? (envelope.input as CapabilityRequestBody)
@@ -1264,15 +1294,13 @@ async function executeToolPipelineMode(
   capability: ModelCapability,
   body: CapabilityRequestBody,
   envelope: CapabilityExecutionEnvelope,
-  request: FastifyRequest,
+  userContext: OrchestrationContext,
   requestId: string,
   services: {
     search: SearchOrchestrationService;
     pdf: PDFService;
   }
 ): Promise<CapabilityModeResult> {
-  const userContext = getUserContext(request);
-
   if (SEARCH_CAPABILITIES.has(capability)) {
     const query = asString(body.query) ?? deriveTextInput(body, envelope);
     if (!query) throw buildCapabilityError(capability, 'query is required for search capability');
@@ -1440,10 +1468,11 @@ async function executeSandboxWorkflowMode(
   capability: ModelCapability,
   body: CapabilityRequestBody,
   envelope: CapabilityExecutionEnvelope,
-  request: FastifyRequest,
+  request: FastifyRequest | undefined,
   requestId: string,
   codeExecutionService: CodeExecutionService
 ): Promise<CapabilityModeResult> {
+  request = requireHttpRequest(capability, 'sandbox_workflow', request);
   if (!CODE_CAPABILITIES.has(capability)) {
     throw buildCapabilityError(
       capability,
@@ -1511,9 +1540,10 @@ async function executeAgenticSandboxMode(
   capability: ModelCapability,
   body: CapabilityRequestBody,
   envelope: CapabilityExecutionEnvelope,
-  request: FastifyRequest,
+  request: FastifyRequest | undefined,
   requestId: string
 ): Promise<CapabilityModeResult> {
+  request = requireHttpRequest(capability, 'agentic_sandbox', request);
   const userContext = getUserContext(request);
   // SECURITY (2026-09-25, issue #664 finding 3): `process.cwd()` is the API
   // container's own source tree, not a tenant workspace. `getToolsBaseDir()`
@@ -1721,9 +1751,10 @@ async function executeCodeExecutionSandboxMode(
   capability: ModelCapability,
   body: CapabilityRequestBody,
   envelope: CapabilityExecutionEnvelope,
-  request: FastifyRequest,
+  request: FastifyRequest | undefined,
   requestId: string
 ): Promise<CapabilityModeResult> {
+  request = requireHttpRequest(capability, 'code_execution_sandbox', request);
   // Defense-in-depth: check the flag HERE too, not only inside `executeCode()`.
   // `executeCode()` already fails closed on its own (see its own
   // `isCodeExecutionSandboxEnabled()` check), but this mode function must not
@@ -1801,9 +1832,8 @@ async function executeOrchestrationMode(
   capability: ModelCapability,
   body: CapabilityRequestBody,
   envelope: CapabilityExecutionEnvelope,
-  request: FastifyRequest
+  userContext: OrchestrationContext
 ): Promise<CapabilityModeResult> {
-  const userContext = getUserContext(request);
   const capabilityExecutionService = getCapabilityExecutionService();
   const orchestrationBody = {
     ...(envelope.options && typeof envelope.options === 'object'
@@ -1860,8 +1890,9 @@ async function executeProxyMode(
   capability: ModelCapability,
   body: CapabilityRequestBody,
   envelope: CapabilityExecutionEnvelope,
-  request: FastifyRequest
+  request: FastifyRequest | undefined
 ): Promise<CapabilityModeResult> {
+  request = requireHttpRequest(capability, 'proxy_route', request);
   const target = getProxyTarget(capability);
   if (!target) {
     throw buildCapabilityError(capability, `No proxy target configured for ${capability}`, {
@@ -1894,8 +1925,22 @@ export async function executeCapabilityByPlan(
   plan: CapabilityExecutionPlan,
   body: CapabilityRequestBody,
   envelope: CapabilityExecutionEnvelope,
-  request: FastifyRequest,
+  // `request` is only needed by the 4 modes that genuinely require a live
+  // HTTP request (proxy_route's auth-header forwarding, and the 3 sandbox/
+  // agentic modes' admin/request-bound checks) — undefined for callers with
+  // no HTTP request in hand (MediaPlannerStrategy's chat/triage safety-net
+  // dispatch, orchestration-engine.ts). Those 4 modes fail closed with a
+  // specific, catchable error when it's missing (see each mode below),
+  // which this function's existing fallback-to-next-mode loop already
+  // handles like any other mode-unavailable failure.
+  request: FastifyRequest | undefined,
   requestId: string,
+  // Resolved once by the caller (from the live request when there is one —
+  // see getUserContext — or from the OrchestrationContext already in hand
+  // otherwise) instead of each mode independently re-deriving it from
+  // `request`, which is exactly what made a live request a hard requirement
+  // for every mode, not just the 4 that actually need one.
+  userContext: OrchestrationContext,
   services: {
     audio: AudioOrchestrationService;
     music: MusicOrchestrationService;
@@ -1918,7 +1963,7 @@ export async function executeCapabilityByPlan(
       if (mode === 'proxy_route') {
         modeResult = await executeProxyMode(plan.id, body, envelope, request);
       } else if (mode === 'native_adapter') {
-        modeResult = await executeNativeAdapterMode(plan.id, body, envelope, request, requestId, {
+        modeResult = await executeNativeAdapterMode(plan.id, body, envelope, userContext, requestId, {
           audio: services.audio,
           music: services.music,
           image: services.image,
@@ -1929,7 +1974,7 @@ export async function executeCapabilityByPlan(
           vision: services.vision,
         });
       } else if (mode === 'tool_pipeline') {
-        modeResult = await executeToolPipelineMode(plan.id, body, envelope, request, requestId, {
+        modeResult = await executeToolPipelineMode(plan.id, body, envelope, userContext, requestId, {
           search: services.search,
           pdf: services.pdf,
         });
@@ -1953,7 +1998,7 @@ export async function executeCapabilityByPlan(
           requestId
         );
       } else {
-        modeResult = await executeOrchestrationMode(plan.id, body, envelope, request);
+        modeResult = await executeOrchestrationMode(plan.id, body, envelope, userContext);
       }
 
       return {
@@ -2036,6 +2081,7 @@ export async function registerCapabilitiesRoutes(server: FastifyInstance): Promi
       const body = request.body || {};
       const envelope = parseEnvelope(body);
       const requestId = request.id;
+      const userContext = getUserContext(request);
       const start = Date.now();
 
       try {
@@ -2091,7 +2137,7 @@ export async function registerCapabilitiesRoutes(server: FastifyInstance): Promi
 
         const execution = await executeRouteWithRetry(
           () =>
-            executeCapabilityByPlan(dynamicPlan, body, envelope, request, requestId, {
+            executeCapabilityByPlan(dynamicPlan, body, envelope, request, requestId, userContext, {
               audio: audioService,
               music: musicService,
               image: imageService,
@@ -2530,15 +2576,33 @@ export async function registerCapabilitiesRoutes(server: FastifyInstance): Promi
       // resolves.
       let critics: Awaited<ReturnType<typeof buildMediaCritics>>['critics'] = [];
       let qualityJudgingUnavailableReason: string | undefined;
+      // Section D (wired 2026-09-27): `imageEditJudge` below is the SAME
+      // `spec_compliance` MediaJudgeEvaluator instance already present in
+      // `critics` — one resolved judge model, reused for `edit` actions'
+      // before/after check, not a second independent resolution. See
+      // media-critics-factory.ts's `imageEditJudge` doc comment.
+      let imageEditJudge: Awaited<ReturnType<typeof buildMediaCritics>>['imageEditJudge'];
+      // Section C (wired 2026-09-27): same `judgeEnabled` gate as Section A/D
+      // above — see document-critics-factory.ts's module doc for why this is
+      // one master switch, not a separate document-specific flag. Resolved
+      // concurrently with buildMediaCritics — independent judge-model
+      // resolutions, no reason to serialize them on the request path.
+      let documentCritics: Awaited<ReturnType<typeof buildDocumentCritics>>['critics'] = [];
       if (config.mediaPlanner.judgeEnabled) {
-        const built = await buildMediaCritics({ providerRegistry: getProviderRegistry() });
+        const providerRegistry = getProviderRegistry();
+        const [built, builtDocument] = await Promise.all([
+          buildMediaCritics({ providerRegistry }),
+          buildDocumentCritics({ providerRegistry }),
+        ]);
         critics = built.critics;
         qualityJudgingUnavailableReason = built.qualityJudgingUnavailableReason;
+        imageEditJudge = built.imageEditJudge;
+        documentCritics = builtDocument.critics;
       }
 
       const strategy = new MediaPlannerStrategy({
-        capabilityDispatcher: (plan, capabilityBody) =>
-          executeCapabilityByPlan(plan, capabilityBody, envelope, request, requestId, {
+        capabilityDispatcher: (plan, capabilityBody, context) =>
+          executeCapabilityByPlan(plan, capabilityBody, envelope, request, requestId, context, {
             audio: audioService,
             music: musicService,
             image: imageService,
@@ -2561,28 +2625,27 @@ export async function registerCapabilitiesRoutes(server: FastifyInstance): Promi
           critics,
           qualityJudgingUnavailableReason,
         }),
-        // TODO(section-A-dependency, section-D-image-edit-verify-plan): once
-        // Section A wires a real vision-capable judge model via
-        // ModelRoleResolver, pass a MediaJudgeEvaluator(criticRole:
-        // 'spec_compliance') here as `imageEditJudge` so edit actions get a
-        // subjective before/after check on top of the deterministic gate.
-        // Absent, edits are still gated deterministically (dimensions/
-        // format) — this is a strictly additive quality improvement, not a
-        // correctness gap. (Section A itself has since merged -- this
-        // wiring is now actionable, left as a follow-up rather than done
-        // as part of this merge.)
-        // Document/PDF generalization (Section C). Same safe-by-default
-        // posture as mediaConsensusExecutor above: critics intentionally
-        // NOT wired yet (empty array) — DocumentJudgeEvaluator needs a real
-        // judge-model id per critic role, a separate piece of work. With
-        // zero critics, DocumentReviewStrategy degrades explicitly
-        // (degradedReason: 'no_document_critics_configured') instead of
-        // silently doing nothing — pdf_understanding still returns its raw
-        // extraction via the unchanged capability_result fallback path.
-        documentReviewExecutor: new DocumentReviewStrategy({ critics: [] }),
+        // Section D (wired 2026-09-27): subjective before/after check on top
+        // of the deterministic gate, reusing Section A's resolved judge
+        // model (see the `imageEditJudge` assignment above). `undefined`
+        // when judging is off/unavailable — edits still get the
+        // deterministic dimension/format gate either way, so this is a
+        // strictly additive quality improvement, never a correctness gap.
+        imageEditJudge,
+        // Document/PDF generalization (Section C, wired 2026-09-27): real
+        // critics when `judgeEnabled` resolves a text-capable judge model
+        // (see document-critics-factory.ts); empty array under the exact
+        // same conditions as before otherwise, so `DocumentReviewStrategy`
+        // keeps its existing, tested `no_document_critics_configured`
+        // degrade path (extraction-only, no fabricated review).
+        documentReviewExecutor: new DocumentReviewStrategy({ critics: documentCritics }),
       });
 
-      const result = await strategy.execute(chatRequest, orchestrationContext);
+      const preparedChatRequest = withExecutionSystemPrompt(chatRequest, {
+        ...orchestrationContext,
+        isCollectiveStrategy: true,
+      });
+      const result = await strategy.execute(preparedChatRequest, orchestrationContext);
       return reply.send(result);
     }
   );

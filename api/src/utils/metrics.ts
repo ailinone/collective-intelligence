@@ -775,3 +775,96 @@ export function getPerformanceProfiler(): PerformanceProfiler {
   }
   return profilerInstance;
 }
+
+
+/**
+ * Strategy target-policy decision telemetry (OPS-001a) — the A3 gate
+ * (strategy-target-policy.ts) turns every `(org, family)` decision into a
+ * scraped Prometheus series, not just a log line, so the shadow→enforce flip
+ * (ENT-001 Phase 1) has an alertable signal: specifically
+ * `ailin_dev_target_policy_shadow_would_deny_total`, the rate at which shadow
+ * mode is absorbing would-be denials.
+ */
+export const targetPolicyDecisions = getOrCreateMetric(
+  'ailin_dev_target_policy_decisions_total',
+  () =>
+    new promClient.Counter({
+      name: 'ailin_dev_target_policy_decisions_total',
+      help: 'Strategy target-policy (A3 gate) decisions by outcome, mode, entitlement basis and family risk class',
+      labelNames: ['decision', 'mode', 'basis', 'family_risk'],
+    })
+);
+
+export const targetPolicyShadowWouldDeny = getOrCreateMetric(
+  'ailin_dev_target_policy_shadow_would_deny_total',
+  () =>
+    new promClient.Counter({
+      name: 'ailin_dev_target_policy_shadow_would_deny_total',
+      help: 'A3 gate decisions that would deny in enforce mode but were allowed in shadow (OPS-001 alert series)',
+    })
+);
+
+/** The `decision` label vocabulary of `ailin_dev_target_policy_decisions_total`
+ * — mirrors the structured log line's semantics: a shadow-mode would-be deny is
+ * recorded as `shadow_would_deny` (the request was allowed), never as `deny`. */
+export type TargetPolicyDecisionLabel = 'allow' | 'deny' | 'shadow_would_deny';
+
+/** Record one A3 gate decision (never throws — telemetry must not, same
+ * contract as noteFailOpen). Mode `off` never reaches here: the gate is
+ * compute-free by design and must stay silent on the wire. */
+export function recordTargetPolicyDecision(telemetry: {
+  decision: TargetPolicyDecisionLabel;
+  mode: 'off' | 'shadow' | 'enforce';
+  basis: 'fresh' | 'stale' | 'unavailable';
+  familyRisk: 'low' | 'high';
+}): void {
+  try {
+    targetPolicyDecisions.inc({
+      decision: telemetry.decision,
+      mode: telemetry.mode,
+      basis: telemetry.basis,
+      family_risk: telemetry.familyRisk,
+    });
+    if (telemetry.decision === 'shadow_would_deny') {
+      targetPolicyShadowWouldDeny.inc();
+    }
+  } catch {
+    // Metrics registry unavailable (not initialized / cleared mid-flight):
+    // the caller already logged the decision; nothing else to do.
+  }
+}
+
+/**
+ * Fail-open degradation events (audit 2026-09-29 item 11: "fail-open as a
+ * posture" — entitlements, usage-report, wallet and quota gates all degrade
+ * SILENTLY, so a billing outage is invisible until someone reads warn logs).
+ *
+ * One counter, one label: which gate degraded. Alert on
+ *   increase(rate(...[5m]) > 0)
+ * per gate; the label values are a CLOSED set kept in sync with the call
+ * sites below (grep noteFailOpen). Not instrumented: "flag off" and
+ * "not configured" states — those are design, not degradation.
+ */
+export const failOpenEvents = getOrCreateMetric(
+  'ailin_dev_fail_open_events_total',
+  () =>
+    new promClient.Counter({
+      name: 'ailin_dev_fail_open_events_total',
+      help:
+        'Degradation events where a billing/quota integration failed open (allowed) instead of erroring',
+      labelNames: ['gate'],
+    })
+);
+
+/** Record one fail-open degradation (never throws — telemetry must not). */
+export function noteFailOpen(gate: string, context?: Record<string, unknown>): void {
+  try {
+    failOpenEvents.inc({ gate });
+  } catch {
+    // Metrics registry unavailable (not initialized / cleared mid-flight):
+    // the caller already logged its own warn; nothing else to do.
+  }
+  if (context) {
+    log.debug({ gate, ...context }, 'fail-open degradation recorded');
+  }
+}

@@ -22,7 +22,6 @@ import re
 from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path
-from typing import Any, Optional
 
 import click
 import yaml
@@ -36,6 +35,7 @@ DEFAULT_REGISTRY_FILE = Path(__file__).resolve().parent / "registry.yaml"
 # ---------------------------------------------------------------------------
 # Data model
 # ---------------------------------------------------------------------------
+
 
 class ModelStatus(str, Enum):
     REGISTERED = "registered"
@@ -56,9 +56,9 @@ class ModelEntry(BaseModel):
     created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
     metrics: dict[str, float] = Field(default_factory=dict)
     status: ModelStatus = ModelStatus.REGISTERED
-    promoted_from: Optional[str] = None
+    promoted_from: str | None = None
     tags: list[str] = Field(default_factory=list)
-    training_run_id: Optional[str] = None
+    training_run_id: str | None = None
     description: str = ""
 
     @field_validator("version")
@@ -72,6 +72,7 @@ class ModelEntry(BaseModel):
 # ---------------------------------------------------------------------------
 # Version comparison
 # ---------------------------------------------------------------------------
+
 
 def _parse_version(v: str) -> tuple[int, ...]:
     return tuple(int(x) for x in v.split("."))
@@ -90,6 +91,7 @@ def compare_versions(a: str, b: str) -> int:
 # ---------------------------------------------------------------------------
 # Registry I/O
 # ---------------------------------------------------------------------------
+
 
 class ModelRegistry:
     """YAML-backed model registry."""
@@ -125,7 +127,9 @@ class ModelRegistry:
         logger.info("Registered %s@%s", entry.name, entry.version)
         return entry
 
-    def promote(self, name: str, version: str, to_status: ModelStatus = ModelStatus.CHAMPION) -> ModelEntry:
+    def promote(
+        self, name: str, version: str, to_status: ModelStatus = ModelStatus.CHAMPION
+    ) -> ModelEntry:
         """Promote a model version to a higher status.
 
         If promoting to CHAMPION, the current champion (if any) is
@@ -210,10 +214,13 @@ class ModelRegistry:
 # CLI
 # ---------------------------------------------------------------------------
 
+
 @click.group()
-@click.option("--registry", type=click.Path(), default=str(DEFAULT_REGISTRY_FILE), help="Registry YAML path")
+@click.option(
+    "--registry", type=click.Path(), default=str(DEFAULT_REGISTRY_FILE), help="Registry YAML path"
+)
 @click.pass_context
-def cli(ctx: click.Context, registry: str):
+def cli(ctx: click.Context, registry: str) -> None:
     """Model registry management."""
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
     ctx.ensure_object(dict)
@@ -229,7 +236,16 @@ def cli(ctx: click.Context, registry: str):
 @click.option("--tag", multiple=True)
 @click.option("--description", default="")
 @click.pass_context
-def register(ctx, name, version, architecture, param_count, checkpoint_path, tag, description):
+def register(
+    ctx: click.Context,
+    name: str,
+    version: str,
+    architecture: str,
+    param_count: int,
+    checkpoint_path: str,
+    tag: tuple[str, ...],
+    description: str,
+) -> None:
     """Register a new model version."""
     reg: ModelRegistry = ctx.obj["registry"]
     entry = ModelEntry(
@@ -250,7 +266,7 @@ def register(ctx, name, version, architecture, param_count, checkpoint_path, tag
 @click.option("--status", type=click.Choice([s.value for s in ModelStatus]), default=None)
 @click.option("--tag", default=None)
 @click.pass_context
-def list_cmd(ctx, name, status, tag):
+def list_cmd(ctx: click.Context, name: str | None, status: str | None, tag: str | None) -> None:
     """List registered models."""
     reg: ModelRegistry = ctx.obj["registry"]
     status_enum = ModelStatus(status) if status else None
@@ -260,7 +276,9 @@ def list_cmd(ctx, name, status, tag):
         return
     for e in entries:
         tags_str = f" [{', '.join(e.tags)}]" if e.tags else ""
-        click.echo(f"  {e.name}@{e.version}  {e.status.value:12s}  params={e.param_count}{tags_str}")
+        click.echo(
+            f"  {e.name}@{e.version}  {e.status.value:12s}  params={e.param_count}{tags_str}"
+        )
 
 
 @cli.command()
@@ -268,7 +286,7 @@ def list_cmd(ctx, name, status, tag):
 @click.option("--version", required=True)
 @click.option("--to-status", type=click.Choice(["staging", "champion"]), default="champion")
 @click.pass_context
-def promote(ctx, name, version, to_status):
+def promote(ctx: click.Context, name: str, version: str, to_status: str) -> None:
     """Promote a model to staging or champion."""
     reg: ModelRegistry = ctx.obj["registry"]
     reg.promote(name, version, ModelStatus(to_status))
@@ -279,7 +297,7 @@ def promote(ctx, name, version, to_status):
 @click.option("--name", required=True)
 @click.option("--version", required=True)
 @click.pass_context
-def deprecate(ctx, name, version):
+def deprecate(ctx: click.Context, name: str, version: str) -> None:
     """Deprecate a model version."""
     reg: ModelRegistry = ctx.obj["registry"]
     reg.deprecate(name, version)
@@ -289,7 +307,7 @@ def deprecate(ctx, name, version):
 @cli.command()
 @click.argument("ver_a")
 @click.argument("ver_b")
-def compare(ver_a, ver_b):
+def compare(ver_a: str, ver_b: str) -> None:
     """Compare two semver strings."""
     result = compare_versions(ver_a, ver_b)
     labels = {-1: "older", 0: "equal", 1: "newer"}

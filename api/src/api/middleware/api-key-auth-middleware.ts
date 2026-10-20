@@ -43,6 +43,7 @@ import { getHeaderString } from '@/utils/type-guards';
 import { getAuthService } from '@/services/auth-service';
 import { registerRoleChangeListener } from '@/services/rbac-service';
 import { looksLikeApiKey } from '@/utils/api-key-format';
+import { attachForwardedActorIdentity } from '@/middleware/auth-middleware';
 import {
   consumeRealtimeSession,
   REALTIME_SESSION_TOKEN_PREFIX,
@@ -1022,7 +1023,8 @@ export async function apiKeyAuthMiddleware(
       return reply.status(401).send({
         error: {
           code: 'invalid_token',
-          message: 'Invalid or expired JWT token',
+          message:
+            'Invalid or expired JWT token. If you meant to authenticate with an API key, it was not recognized: keys must start with ai1sk_ (legacy ak_ is also accepted) and be sent via Authorization: Bearer or the x-api-key header.',
           type: 'authentication_error',
         },
       });
@@ -1094,6 +1096,15 @@ export async function apiKeyAuthMiddleware(
   authenticatedRequest.userId = authContext.userId;
   authenticatedRequest.organizationTier = authContext.tenantContext.tier;
   authenticatedRequest.userContext = createOrchestrationContext(request);
+
+  // WHY: this global preHandler authenticates the key ITSELF (it never calls
+  // authenticate()), so the forwarded-actor swap inside authenticate()'s
+  // short-circuit was dead code for ALL key-authed traffic — chat's
+  // X-Ailin-Actor-Token attribution (per-user free-tier bucketing,
+  // credits-continue billing) silently stayed on the key's shared
+  // service-account user. Best-effort, attribution only: org/roles are never
+  // touched, and a missing/invalid token keeps the primary identity.
+  await attachForwardedActorIdentity(request, authenticatedRequest);
 
   request.log.info(
     {

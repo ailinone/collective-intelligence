@@ -196,12 +196,16 @@ const executionToCanonical: Record<ExecutionStrategyName, CanonicalStrategyName>
   'tri-role-collective': 'tri-role-collective',
   cached: 'dynamic',
   auto: 'dynamic',
-  // LOTE AT (Part 2): not user-selectable (absent from STRATEGY_INPUT_VALUES
-  // / aliasToCanonical), reached only via `resolveMediaPlanRouting`'s own
-  // gate. Mapped to 'agentic' — the closest existing canonical bucket
-  // ("Autonomous: plan workflow → execute steps ... → deliver result") —
-  // purely so this Record stays exhaustive; nothing resolves TO
-  // 'media-planner' via canonicalToExecution.
+  // LOTE AT (Part 2): not user-selectable via the `strategy` field (absent
+  // from STRATEGY_INPUT_VALUES / aliasToCanonical). Reached via (a) the
+  // resolveMediaPlanRouting gate (REST route / Section E safety net) and,
+  // since 2026-10-02, (b) sold `media-planner:<tier>` composites — which
+  // resolve through strategyTierToExecution's explicit special case (see
+  // ailin-virtual-model-service.ts), NOT through this map. Mapped to
+  // 'agentic' — the closest existing canonical bucket ("Autonomous: plan
+  // workflow → execute steps ... → deliver result") — purely so this Record
+  // stays exhaustive; nothing resolves TO 'media-planner' via
+  // canonicalToExecution.
   'media-planner': 'agentic',
 };
 

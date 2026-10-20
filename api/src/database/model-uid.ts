@@ -27,3 +27,28 @@ import { createHash } from 'crypto';
 export function computeModelUid(providerId: string, modelId: string): string {
   return createHash('md5').update(`${providerId}:${modelId}`).digest('hex').substring(0, 25);
 }
+
+/**
+ * Next candidate uid for a (provider, model) whose canonical uid is already
+ * held by a DIFFERENT row.
+ *
+ * `uid` is an opaque primary key; the real identity of a model row is
+ * (provider_id, id). Historically the discovery fallback path re-parented rows
+ * across providers while keeping their original uid, so ~800 production rows
+ * hold a uid that is the canonical hash of some OTHER (provider, id) pair. A
+ * brand-new row whose canonical uid is occupied that way must not collide with
+ * (or, via ON CONFLICT (uid), overwrite) the row that squats on it — it takes a
+ * salted uid instead. attempt=0 is the canonical uid.
+ */
+export function computeModelUidCandidate(
+  providerId: string,
+  modelId: string,
+  attempt: number
+): string {
+  return attempt === 0
+    ? computeModelUid(providerId, modelId)
+    : createHash('md5')
+        .update(`${providerId}:${modelId}#${attempt}`)
+        .digest('hex')
+        .substring(0, 25);
+}

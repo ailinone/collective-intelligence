@@ -18,17 +18,20 @@ from __future__ import annotations
 
 import logging
 import math
-import multiprocessing
-import signal
 import subprocess
 import sys
 import tempfile
-import textwrap
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from datasets import load_dataset
+# 2026-10-18: mypy resolves `datasets` to the repo-local namespace package
+# (model-stack/datasets/, no __init__.py) instead of the pip library; at
+# runtime PEP 420 gives precedence to the regular package in site-packages.
+from datasets import load_dataset  # type: ignore[attr-defined]
+
+if TYPE_CHECKING:
+    from evals.runner import ModelClient
 
 logger = logging.getLogger("humaneval_eval")
 
@@ -38,6 +41,7 @@ EXECUTION_TIMEOUT = 10  # seconds per test execution
 # ---------------------------------------------------------------------------
 # pass@k estimator (unbiased, from the original paper)
 # ---------------------------------------------------------------------------
+
 
 def pass_at_k(n: int, c: int, k: int) -> float:
     """Unbiased estimator for pass@k.
@@ -52,6 +56,7 @@ def pass_at_k(n: int, c: int, k: int) -> float:
 # ---------------------------------------------------------------------------
 # Sandboxed execution
 # ---------------------------------------------------------------------------
+
 
 def execute_code(code: str, test_code: str, timeout: int = EXECUTION_TIMEOUT) -> tuple[bool, str]:
     """Run generated code + unit tests in a subprocess with a timeout.
@@ -86,6 +91,7 @@ def execute_code(code: str, test_code: str, timeout: int = EXECUTION_TIMEOUT) ->
 # Prompt construction
 # ---------------------------------------------------------------------------
 
+
 def build_prompt(prompt: str, entry_point: str) -> str:
     """Build a completion prompt from the HumanEval problem signature."""
     return (
@@ -114,6 +120,7 @@ def extract_function(model_output: str, prompt: str) -> str:
 # Evaluation
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class HumanEvalResult:
     task_id: str
@@ -125,12 +132,12 @@ class HumanEvalResult:
 
 
 def run(
-    client,
+    client: ModelClient,
     num_samples: int | None = None,
     n_completions: int = 5,
     temperature: float = 0.2,
-    **_kwargs,
-) -> tuple[dict[str, float], list[dict]]:
+    **_kwargs: Any,
+) -> tuple[dict[str, float], list[dict[str, Any]]]:
     """Entry point called by the central eval runner."""
     logger.info("Loading HumanEval dataset ...")
     ds = load_dataset("openai_humaneval", split="test")
@@ -165,8 +172,6 @@ def run(
             code = extract_function(raw, prompt)
             completions.append(code)
 
-            # Build the test harness
-            harness = f"{code}\n\n{test_code}\n\ncheck({entry_point})\n"
             passed, err = execute_code(code, f"{test_code}\n\ncheck({entry_point})\n")
             test_results.append(passed)
             errors.append(err)
@@ -191,7 +196,9 @@ def run(
     per_problem_correct = [sum(r.test_results) for r in results]
 
     pass_1 = sum(pass_at_k(n_completions, c, 1) for c in per_problem_correct) / max(total, 1)
-    pass_5 = sum(pass_at_k(n_completions, c, min(5, n_completions)) for c in per_problem_correct) / max(total, 1)
+    pass_5 = sum(
+        pass_at_k(n_completions, c, min(5, n_completions)) for c in per_problem_correct
+    ) / max(total, 1)
 
     metrics = {
         "pass_at_1": round(pass_1, 4),

@@ -28,10 +28,24 @@
  * the vi.mock factories.
  */
 
+/** Structural stand-in for the wire `ToolCall` (keeps this module dependency-free). */
+export interface MockToolCall {
+  id: string;
+  type: 'function';
+  function: { name: string; arguments: string };
+}
+
 export interface ConsensusAggOverride {
   content: string;
   confidence: number;
   threwError: boolean;
+  /**
+   * When set, the mocked aggregate returns `finish_reason: 'tool_calls'` with
+   * these calls on `choices[0].message` — mirroring the REAL aggregator's
+   * Elo-3 quorum preservation, which only sets that shape on a strict
+   * majority. Tests use it to drive the consensus quorum-tool execution path.
+   */
+  toolCalls?: MockToolCall[];
 }
 
 declare global {
@@ -66,8 +80,12 @@ export function responseAggregatorModuleMock() {
             choices: [
               {
                 index: 0,
-                message: { role: 'assistant', content: override.content },
-                finish_reason: 'stop',
+                message: {
+                  role: 'assistant',
+                  content: override.content,
+                  ...(override.toolCalls?.length ? { tool_calls: override.toolCalls } : {}),
+                },
+                finish_reason: override.toolCalls?.length ? 'tool_calls' : 'stop',
                 logprobs: null,
               },
             ],

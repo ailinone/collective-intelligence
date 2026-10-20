@@ -130,7 +130,7 @@ describe('SemanticCache (pgvector)', () => {
       expect(sql).toMatch(/ORDER BY embedding <=> \$1::vector/);
       expect(sql).toMatch(/strategy_key = \$3/);
       expect(params[1]).toBe('org-1');
-      expect(params[2]).toBe('dynamic');
+      expect(params[2]).toBe('dynamic|policy:ailin-identity-v1');
     });
 
     it('returns null when the best match is below the similarity threshold', async () => {

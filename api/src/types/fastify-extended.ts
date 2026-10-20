@@ -41,6 +41,13 @@ export interface ExtendedFastifyRequest extends Omit<FastifyRequest, 'user'> {
   apiVersion?: string;
   userId?: string;
   organizationId?: string;
+  /**
+   * JIT-provisioning hints captured by attachForwardedActorIdentity — ONLY
+   * set inside the actor-token-verified branch (never client-spookable):
+   * email + tenant asserted by chat's M2M backend alongside X-Acting-User.
+   */
+  actingUserEmail?: string;
+  actingUserTenant?: string;
   organizationTier?: string;
   userContext?: OrchestrationContext;
   metricsStartTime?: bigint;

@@ -18,6 +18,45 @@ import { logger } from '@/utils/logger';
 
 const log = logger.child({ component: 'branding' });
 
+export interface BrandingOptions {
+  /**
+   * The model id the client explicitly pinned on this request. Undefined for
+   * auto/alias/strategy requests (see getPinnedModelId).
+   */
+  explicitModel?: string;
+}
+
+/**
+ * Both sides are compared as their full trimmed id AND their last '/'
+ * segment: a catalog id like "openai/gpt-4o" (or "@cf/meta/llama-…") may be
+ * executed and echoed back under the provider-stripped form, and vice versa.
+ * Only an exact id/name match preserves identity — anything else keeps the
+ * current branding (fail-closed).
+ */
+function modelRefVariants(value: unknown): string[] {
+  if (typeof value !== 'string') return [];
+  const trimmed = value.trim().toLowerCase();
+  if (!trimmed) return [];
+  const last = trimmed.split('/').pop() ?? trimmed;
+  return last && last !== trimmed ? [trimmed, last] : [trimmed];
+}
+
+function responseExecutedExplicitModel(response: ChatResponse, explicitModel: string): boolean {
+  const requested = modelRefVariants(explicitModel);
+  if (requested.length === 0) return false;
+  const metadata = response.ailin_metadata;
+  const executed = [
+    response.model,
+    metadata && !('type' in metadata) ? metadata.resolved_model : undefined,
+    metadata && !('type' in metadata) ? metadata.final_decider_model_id : undefined,
+    metadata && !('type' in metadata) ? metadata.final_decider_model_name : undefined,
+  ];
+  return executed.some((executedRef) => {
+    const variants = modelRefVariants(executedRef);
+    return variants.length > 0 && variants.some((v) => requested.includes(v));
+  });
+}
+
 /**
  * Apply branding to chat response
  *
@@ -27,9 +66,31 @@ const log = logger.child({ component: 'branding' });
  * 3. Preserves internal tracking for analytics
  *
  * @param response - Original chat response
+ * @param options - When `explicitModel` is set to the model the client
+ *   explicitly pinned on this request (see getPinnedModelId) and the response
+ *   was executed by that exact model, branding is SKIPPED: the user named the
+ *   model themselves, so redacting its identity would only obscure their own
+ *   choice. Strategy/alias/auto requests never match here — their requested
+ *   id is not a catalog model id, so the executed model is always a different
+ *   (delegated) one and stays branded. A pin that FAILED OVER to another
+ *   model also stays branded: the user did not get what they asked for.
  * @returns Branded response
  */
-export function applyBranding(response: ChatResponse): ChatResponse {
+export function applyBranding(response: ChatResponse, options?: BrandingOptions): ChatResponse {
+  if (options?.explicitModel && responseExecutedExplicitModel(response, options.explicitModel)) {
+    // Identity of the pinned model stays, but the defensive passthrough-strip
+    // below still applies: a pinned request can hit a provider that passes
+    // its raw upstream JSON through, and system_fingerprint leaked verbatim
+    // through exactly this class of hole before (see the P1-3 comment).
+    // Copied (not mutated in place) so both paths have the same
+    // returns-a-new-object contract.
+    const preserved = { ...response };
+    if (brandingConfig.hideModels) {
+      delete (preserved as Record<string, unknown>).system_fingerprint;
+    }
+    return preserved;
+  }
+
   const branded = { ...response };
 
   // Replace model name with brand name

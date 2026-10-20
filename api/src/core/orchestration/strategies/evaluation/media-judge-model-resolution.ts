@@ -84,13 +84,21 @@ function wrapJudgeCandidate(model: Model): ModelCandidate {
 }
 
 /**
- * Resolves one vision-capable judge model id from the live catalog, or
- * `undefined` when none satisfies the resolver's judge-role filters
- * (capability, health, credits, context window, requireVision). Never
- * fabricates a fallback model id.
+ * Resolves one judge model id from the live catalog, or `undefined` when
+ * none satisfies the resolver's judge-role filters (capability, health,
+ * credits, context window, and — when `requireVision` is true — vision).
+ * Never fabricates a fallback model id.
+ *
+ * `requireVision` defaults to `true`, preserving this function's original
+ * (Section A, media) behavior exactly. Section C's document critics judge
+ * extracted PDF TEXT only (see document-judge-evaluator.types.ts's module
+ * doc) and have no vision dispatch, so `resolveDocumentJudgeModelId` below
+ * calls this same pool-building/resolving logic with `requireVision: false`
+ * instead of duplicating it.
  */
 export async function resolveMediaJudgeModelId(
-  deps: MediaJudgeModelResolutionDeps = {}
+  deps: MediaJudgeModelResolutionDeps = {},
+  requireVision = true
 ): Promise<string | undefined> {
   const resolver = deps.resolver ?? new ModelRoleResolver();
   const listCatalogModels = deps.listCatalogModels ?? getAllCatalogModels;
@@ -105,8 +113,17 @@ export async function resolveMediaJudgeModelId(
     strategyName: 'media-consensus',
     role: 'judge',
     candidatePool,
-    constraints: { requireVision: true, count: 1 },
+    constraints: { requireVision, count: 1 },
   });
 
   return result.selected[0]?.model.id;
+}
+
+/** Text-only judge model resolution for Section C's document critics —
+ *  see `resolveMediaJudgeModelId`'s doc for why this delegates rather than
+ *  duplicating the pool-building logic. */
+export async function resolveDocumentJudgeModelId(
+  deps: MediaJudgeModelResolutionDeps = {}
+): Promise<string | undefined> {
+  return resolveMediaJudgeModelId(deps, false);
 }

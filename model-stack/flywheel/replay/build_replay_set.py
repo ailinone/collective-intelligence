@@ -24,8 +24,7 @@ import json
 import logging
 import random
 import uuid
-from dataclasses import asdict, dataclass, field
-from datetime import datetime, timezone
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -33,17 +32,14 @@ import click
 
 logger = logging.getLogger("build_replay_set")
 
-DEFAULT_CLUSTER_REPORT = (
-    Path(__file__).resolve().parents[1] / "clustering" / "cluster_report.json"
-)
-DEFAULT_FAILURE_STORE = (
-    Path(__file__).resolve().parents[1] / "failures" / "captured_failures.json"
-)
+DEFAULT_CLUSTER_REPORT = Path(__file__).resolve().parents[1] / "clustering" / "cluster_report.json"
+DEFAULT_FAILURE_STORE = Path(__file__).resolve().parents[1] / "failures" / "captured_failures.json"
 
 
 # ---------------------------------------------------------------------------
 # Data model
 # ---------------------------------------------------------------------------
+
 
 @dataclass
 class ReplayExample:
@@ -99,7 +95,7 @@ CAPABILITY_TEMPLATES: dict[str, str] = {
 
 
 def build_example_from_failure(
-    failure: dict,
+    failure: dict[str, Any],
     cluster_id: int,
 ) -> ReplayExample:
     """Convert a captured failure into a replay training example."""
@@ -126,7 +122,9 @@ def build_example_from_failure(
             "I'll respond helpfully while maintaining my guidelines."
         )
     elif capability == "factuality":
-        assistant_content = expected if expected else "I'm not certain about this and would rather not guess."
+        assistant_content = (
+            expected if expected else "I'm not certain about this and would rather not guess."
+        )
     else:
         assistant_content = expected or "I'll help with that."
 
@@ -152,9 +150,10 @@ def build_example_from_failure(
 # Replay set generation
 # ---------------------------------------------------------------------------
 
+
 def build_replay_set(
-    cluster_report: dict,
-    failures: list[dict],
+    cluster_report: dict[str, Any],
+    failures: list[dict[str, Any]],
     max_examples_per_cluster: int = 50,
     oversample_small_clusters: bool = True,
     seed: int = 42,
@@ -166,9 +165,6 @@ def build_replay_set(
     """
     rng = random.Random(seed)
 
-    # Index failures by failure_id
-    failure_index = {f["failure_id"]: f for f in failures}
-
     # Map failures to clusters
     # The cluster_report contains cluster info; we need to map failures to cluster IDs
     # by matching capability/suite since the cluster report doesn't store individual IDs.
@@ -178,7 +174,7 @@ def build_replay_set(
     examples: list[ReplayExample] = []
 
     # Simple assignment: group failures by capability, then round-robin into clusters
-    capability_failures: dict[str, list[dict]] = {}
+    capability_failures: dict[str, list[dict[str, Any]]] = {}
     for f in failures:
         cap = f.get("capability", "unknown")
         capability_failures.setdefault(cap, []).append(f)
@@ -189,7 +185,6 @@ def build_replay_set(
             continue  # skip noise
 
         dominant_cap = cinfo.get("dominant_capability", "")
-        cluster_size = cinfo.get("size", 0)
 
         # Get failures matching this cluster's dominant capability
         matching = capability_failures.get(dominant_cap, [])
@@ -206,7 +201,7 @@ def build_replay_set(
 
     # Oversample small clusters to balance
     if oversample_small_clusters and examples:
-        cluster_counts = {}
+        cluster_counts: dict[int, int] = {}
         for ex in examples:
             cluster_counts[ex.cluster_id] = cluster_counts.get(ex.cluster_id, 0) + 1
 
@@ -253,6 +248,7 @@ def write_replay_jsonl(examples: list[ReplayExample], output_path: Path) -> None
 # CLI
 # ---------------------------------------------------------------------------
 
+
 @click.command()
 @click.option("--cluster-report", type=click.Path(exists=True), default=str(DEFAULT_CLUSTER_REPORT))
 @click.option("--failures-path", type=click.Path(exists=True), default=str(DEFAULT_FAILURE_STORE))
@@ -267,7 +263,7 @@ def main(
     max_per_cluster: int,
     oversample: bool,
     seed: int,
-):
+) -> None:
     """Build a replay training dataset from clustered failures."""
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
 

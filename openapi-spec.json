@@ -17417,7 +17417,7 @@
                   "model": {
                     "type": "string",
                     "default": "auto",
-                    "description": "Model ID or \"auto\" for intelligent selection. When \"auto\", Ailin orchestrates across 500+ models to find the best TTS model for your requirements."
+                    "description": "Model ID or \"auto\" for intelligent selection. When \"auto\", Ailin orchestrates across the full model catalog to find the best TTS model for your requirements."
                   },
                   "input": {
                     "type": "string",
@@ -17813,7 +17813,7 @@
                   "model": {
                     "type": "string",
                     "default": "auto",
-                    "description": "Model ID or \"auto\" for intelligent selection. When \"auto\", Ailin orchestrates across 500+ models to find the best audio translation model."
+                    "description": "Model ID or \"auto\" for intelligent selection. When \"auto\", Ailin orchestrates across the full model catalog to find the best audio translation model."
                   },
                   "prompt": {
                     "type": "string",
@@ -18006,7 +18006,7 @@
                   "model": {
                     "type": "string",
                     "default": "auto",
-                    "description": "Model ID or \"auto\" for intelligent selection. When \"auto\", Ailin orchestrates across 500+ models to find the best image generation model."
+                    "description": "Model ID or \"auto\" for intelligent selection. When \"auto\", Ailin orchestrates across the full model catalog to find the best image generation model."
                   },
                   "prompt": {
                     "type": "string",
@@ -18227,7 +18227,7 @@
                   "model": {
                     "type": "string",
                     "default": "auto",
-                    "description": "Model ID or \"auto\" for intelligent selection. When \"auto\", Ailin orchestrates across 500+ models to find the best image editing model."
+                    "description": "Model ID or \"auto\" for intelligent selection. When \"auto\", Ailin orchestrates across the full model catalog to find the best image editing model."
                   },
                   "n": {
                     "type": "integer",
@@ -18390,7 +18390,7 @@
                   "model": {
                     "type": "string",
                     "default": "auto",
-                    "description": "Model ID or \"auto\" for intelligent selection. When \"auto\", Ailin orchestrates across 500+ models to find the best image editing model."
+                    "description": "Model ID or \"auto\" for intelligent selection. When \"auto\", Ailin orchestrates across the full model catalog to find the best image editing model."
                   },
                   "n": {
                     "type": "integer",

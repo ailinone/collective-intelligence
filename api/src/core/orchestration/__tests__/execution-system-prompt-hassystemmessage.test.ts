@@ -43,7 +43,10 @@
  * faithful proxy for "the model actually receives this grounding".
  */
 import { describe, expect, it } from 'vitest';
-import { buildExecutionSystemPrompt } from '@/core/orchestration/execution-system-prompt';
+import {
+  buildExecutionSystemPrompt,
+  withExecutionSystemPrompt,
+} from '@/core/orchestration/execution-system-prompt';
 import { BEHAVIORAL_GUARDRAILS_DIRECTIVE } from '@/core/orchestration/prompts/behavioral-guardrails';
 import type { ChatRequest, OrchestrationContext } from '@/types';
 
@@ -78,6 +81,20 @@ function makeRequestWithSystem(
     ...overrides,
   } as ChatRequest;
 }
+
+describe('withExecutionSystemPrompt', () => {
+  it('returns a new request with Ailin grounding ahead of caller instructions', () => {
+    const request = makeRequestWithSystem('Use a terse technical tone.');
+    const prepared = withExecutionSystemPrompt(request, makeContext());
+
+    expect(prepared).not.toBe(request);
+    expect(prepared.messages).toHaveLength(3);
+    expect(prepared.messages[0]).toMatchObject({ role: 'system' });
+    expect(String(prepared.messages[0]?.content)).toContain('Ailin¹');
+    expect(prepared.messages[1]).toEqual(request.messages[0]);
+    expect(request.messages).toHaveLength(2);
+  });
+});
 
 describe('buildExecutionSystemPrompt — (a) no pre-existing system message (baseline, unchanged)', () => {
   it('still returns full grounding — identity, guardrails, and the capability manifest', () => {

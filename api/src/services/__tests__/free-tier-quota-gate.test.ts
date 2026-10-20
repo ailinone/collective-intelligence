@@ -40,7 +40,10 @@ import {
   chatFreeTierApiKeyId,
   checkAndConsumeFreeTierAutoQuota,
   checkChatFreeTierApiKeyConfig,
+  CREDITS_CONTINUE_HEADER,
+  CREDITS_CONTINUE_MODEL_CELL,
   freeTierQuotaExceededBody,
+  isCreditsContinueRequested,
   isFreeTierAutoQuotaEnabled,
   isFreeTierAutoRawModel,
   isInChatFreeTierScope,
@@ -204,7 +207,51 @@ describe('freeTierQuotaExceededBody', () => {
     const body = freeTierQuotaExceededBody('2026-08-03T00:00:00.000Z');
     expect(body.error.code).toBe('free_quota_exceeded');
     expect(body.error.reset_at).toBe('2026-08-03T00:00:00.000Z');
-    expect(body.error.message).toContain('paid model');
+    expect(body.error.message).toContain('Upgrade your plan or add credits');
+  });
+
+  it('omits credits_continue when no offer is passed', () => {
+    const body = freeTierQuotaExceededBody('2026-08-03T00:00:00.000Z');
+    expect(body.credits_continue).toBeUndefined();
+  });
+
+  it('carries the credits-continue offer when passed (including null balance)', () => {
+    const body = freeTierQuotaExceededBody('2026-08-03T00:00:00.000Z', {
+      balance_usd: null,
+      model_cell: CREDITS_CONTINUE_MODEL_CELL,
+    });
+    expect(body.credits_continue).toEqual({
+      balance_usd: null,
+      model_cell: 'auto:base',
+    });
+  });
+});
+
+describe('isCreditsContinueRequested', () => {
+  it('accepts "1" and "true" (case-exact, single header)', () => {
+    expect(isCreditsContinueRequested({ [CREDITS_CONTINUE_HEADER]: '1' })).toBe(true);
+    expect(isCreditsContinueRequested({ [CREDITS_CONTINUE_HEADER]: 'true' })).toBe(true);
+  });
+
+  it('accepts the fastify repeated-header array form', () => {
+    expect(isCreditsContinueRequested({ [CREDITS_CONTINUE_HEADER]: ['1'] })).toBe(true);
+  });
+
+  it('rejects anything else or absent', () => {
+    expect(isCreditsContinueRequested({})).toBe(false);
+    expect(isCreditsContinueRequested({ [CREDITS_CONTINUE_HEADER]: 'yes' })).toBe(false);
+    expect(isCreditsContinueRequested({ [CREDITS_CONTINUE_HEADER]: '0' })).toBe(false);
+    expect(isCreditsContinueRequested({ 'x-other': '1' })).toBe(false);
+  });
+});
+
+describe('CREDITS_CONTINUE_MODEL_CELL', () => {
+  it('is an execution-ready auto-strategy cell at the default tier', async () => {
+    expect(CREDITS_CONTINUE_MODEL_CELL).toBe('auto:base');
+    const { resolveStrategyTier } = await import('@/services/pricing-tiers');
+    const resolved = resolveStrategyTier(CREDITS_CONTINUE_MODEL_CELL);
+    expect(resolved?.executionReady).toBe(true);
+    expect(resolved?.tier).toBe('base');
   });
 });
 

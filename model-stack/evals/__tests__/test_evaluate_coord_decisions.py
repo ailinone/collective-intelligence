@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -35,12 +36,12 @@ def _make_sft_record(
     *,
     strategy: str = "debate",
     decision_type: str = "moderator-selection",
-    context: dict | None = None,
+    context: dict[str, Any] | None = None,
     teacher_role: str = "moderator",
     teacher_reason: str = "task-type-match",
     teacher_confidence: float = 0.85,
     trace_id: str = "trace-x",
-) -> dict:
+) -> dict[str, Any]:
     """Match the shape produced by synthesize_sft.transform_trace."""
     coordination_brief = {
         "strategy": strategy,
@@ -78,7 +79,7 @@ def _make_sft_record(
 
 
 class TestParseSftRecord:
-    def test_well_formed_record_yields_truth(self):
+    def test_well_formed_record_yields_truth(self) -> None:
         from evals.evaluate_coord_decisions import parse_sft_record
 
         record = _make_sft_record()
@@ -93,13 +94,13 @@ class TestParseSftRecord:
         assert truth.trace_id == "trace-x"
         assert truth.context["requestId"] == "trace-x"
 
-    def test_malformed_record_returns_none(self):
+    def test_malformed_record_returns_none(self) -> None:
         from evals.evaluate_coord_decisions import parse_sft_record
 
         assert parse_sft_record({}) is None
         assert parse_sft_record({"messages": []}) is None
 
-    def test_assistant_message_invalid_json_returns_none(self):
+    def test_assistant_message_invalid_json_returns_none(self) -> None:
         from evals.evaluate_coord_decisions import parse_sft_record
 
         record = _make_sft_record()
@@ -107,7 +108,7 @@ class TestParseSftRecord:
         record["messages"][2]["content"] = "{not-valid-json"
         assert parse_sft_record(record) is None
 
-    def test_context_extraction_handles_missing_marker(self):
+    def test_context_extraction_handles_missing_marker(self) -> None:
         from evals.evaluate_coord_decisions import parse_sft_record
 
         record = _make_sft_record()
@@ -124,7 +125,7 @@ class TestParseSftRecord:
 
 
 class TestIterSftRecords:
-    def test_reads_all_files_in_dir(self, tmp_path: Path):
+    def test_reads_all_files_in_dir(self, tmp_path: Path) -> None:
         from evals.evaluate_coord_decisions import iter_sft_records
 
         f1 = tmp_path / "sft-coord-2026-05-05.jsonl"
@@ -142,7 +143,7 @@ class TestIterSftRecords:
         ids = [t.trace_id for t in truths]
         assert sorted(ids) == ["t1", "t2", "t3"]
 
-    def test_skips_malformed_lines(self, tmp_path: Path):
+    def test_skips_malformed_lines(self, tmp_path: Path) -> None:
         from evals.evaluate_coord_decisions import iter_sft_records
 
         f = tmp_path / "sft-coord-2026-05-05.jsonl"
@@ -166,7 +167,7 @@ class TestIterSftRecords:
 
 class TestEvaluate:
     @pytest.mark.asyncio
-    async def test_perfect_decider_yields_full_accuracy(self):
+    async def test_perfect_decider_yields_full_accuracy(self) -> None:
         from evals.evaluate_coord_decisions import (
             DeciderOutput,
             TeacherTruth,
@@ -186,7 +187,7 @@ class TestEvaluate:
             for i in range(5)
         ]
 
-        async def perfect_decider(t):
+        async def perfect_decider(t: TeacherTruth) -> DeciderOutput:
             return DeciderOutput(
                 role=t.teacher_role,
                 reason=t.teacher_reason,
@@ -202,7 +203,7 @@ class TestEvaluate:
         assert report.divergence_samples == []
 
     @pytest.mark.asyncio
-    async def test_always_wrong_decider_yields_zero_accuracy(self):
+    async def test_always_wrong_decider_yields_zero_accuracy(self) -> None:
         from evals.evaluate_coord_decisions import (
             DeciderOutput,
             TeacherTruth,
@@ -222,7 +223,7 @@ class TestEvaluate:
             for i in range(3)
         ]
 
-        async def wrong_decider(t):
+        async def wrong_decider(t: TeacherTruth) -> DeciderOutput:
             return DeciderOutput(role="WRONG", reason="WRONG-reason", confidence=1.0)
 
         report = await evaluate(truths, wrong_decider)
@@ -234,7 +235,7 @@ class TestEvaluate:
         assert len(report.divergence_samples) == 3
 
     @pytest.mark.asyncio
-    async def test_per_strategy_breakdown(self):
+    async def test_per_strategy_breakdown(self) -> None:
         from evals.evaluate_coord_decisions import (
             DeciderOutput,
             TeacherTruth,
@@ -247,7 +248,7 @@ class TestEvaluate:
             TeacherTruth("expert-panel", "panel-composition", {}, "coordinator", "r2", 0.9, "p1"),
         ]
 
-        async def half_correct_decider(t):
+        async def half_correct_decider(t: TeacherTruth) -> DeciderOutput:
             # Correct on debate, wrong on expert-panel
             if t.strategy == "debate":
                 return DeciderOutput(t.teacher_role, t.teacher_reason, 0.9)
@@ -261,7 +262,7 @@ class TestEvaluate:
         assert report.per_strategy["expert-panel/panel-composition"]["role_accuracy"] == 0.0
 
     @pytest.mark.asyncio
-    async def test_divergence_samples_capped(self):
+    async def test_divergence_samples_capped(self) -> None:
         from evals.evaluate_coord_decisions import (
             DeciderOutput,
             TeacherTruth,
@@ -273,14 +274,14 @@ class TestEvaluate:
             for i in range(20)
         ]
 
-        async def wrong_decider(t):
+        async def wrong_decider(t: TeacherTruth) -> DeciderOutput:
             return DeciderOutput("WRONG", "r", 0.9)
 
         report = await evaluate(truths, wrong_decider, max_divergence_samples=5)
         assert len(report.divergence_samples) == 5
 
     @pytest.mark.asyncio
-    async def test_role_confusion_matrix(self):
+    async def test_role_confusion_matrix(self) -> None:
         from evals.evaluate_coord_decisions import (
             DeciderOutput,
             TeacherTruth,
@@ -293,7 +294,7 @@ class TestEvaluate:
             TeacherTruth("debate", "moderator-selection", {}, "synthesizer", "r", 0.9, "d3"),
         ]
 
-        async def confused_decider(t):
+        async def confused_decider(t: TeacherTruth) -> DeciderOutput:
             return DeciderOutput("moderator", "r", 0.9)
 
         report = await evaluate(truths, confused_decider)
@@ -309,7 +310,7 @@ class TestEvaluate:
 
 class TestInProcessDecider:
     @pytest.mark.asyncio
-    async def test_mock_cascade_decider_returns_canonical_role(self):
+    async def test_mock_cascade_decider_returns_canonical_role(self) -> None:
         from evals.evaluate_coord_decisions import (
             TeacherTruth,
             make_inprocess_decider,
@@ -336,7 +337,7 @@ class TestInProcessDecider:
 
 
 class TestCli:
-    def test_cli_runs_against_mock_cascade(self, tmp_path: Path):
+    def test_cli_runs_against_mock_cascade(self, tmp_path: Path) -> None:
         from click.testing import CliRunner
 
         from evals.evaluate_coord_decisions import cli
@@ -389,7 +390,7 @@ class TestCli:
         assert report["role_accuracy"] == 0.5
         assert report["decider_label"] == "in-process:mock_cascade"
 
-    def test_cli_http_mode_requires_endpoint(self, tmp_path: Path):
+    def test_cli_http_mode_requires_endpoint(self, tmp_path: Path) -> None:
         from click.testing import CliRunner
 
         from evals.evaluate_coord_decisions import cli
@@ -416,7 +417,7 @@ class TestCli:
         assert result.exit_code != 0
         assert "--endpoint" in result.output
 
-    def test_cli_empty_input_exits_nonzero(self, tmp_path: Path):
+    def test_cli_empty_input_exits_nonzero(self, tmp_path: Path) -> None:
         from click.testing import CliRunner
 
         from evals.evaluate_coord_decisions import cli

@@ -189,7 +189,10 @@ class VoteAggregator:
         self, tier_results: Sequence[TierResult]
     ) -> tuple[str, str, float, dict[str, int]]:
         """Returns (role, reason, confidence, vote_distribution)."""
-        weighted_scores: Counter[str] = Counter()
+        # 2026-10-18 — plain dict, not Counter: scores are floats and
+        # Counter's value type is int. Winner selection below is the exact
+        # stable-first-max equivalent of Counter.most_common(1)[0].
+        weighted_scores: dict[str, float] = {}
         all_votes: list[CoordinatorVote] = []
         vote_dist: Counter[str] = Counter()
 
@@ -198,7 +201,7 @@ class VoteAggregator:
             for v in tr.votes:
                 acc = self.accuracy_history.get(v.model_id, 1.0)
                 weight = tier_w * v.confidence * acc
-                weighted_scores[v.role] += weight
+                weighted_scores[v.role] = weighted_scores.get(v.role, 0.0) + weight
                 vote_dist[v.role] += 1
                 all_votes.append(v)
 
@@ -206,7 +209,7 @@ class VoteAggregator:
             return "fallback-default", "no-votes", 0.0, {}
 
         # Top-scoring role wins.
-        winner_role, winner_score = weighted_scores.most_common(1)[0]
+        winner_role, winner_score = max(weighted_scores.items(), key=lambda kv: kv[1])
         total_weight = sum(weighted_scores.values())
         confidence = winner_score / total_weight if total_weight > 0 else 0.0
 

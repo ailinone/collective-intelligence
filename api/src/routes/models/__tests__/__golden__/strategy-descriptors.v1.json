@@ -1,0 +1,149 @@
+{
+  "comment": "Golden strategy-descriptor corpus v1 — the cross-repo contract artifact (ci → chat BFF). chat BFF validates its pydantic models against this corpus; strategy-descriptors.golden.test.ts asserts a rebuild matches byte-for-byte. Regenerate via: cd api && npx tsx scripts/generate-strategy-descriptor-golden.ts — never hand-edit.",
+  "catalogVersion": "v1",
+  "descriptors": [
+    {
+      "given": {
+        "id": "best:medium",
+        "strategy": "best",
+        "tier": "medium",
+        "qualityTarget": 0.8,
+        "inputPer1MUsd": 2,
+        "outputPer1MUsd": 8,
+        "inputCostPer1k": 0.002,
+        "outputCostPer1k": 0.002
+      },
+      "descriptor": {
+        "catalogVersion": "v1",
+        "id": "best:medium",
+        "kind": "collective_strategy",
+        "displayName": "Best Strategy",
+        "description": "Collective best strategy at the medium pricing tier (quality target 0.8).",
+        "strategy": {
+          "family": "best",
+          "tier": "medium"
+        },
+        "selectable": true,
+        "capabilities": [
+          "chat",
+          "streaming",
+          "function_calling"
+        ],
+        "operability": "operational",
+        "pricing": {
+          "currency": "USD",
+          "inputPer1MUsd": 2,
+          "outputPer1MUsd": 8
+        },
+        "entitlement": {
+          "required": true
+        }
+      }
+    },
+    {
+      "given": {
+        "id": "consensus:large",
+        "strategy": "consensus",
+        "tier": "large",
+        "qualityTarget": 0.88,
+        "inputPer1MUsd": 4,
+        "outputPer1MUsd": 20,
+        "inputCostPer1k": 0.004,
+        "outputCostPer1k": 0.004
+      },
+      "descriptor": {
+        "catalogVersion": "v1",
+        "id": "consensus:large",
+        "kind": "collective_strategy",
+        "displayName": "Consensus Strategy",
+        "description": "Collective consensus strategy at the large pricing tier (quality target 0.88).",
+        "strategy": {
+          "family": "consensus",
+          "tier": "large"
+        },
+        "selectable": true,
+        "capabilities": [
+          "chat",
+          "function_calling"
+        ],
+        "operability": "operational",
+        "pricing": {
+          "currency": "USD",
+          "inputPer1MUsd": 4,
+          "outputPer1MUsd": 20
+        },
+        "entitlement": {
+          "required": true
+        }
+      }
+    },
+    {
+      "given": {
+        "id": "economy:base",
+        "strategy": "economy",
+        "tier": "base",
+        "qualityTarget": 0.75,
+        "inputPer1MUsd": 1,
+        "outputPer1MUsd": 4,
+        "inputCostPer1k": 0.001,
+        "outputCostPer1k": 0.001
+      },
+      "descriptor": {
+        "catalogVersion": "v1",
+        "id": "economy:base",
+        "kind": "collective_strategy",
+        "displayName": "Economy Strategy",
+        "description": "Collective economy strategy at the base pricing tier (quality target 0.75).",
+        "strategy": {
+          "family": "economy",
+          "tier": "base"
+        },
+        "selectable": true,
+        "capabilities": [
+          "chat",
+          "streaming",
+          "function_calling"
+        ],
+        "operability": "operational",
+        "pricing": {
+          "currency": "USD",
+          "inputPer1MUsd": 1,
+          "outputPer1MUsd": 4
+        },
+        "entitlement": {
+          "required": true
+        }
+      }
+    }
+  ],
+  "failClosed": [
+    {
+      "given": {
+        "id": "war-room:large",
+        "strategy": "war-room",
+        "tier": "large",
+        "qualityTarget": 0.88,
+        "inputPer1MUsd": 4,
+        "outputPer1MUsd": 20,
+        "inputCostPer1k": 0.004,
+        "outputCostPer1k": 0.004
+      },
+      "descriptor": null,
+      "reason": "family 'war-room' is outside the canonical 8-family enum (shadow-wired) — must never leak"
+    },
+    {
+      "given": {
+        "id": "no_viable_strategy:base",
+        "strategy": "no_viable_strategy",
+        "tier": "base",
+        "qualityTarget": 0.75,
+        "inputPer1MUsd": 1,
+        "outputPer1MUsd": 4,
+        "inputCostPer1k": 0.001,
+        "outputCostPer1k": 0.001
+      },
+      "descriptor": null,
+      "reason": "wholly bogus family string — buildStrategyDescriptor fails closed with null"
+    }
+  ]
+}

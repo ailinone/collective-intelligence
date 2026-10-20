@@ -22,6 +22,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 import pytest
 import yaml
@@ -80,7 +81,7 @@ specialty: code
 
 
 @pytest.fixture
-def fake_config_dir(tmp_path: Path):
+def fake_config_dir(tmp_path: Path) -> Path:
     cfg_dir = tmp_path / "coord-stable"
     cfg_dir.mkdir()
     (cfg_dir / "_shared.yaml").write_text(SHARED_FAKE, encoding="utf-8")
@@ -95,7 +96,7 @@ def fake_config_dir(tmp_path: Path):
 
 
 class TestLoadCoordConfig:
-    def test_child_inherits_parent_defaults(self, fake_config_dir):
+    def test_child_inherits_parent_defaults(self, fake_config_dir: Path) -> None:
         from alignment.sft.train_sft_coord import load_coord_config
 
         merged = load_coord_config("m13", config_dir=fake_config_dir)
@@ -107,7 +108,7 @@ class TestLoadCoordConfig:
         assert merged["fine_tune"]["alpha"] == 32
         assert merged["training"]["num_epochs"] == 3
 
-    def test_child_overrides_parent_dict_leaves(self, fake_config_dir):
+    def test_child_overrides_parent_dict_leaves(self, fake_config_dir: Path) -> None:
         from alignment.sft.train_sft_coord import load_coord_config
 
         merged = load_coord_config("m01", config_dir=fake_config_dir)
@@ -119,7 +120,7 @@ class TestLoadCoordConfig:
         assert merged["training"]["num_epochs"] == 5
         assert merged["training"]["learning_rate"] == 2.0e-4
 
-    def test_child_replaces_parent_lists(self, fake_config_dir):
+    def test_child_replaces_parent_lists(self, fake_config_dir: Path) -> None:
         from alignment.sft.train_sft_coord import load_coord_config
 
         merged = load_coord_config("m01", config_dir=fake_config_dir)
@@ -127,7 +128,7 @@ class TestLoadCoordConfig:
         # Child target_modules fully replaces parent list, not concat
         assert merged["fine_tune"]["target_modules"] == ["query", "key", "value"]
 
-    def test_missing_config_raises(self, fake_config_dir):
+    def test_missing_config_raises(self, fake_config_dir: Path) -> None:
         from alignment.sft.train_sft_coord import load_coord_config
 
         with pytest.raises(FileNotFoundError):
@@ -140,7 +141,7 @@ class TestLoadCoordConfig:
 
 
 class TestTranslateToSftConfig:
-    def test_all_required_sections_present(self, fake_config_dir):
+    def test_all_required_sections_present(self, fake_config_dir: Path) -> None:
         from alignment.sft.train_sft_coord import (
             TranslationOptions,
             load_coord_config,
@@ -172,7 +173,7 @@ class TestTranslateToSftConfig:
         assert sft["lora"]["enabled"] is True
         assert sft["lora"]["task_type"] == "CAUSAL_LM"
 
-    def test_encoder_arch_maps_to_seq_cls_task(self, fake_config_dir):
+    def test_encoder_arch_maps_to_seq_cls_task(self, fake_config_dir: Path) -> None:
         from alignment.sft.train_sft_coord import (
             load_coord_config,
             translate_to_sft_config,
@@ -184,7 +185,7 @@ class TestTranslateToSftConfig:
         assert sft["lora"]["task_type"] == "SEQ_CLS"
         assert sft["lora"]["target_modules"] == ["query", "key", "value"]
 
-    def test_lora_rank_inherits_from_child(self, fake_config_dir):
+    def test_lora_rank_inherits_from_child(self, fake_config_dir: Path) -> None:
         from alignment.sft.train_sft_coord import (
             load_coord_config,
             translate_to_sft_config,
@@ -196,7 +197,7 @@ class TestTranslateToSftConfig:
         assert sft["lora"]["r"] == 8
         assert sft["lora"]["lora_alpha"] == 32
 
-    def test_real_coord_stable_configs_translate(self):
+    def test_real_coord_stable_configs_translate(self) -> None:
         """Sanity: every real m*.yaml in the repo translates without errors."""
         from alignment.sft.train_sft_coord import (
             COORD_CONFIG_DIR,
@@ -220,7 +221,7 @@ class TestTranslateToSftConfig:
 
 
 class TestFilters:
-    def test_tier_filter(self, fake_config_dir):
+    def test_tier_filter(self, fake_config_dir: Path) -> None:
         from alignment.sft.train_sft_coord import filter_by_tier_and_specialty
 
         result = filter_by_tier_and_specialty(
@@ -231,7 +232,7 @@ class TestFilters:
         )
         assert result == ["m01"]
 
-    def test_specialty_filter(self, fake_config_dir):
+    def test_specialty_filter(self, fake_config_dir: Path) -> None:
         from alignment.sft.train_sft_coord import filter_by_tier_and_specialty
 
         result = filter_by_tier_and_specialty(
@@ -242,7 +243,7 @@ class TestFilters:
         )
         assert result == ["m13"]
 
-    def test_combined_filter(self, fake_config_dir):
+    def test_combined_filter(self, fake_config_dir: Path) -> None:
         from alignment.sft.train_sft_coord import filter_by_tier_and_specialty
 
         # tier 4 + specialty generalist → empty
@@ -261,16 +262,16 @@ class TestFilters:
 
 
 class TestInvokeTrainer:
-    def test_calls_runner_with_expected_args(self, tmp_path):
+    def test_calls_runner_with_expected_args(self, tmp_path: Path) -> None:
         from alignment.sft.train_sft_coord import invoke_trainer
 
-        captured = {}
+        captured: dict[str, Any] = {}
 
         @dataclass
         class FakeResult:
             returncode: int = 0
 
-        def fake_runner(cmd, **kw):
+        def fake_runner(cmd: list[str], **kw: Any) -> FakeResult:
             captured["cmd"] = cmd
             captured["kw"] = kw
             return FakeResult(returncode=0)
@@ -293,7 +294,9 @@ class TestInvokeTrainer:
 
 
 class TestCli:
-    def test_cli_dry_run_one_model(self, fake_config_dir, tmp_path, monkeypatch):
+    def test_cli_dry_run_one_model(
+        self, fake_config_dir: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         from click.testing import CliRunner
 
         import alignment.sft.train_sft_coord as mod
@@ -315,7 +318,9 @@ class TestCli:
         parsed = yaml.safe_load(gen.read_text(encoding="utf-8"))
         assert parsed["model"]["base_model"] == "answerdotai/ModernBERT-base"
 
-    def test_cli_filter_returns_no_runs(self, fake_config_dir, tmp_path, monkeypatch):
+    def test_cli_filter_returns_no_runs(
+        self, fake_config_dir: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         from click.testing import CliRunner
 
         import alignment.sft.train_sft_coord as mod
@@ -328,7 +333,9 @@ class TestCli:
         assert result.exit_code == 0
         assert "No coordinators matched" in result.output
 
-    def test_cli_requires_target(self, fake_config_dir, tmp_path, monkeypatch):
+    def test_cli_requires_target(
+        self, fake_config_dir: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         from click.testing import CliRunner
 
         import alignment.sft.train_sft_coord as mod

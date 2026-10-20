@@ -1196,21 +1196,6 @@ Output ONLY valid JSON.`,
     log.info({ stepId: step.id, toolName: tool.name, toolCallId }, 'Executing tool step');
 
     try {
-      // Import tool execution functions dynamically
-      const toolExecutionModule = await import('@/services/advanced-tool-execution-service.js');
-      const {
-        executeExtractFunctionTool,
-        executeRenameSymbolTool,
-        executeExtractVariableTool,
-        executeHealFileTool,
-        executeGenerateTestsTool,
-        executeDetectErrorsTool,
-        executeValidateCodeTool,
-        executeFileSearchTool,
-        executeDeleteFileTool,
-        executeExploreCodebaseTool,
-      } = toolExecutionModule;
-
       // Create tool execution context
       const toolContext: ToolExecutionContext = {
         // SECURITY: was `process.cwd()` — the SAME clamped, operator-configured
@@ -1224,124 +1209,50 @@ Output ONLY valid JSON.`,
         userId: context.userId,
       };
 
-      // Dispatch to appropriate tool function based on tool name
-      let toolResult: ToolResult;
-
       // Substitute variables in parameters
       const resolvedParams = this.substituteVariables(tool.parameters || {}, context.variables);
 
-      switch (tool.name) {
-        case 'extract_function':
-          toolResult = await executeExtractFunctionTool(
-            resolvedParams as {
-              filePath: string;
-              startLine: number;
-              endLine: number;
-              functionName: string;
-              dryRun?: boolean;
-            },
-            toolCallId,
-            toolContext
-          );
-          break;
-
-        case 'rename_symbol':
-          toolResult = await executeRenameSymbolTool(
-            resolvedParams as {
-              oldName: string;
-              newName: string;
-              files: string[];
-              symbolType?: 'function' | 'variable' | 'class' | 'any';
-              dryRun?: boolean;
-            },
-            toolCallId,
-            toolContext
-          );
-          break;
-
-        case 'extract_variable':
-          toolResult = await executeExtractVariableTool(
-            resolvedParams as {
-              filePath: string;
-              line: number;
-              startColumn: number;
-              endColumn: number;
-              variableName: string;
-              dryRun?: boolean;
-            },
-            toolCallId,
-            toolContext
-          );
-          break;
-
-        case 'heal_file':
-          toolResult = await executeHealFileTool(
-            resolvedParams as { filePath: string },
-            toolCallId,
-            toolContext
-          );
-          break;
-
-        case 'generate_tests':
-          toolResult = await executeGenerateTestsTool(
-            resolvedParams as { filePath: string },
-            toolCallId,
-            toolContext
-          );
-          break;
-
-        case 'detect_errors':
-          toolResult = await executeDetectErrorsTool(
-            resolvedParams as { filePath: string },
-            toolCallId,
-            toolContext
-          );
-          break;
-
-        case 'validate_code':
-          toolResult = await executeValidateCodeTool(
-            resolvedParams as { filePaths: string[] },
-            toolCallId,
-            toolContext
-          );
-          break;
-
-        case 'file_search':
-          toolResult = await executeFileSearchTool(
-            resolvedParams as { pattern: string; directory?: string },
-            toolCallId,
-            toolContext
-          );
-          break;
-
-        case 'delete_file':
-          toolResult = await executeDeleteFileTool(
-            resolvedParams as { filePath: string },
-            toolCallId,
-            toolContext
-          );
-          break;
-
-        case 'explore_codebase':
-          toolResult = await executeExploreCodebaseTool(
-            resolvedParams as { path?: string; maxDepth?: number },
-            toolCallId,
-            toolContext
-          );
-          break;
-
-        default:
-          // For tools not directly available, try to use chat request processor
-          log.warn(
-            { toolName: tool.name },
-            'Tool not directly supported in workflow engine, attempting via chat request processor'
-          );
-          toolResult = {
-            tool_call_id: toolCallId,
-            success: false,
-            error: `Tool "${tool.name}" is not directly supported in workflow engine. Please use chat request processor for this tool.`,
-          };
-      }
+      // SECURITY (single-decision-point refactor, follow-up to ci#652/#653):
+      // this used to import advanced-tool-execution-service's executors
+      // directly and switch on `tool.name` by hand — a call-site PARALLEL to
+      // chat-request-processor.ts's executeRealTool, base-strategy.ts's
+      // executeModelWithTools and strategy-tool-executor.ts's
+      // executeToolForStrategy, none of which it went through. It ran
+      // whatever it imported, with no `safeForStrategies` check at all, and
+      // an unknown tool name silently fell through to a "not supported"
+      // result instead of being refused outright. It was only ever safe in
+      // practice because the ROUTE gates the entire request behind
+      // `workflowRequiresPlatformAdmin()` above — a future caller of
+      // `AgenticWorkflowEngine.execute()` that omits that gate would have
+      // reopened the hole with no protection left in this function.
+      //
+      // Routing through the SAME central registry every other tool-calling
+      // call site uses closes that: an unregistered/unknown tool name and a
+      // tool registered `safeForStrategies: false` are now both refused by
+      // `executeForStrategy()` itself, not by whichever caller remembered to
+      // ask first.
+      //
+      // KNOWN BEHAVIOR CHANGE (documented in the PR, not silently patched
+      // over): `delete_file` is registered `safeForStrategies: false`
+      // (chat-request-processor.ts's registerToolsInRegistry), so it is now
+      // refused here too — including for the platform-admin-gated
+      // `/v1/workflows/execute` path, which previously could reach
+      // `executeDeleteFileTool` directly. The registry has no notion of
+      // "blocked for tenants but allowed for platform admins": the single
+      // existing bypass in this codebase
+      // (`executeQuorumApprovedToolForStrategy`, strategy-tool-executor.ts)
+      // is a narrow, caller-verified exception for the quorum mechanism, and
+      // `ExecutionContext` here carries no admin/authorization signal to
+      // condition an equivalent bypass on. Threading one through from the
+      // route is a real architecture decision left for a follow-up, not
+      // decided unilaterally in this refactor. A platform admin who needs to
+      // delete a file should use `/v1/tools/*` (tools-routes.ts) directly.
+      const toolResult: ToolResult = await toolRegistry.executeForStrategy(
+        tool.name,
+        resolvedParams,
+        toolCallId,
+        toolContext
+      );
 
       if (!toolResult.success) {
         log.error(

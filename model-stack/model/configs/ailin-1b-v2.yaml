@@ -1,0 +1,135 @@
+# Copyright (C) 2026 Ailin One, Inc.
+#
+# This file is part of Collective Intelligence Engine (ci).
+# Licensed under the GNU Affero General Public License v3.0 or later.
+# See LICENSE in the repository root, or <https://www.gnu.org/licenses/>.
+#
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Source: https://github.com/ailinone/collective-intelligence
+
+# ============================================================================
+# Ailin-1B-v2 Model Configuration — 2026-10 modern recipe
+# ============================================================================
+# Same non-embedding compute budget as ailin-1b (v1), modernized to the
+# 2025/2026 small-model standard (Qwen3 / Gemma-2 / SmolLM3 generation):
+#
+#   v1 (2024 recipe)                    v2 (2026 recipe)
+#   -----------------                   -----------------
+#   vocab 32k                          vocab 131072  (~2.5x fewer tokens
+#                                                      per char; multilingual)
+#   max_position 4096                  max_position 32768 (native)
+#   rope_theta 10k                     rope_theta 1M (long-context headroom)
+#   GQA 4:1 (4 KV heads)               GQA 2:1 (8 KV heads — better quality
+#                                                      at 1B scale, still 2x
+#                                                      KV savings vs MHA)
+#   no QK-norm                         qk_norm: true (logit stability at
+#                                      long context; Gemma-2/Qwen3 style)
+#   intermediate 5504                  intermediate 6144
+#
+# Parameter count (see model_spec.ModelSpec.total_params):
+#   embedding 131072*2048 = 268.4M (tied LM head)
+#   per-layer  ~50.35M x 24 layers = 1.208B
+#   total ~1.477B (non-embedding ~1.209B — same class as v1)
+# ============================================================================
+
+model:
+  name: "ailin-1b-v2"
+  architecture: "decoder_only_transformer"
+
+  # Core dimensions
+  hidden_size: 2048
+  num_layers: 24
+  num_attention_heads: 16
+  num_key_value_heads: 8      # GQA 2:1
+  intermediate_size: 6144
+  vocab_size: 131072          # bpe_128k tokenizer (tokenizer/configs/bpe_128k.yaml)
+  max_position_embeddings: 32768
+
+  # Positional encoding — high theta gives 32k native context without
+  # scaling. For post-training extension beyond 32k, set rope_scaling to
+  # {"type": "yarn", "factor": 4.0, "original_max_position_embeddings": 32768}.
+  position_embedding_type: "rope"
+  rope_theta: 1000000.0
+  rope_scaling: null
+
+  # Normalization
+  norm_type: "rmsnorm"
+  layer_norm_eps: 1.0e-5
+
+  # Activation
+  hidden_act: "silu"
+  use_gated_mlp: true
+
+  # Attention
+  attention_dropout: 0.0
+  attention_bias: false
+  use_flash_attention: true
+  qk_norm: true               # per-head RMSNorm on q/k pre-RoPE
+
+  # Embeddings
+  tie_word_embeddings: true   # standard at this scale
+  embedding_dropout: 0.0
+
+  # Initialization
+  initializer_range: 0.02
+  use_scaled_init: true
+
+  # Gradient checkpointing
+  gradient_checkpointing: true
+
+  # Precision
+  dtype: "bfloat16"
+  use_mixed_precision: true
+
+# Training hyperparameters — ~400B tokens (~330x Chinchilla for 1.2B
+# non-embedding params; matches the modern over-trained small-model regime).
+training:
+  optimizer: "adamw"
+  learning_rate: 3.0e-4
+  min_learning_rate: 3.0e-5
+  weight_decay: 0.1
+  adam_beta1: 0.9
+  adam_beta2: 0.95
+  adam_epsilon: 1.0e-8
+  max_grad_norm: 1.0
+
+  lr_scheduler: "cosine"
+  warmup_steps: 2000
+  total_steps: 96000          # 512 * 8192 * 96000 ≈ 400B tokens
+  cooldown_steps: 1000
+
+  micro_batch_size: 4
+  gradient_accumulation_steps: 16
+  global_batch_size: 512
+  sequence_length: 8192       # train-long; serve 32k via high rope_theta
+  tokens_per_step: 4194304
+
+  num_workers: 8
+  pin_memory: true
+  prefetch_factor: 2
+
+  save_interval_steps: 1000
+  eval_interval_steps: 500
+  log_interval_steps: 10
+
+  distributed_backend: "nccl"
+  deepspeed_stage: 2
+  activation_checkpointing: true
+
+# Evaluation — 2026 suite: instruction following, reasoning, code, plus the
+# classic anchors for continuity with v1 numbers.
+evaluation:
+  benchmarks:
+    - name: "ifeval"            # instruction following (verifiable constraints)
+      shots: 0
+    - name: "gsm8k"             # math reasoning anchor
+      shots: 5
+    - name: "gpqa_diamond"      # graduate-level reasoning
+      shots: 0
+    - name: "humaneval"         # code generation (pass@1)
+      shots: 0
+    - name: "mmlu"              # knowledge anchor (continuity with v1)
+      shots: 5
+    - name: "arc_challenge"     # classic anchor (continuity with v1)
+      shots: 25
+  eval_batch_size: 16

@@ -18,6 +18,7 @@
 
 import type { FastifyInstance } from 'fastify';
 import { authenticate, requireRole } from '@/middleware/auth-middleware';
+import { requirePermission } from '@/middleware/require-permission-middleware';
 import { rejectAnonymousGuestKeyPreHandler } from '@/services/anonymous-quota-gate';
 import { rejectChatFreeTierKeyPreHandler } from '@/services/free-tier-quota-gate';
 import { logger } from '@/utils/logger';
@@ -40,6 +41,11 @@ export async function registerModelsConfigRoutes(server: FastifyInstance): Promi
         rejectAnonymousGuestKeyPreHandler,
         rejectChatFreeTierKeyPreHandler,
         requireRole('admin', 'developer', 'owner'),
+        // SEC-01: the coarse role check above only proves claims; back it with
+        // the fine-grained RBAC model (Role -> Permission -> RolePermission),
+        // matching the permission the 'developer' role is actually seeded with
+        // (config/rbac-defaults.ts).
+        requirePermission('models:manage'),
         async (request, reply) => {
           // Ensure requireRole has been checked - if reply was sent, stop here
           // This check MUST be first to prevent handler execution if requireRole blocked

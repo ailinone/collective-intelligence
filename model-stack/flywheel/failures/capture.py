@@ -35,6 +35,7 @@ DEFAULT_FAILURE_STORE = Path(__file__).resolve().parent / "captured_failures.jso
 # Data model
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class CapturedFailure:
     failure_id: str
@@ -66,7 +67,7 @@ SUITE_TO_CAPABILITY: dict[str, str] = {
 }
 
 
-def infer_capability(suite: str, detail: dict) -> str:
+def infer_capability(suite: str, detail: dict[str, Any]) -> str:
     """Map a suite name and detail record to a capability category."""
     if suite in SUITE_TO_CAPABILITY:
         return SUITE_TO_CAPABILITY[suite]
@@ -84,7 +85,8 @@ def infer_capability(suite: str, detail: dict) -> str:
 # Extraction from eval reports
 # ---------------------------------------------------------------------------
 
-def extract_failures_from_report(report: dict) -> list[CapturedFailure]:
+
+def extract_failures_from_report(report: dict[str, Any]) -> list[CapturedFailure]:
     """Parse an eval runner report and extract failed examples."""
     failures: list[CapturedFailure] = []
     model_name = report.get("model_name", "")
@@ -110,9 +112,12 @@ def extract_failures_from_report(report: dict) -> list[CapturedFailure]:
                 is_failure = True
             elif "passed" in detail:
                 passed = detail["passed"]
-                if isinstance(passed, bool) and not passed:
-                    is_failure = True
-                elif isinstance(passed, list) and not all(passed):
+                if (
+                    isinstance(passed, bool)
+                    and not passed
+                    or isinstance(passed, list)
+                    and not all(passed)
+                ):
                     is_failure = True
             elif "resisted" in detail and not detail.get("resisted", True):
                 is_failure = True
@@ -127,10 +132,16 @@ def extract_failures_from_report(report: dict) -> list[CapturedFailure]:
                 failure_id=f"{suite}-{idx:04d}",
                 suite=suite,
                 capability=capability,
-                question=detail.get("question", detail.get("prompt", detail.get("prompt_preview", "")))[:500],
+                question=detail.get(
+                    "question", detail.get("prompt", detail.get("prompt_preview", ""))
+                )[:500],
                 expected=str(detail.get("gold", detail.get("expected", "")))[:300],
                 actual=str(detail.get("predicted", detail.get("model_answer", "")))[:300],
-                metadata={k: v for k, v in detail.items() if k not in ("question", "prompt", "gold", "expected", "predicted")},
+                metadata={
+                    k: v
+                    for k, v in detail.items()
+                    if k not in ("question", "prompt", "gold", "expected", "predicted")
+                },
                 model_name=model_name,
                 model_version=model_version,
             )
@@ -142,6 +153,7 @@ def extract_failures_from_report(report: dict) -> list[CapturedFailure]:
 # ---------------------------------------------------------------------------
 # Store
 # ---------------------------------------------------------------------------
+
 
 class FailureStore:
     """JSON-backed store for captured failures."""
@@ -206,8 +218,9 @@ class FailureStore:
 # CLI
 # ---------------------------------------------------------------------------
 
+
 @click.group()
-def cli():
+def cli() -> None:
     """Failure capture system."""
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
 
@@ -215,21 +228,23 @@ def cli():
 @cli.command()
 @click.option("--report", required=True, type=click.Path(exists=True), help="Eval report JSON")
 @click.option("--store", type=click.Path(), default=str(DEFAULT_FAILURE_STORE))
-def capture(report, store):
+def capture(report: str, store: str) -> None:
     """Extract failures from an eval report and store them."""
     data = json.loads(Path(report).read_text())
     failures = extract_failures_from_report(data)
 
     fs = FailureStore(Path(store))
     added = fs.add(failures)
-    click.echo(f"Captured {len(failures)} failures, {added} new (store has {len(fs._failures)} total)")
+    click.echo(
+        f"Captured {len(failures)} failures, {added} new (store has {len(fs._failures)} total)"
+    )
 
 
 @cli.command("list")
 @click.option("--capability", default=None)
 @click.option("--suite", default=None)
 @click.option("--store", type=click.Path(), default=str(DEFAULT_FAILURE_STORE))
-def list_cmd(capability, suite, store):
+def list_cmd(capability: str | None, suite: str | None, store: str) -> None:
     """List captured failures."""
     fs = FailureStore(Path(store))
     failures = fs.list_failures(capability=capability, suite=suite)
@@ -244,7 +259,7 @@ def list_cmd(capability, suite, store):
 
 @cli.command()
 @click.option("--store", type=click.Path(), default=str(DEFAULT_FAILURE_STORE))
-def summary(store):
+def summary(store: str) -> None:
     """Show failure counts by capability."""
     fs = FailureStore(Path(store))
     counts = fs.summary()
@@ -253,7 +268,7 @@ def summary(store):
         return
     total = sum(counts.values())
     for cap, cnt in sorted(counts.items(), key=lambda x: -x[1]):
-        click.echo(f"  {cap:20s} {cnt:5d}  ({cnt/total*100:.1f}%)")
+        click.echo(f"  {cap:20s} {cnt:5d}  ({cnt / total * 100:.1f}%)")
     click.echo(f"  {'TOTAL':20s} {total:5d}")
 
 

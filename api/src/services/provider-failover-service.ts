@@ -16,6 +16,8 @@
 import type { ChatRequest, ChatResponse, Model, ModelCapability } from '@/types';
 import type { ProviderAdapter } from '@/providers/base/provider-adapter';
 import { logger } from '@/utils/logger';
+import { extractStatusCode } from '@/utils/type-guards';
+import { getUserSpecifiedModelFlag } from '@/types/chat-request-extended';
 
 /**
  * Failover attempt result
@@ -25,6 +27,10 @@ export interface FailoverAttempt {
   model: string;
   success: boolean;
   error?: string;
+  /** Provider-reported/status error code when one could be extracted (ci#765). */
+  errorCode?: string | number;
+  /** True when the request carried an explicit (pinned) model (ci#765). */
+  pinnedRequest?: boolean;
   latency: number;
 }
 
@@ -309,12 +315,21 @@ export class ProviderFailoverService {
       };
     } catch (error) {
       const latency = Date.now() - startTime;
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      // ci#765 defect 1: the failure line must carry the provider error code
+      // and whether this was a pinned-model attempt — otherwise a dying pin
+      // (prod: @cf/deepseek pin on cloudflare-workers-ai) is invisible in the
+      // logs between routing and the fallback chain starting.
+      const errorCode = extractStatusCode(error);
+      const pinnedRequest = getUserSpecifiedModelFlag(request);
 
       this.log.warn(
         {
           provider: providerName,
           model: model.name,
-          error: error instanceof Error ? error.message : String(error),
+          error: errorMessage,
+          errorCode: errorCode ?? 'UNKNOWN',
+          pinnedRequest,
           latency,
           attemptType,
         },
@@ -325,7 +340,9 @@ export class ProviderFailoverService {
         provider: providerName,
         model: model.name,
         success: false,
-        error: error instanceof Error ? error.message : String(error),
+        error: errorMessage,
+        errorCode: errorCode ?? 'UNKNOWN',
+        pinnedRequest,
         latency,
       };
     }

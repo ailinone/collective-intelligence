@@ -54,7 +54,12 @@ import { sanitizeToolSchemas } from '@/utils/tool-schema-sanitizer';
 import type { ChatResponse } from '@/types';
 import { prisma } from '@/database/client';
 import { Prisma } from '@/generated/prisma/index.js';
-import { resolveAilinVirtualModelAlias } from '@/services/ailin-virtual-model-service';
+import {
+  resolveAilinVirtualModelAlias,
+  resolveTierCarrier,
+} from '@/services/ailin-virtual-model-service';
+import { gateChatRequest } from '@/services/prepaid-wallet-gate';
+import { prepaidWalletResponses } from '@/services/prepaid-wallet-openapi';
 import { checkExplicitModelExists, unknownModelErrorBody } from '@/services/explicit-model-guard';
 import {
   STRATEGY_INPUT_VALUES,
@@ -777,6 +782,11 @@ class ResponsesService {
       ailin_alias: aliasResolution?.alias,
       ailin_constraints: aliasResolution?.constraints,
       ailin_billing: aliasResolution?.billing,
+      // Billing carrier — same SERVER-SET fields normalizeChatRequest sets on
+      // the chat path. The prepaid wallet gate/debit keys on exactly these;
+      // absent for plain profiles ('ailin-auto'), 'auto' and raw provider ids.
+      ailin_tier: aliasResolution?.tier,
+      ailin_tier_rate: aliasResolution?.tierRate,
       strategy:
         resolvedStrategy ??
         (canonicalStrategy === 'dynamic'
@@ -886,11 +896,22 @@ class ResponsesService {
               organizationId: context.organizationId,
               userId: context.userId ?? '',
               requestId: responseId,
-              request: { model: request.model ?? 'auto', messages: [] },
+              // Carrier + real tokens so the prepaid wallet debits tiered
+              // cells executed through this route (previously 0/0 tokens and
+              // no ailin_tier => silent no-op debit).
+              request: {
+                model: request.model ?? 'auto',
+                messages: [],
+                ...resolveTierCarrier(request.model),
+              },
               cacheHit: false,
               strategyOverride: summary.strategyUsed || 'single-streaming',
               totalCostOverride: summary.totalCost,
               totalTokensOverride: summary.usage.total_tokens,
+              tokenUsageOverride: {
+                promptTokens: summary.usage.input_tokens ?? 0,
+                completionTokens: summary.usage.output_tokens ?? 0,
+              },
             });
           } catch (error) {
             log.warn(
@@ -1426,6 +1447,7 @@ export async function registerResponsesRoutes(server: FastifyInstance): Promise<
           },
         },
         response: {
+          ...prepaidWalletResponses,
           200: {
             description: 'Response created successfully',
             type: 'object',
@@ -1667,6 +1689,22 @@ export async function registerResponsesRoutes(server: FastifyInstance): Promise<
             return reply.status(streamGate.status).send(streamGate.body);
           }
 
+          // Prepaid wallet gate — same placement semantics as runGate above
+          // (before any SSE header, so a 402 keeps a proper JSON body) and
+          // the same carrier chat-routes gates on. gateChatShape already
+          // resolves the alias and carries ailin_tier/ailin_tier_rate.
+          // Org-less principals (see the TENANT-CONTEXT ESCAPE note above)
+          // are not gated: reserving on an empty org id is meaningless.
+          if (userContext.organizationId) {
+            const walletGate = await gateChatRequest(
+              userContext.organizationId,
+              gateChatShape
+            );
+            if (!walletGate.allowed) {
+              return reply.status(walletGate.status ?? 402).send(walletGate.body);
+            }
+          }
+
           // Commit to SSE: set headers, then stream events to the raw socket.
           setupSSEHeaders(reply);
           try {
@@ -1723,6 +1761,19 @@ export async function registerResponsesRoutes(server: FastifyInstance): Promise<
               return { httpStatus: gate.status, body: gate.body };
             }
 
+            // Prepaid wallet gate — inside the idempotency handler for the
+            // same reason as runGate: a replay of already-executed-and-billed
+            // work must not be re-admitted (nor re-held).
+            if (userContext.organizationId) {
+              const walletGate = await gateChatRequest(
+                userContext.organizationId,
+                gateChatShape
+              );
+              if (!walletGate.allowed) {
+                return { httpStatus: walletGate.status ?? 402, body: walletGate.body };
+              }
+            }
+
             // Create response. `gateChatShape` is handed through so the request
             // is built ONCE: `buildChatRequest` is pure but it walks and
             // `.trim()`s every text part (`:1078`), which for a large prompt
@@ -1750,10 +1801,15 @@ export async function registerResponsesRoutes(server: FastifyInstance): Promise<
                 request: {
                   model: response.model,
                   messages: [],
+                  ...resolveTierCarrier(responsesRequest.model),
                 },
                 cacheHit: false,
                 totalCostOverride: response.ailin_metadata?.total_cost ?? 0,
                 totalTokensOverride: response.usage.total_tokens,
+                tokenUsageOverride: {
+                  promptTokens: response.usage.input_tokens ?? 0,
+                  completionTokens: response.usage.output_tokens ?? 0,
+                },
               });
             }
 

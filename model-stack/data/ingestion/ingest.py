@@ -19,9 +19,10 @@ import json
 import logging
 import sys
 import time
+from collections.abc import Iterator
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Iterator
+from typing import Any
 from urllib.parse import urlparse
 
 import click
@@ -38,6 +39,7 @@ logger = logging.getLogger(__name__)
 # Standard record schema
 # ---------------------------------------------------------------------------
 
+
 class StandardRecord(BaseModel):
     """Canonical record format for the training pipeline."""
 
@@ -51,6 +53,7 @@ class StandardRecord(BaseModel):
 # ---------------------------------------------------------------------------
 # Source readers
 # ---------------------------------------------------------------------------
+
 
 def _read_jsonl(path: Path) -> Iterator[dict[str, Any]]:
     with jsonlines.open(path, mode="r") as reader:
@@ -72,7 +75,10 @@ def _read_csv(path: Path) -> Iterator[dict[str, Any]]:
 
 
 def _read_huggingface(dataset_name: str, split: str = "train") -> Iterator[dict[str, Any]]:
-    from datasets import load_dataset
+    # 2026-10-18 mypy resolves the repo's own datasets/ data directory (an
+    # empty namespace package) instead of the HF library, so it cannot see
+    # load_dataset; verified the symbol exists in site-packages.
+    from datasets import load_dataset  # type: ignore[attr-defined]
 
     ds = load_dataset(dataset_name, split=split, streaming=True)
     yield from ds
@@ -112,7 +118,14 @@ def _normalize_record(raw: dict[str, Any], source_name: str) -> StandardRecord |
         timestamp = str(timestamp)
 
     # Collect remaining fields as metadata
-    reserved = set(TEXT_FIELD_CANDIDATES) | {"language", "lang", "timestamp", "date", "created_at", "source"}
+    reserved = set(TEXT_FIELD_CANDIDATES) | {
+        "language",
+        "lang",
+        "timestamp",
+        "date",
+        "created_at",
+        "source",
+    }
     metadata = {k: v for k, v in raw.items() if k not in reserved and _is_serializable(v)}
 
     return StandardRecord(
@@ -135,6 +148,7 @@ def _is_serializable(v: Any) -> bool:
 # ---------------------------------------------------------------------------
 # Manifest writer
 # ---------------------------------------------------------------------------
+
 
 def _write_manifest(
     output_path: Path,
@@ -178,19 +192,27 @@ def _write_manifest(
 # CLI
 # ---------------------------------------------------------------------------
 
+
 @click.command("ingest")
 @click.option("--source", required=True, help="Source URL, file path, or HuggingFace dataset name")
 @click.option(
-    "--format", "fmt",
+    "--format",
+    "fmt",
     type=click.Choice(["jsonl", "parquet", "csv", "huggingface"]),
     required=True,
     help="Input data format",
 )
 @click.option("--output", required=True, type=click.Path(), help="Output JSONL file path")
-@click.option("--split", default="train", help="HuggingFace split name (only for huggingface format)")
+@click.option(
+    "--split", default="train", help="HuggingFace split name (only for huggingface format)"
+)
 @click.option("--max-rows", default=None, type=int, help="Maximum rows to ingest")
 @click.option("--source-name", default=None, help="Override source name in records")
-@click.option("--log-level", default="INFO", type=click.Choice(["DEBUG", "INFO", "WARNING", "ERROR"]))
+@click.option(
+    "--log-level",
+    default="INFO",
+    type=click.Choice(["DEBUG", "INFO", "WARNING", "ERROR"]),
+)
 def cli(
     source: str,
     fmt: str,
@@ -210,10 +232,7 @@ def cli(
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
     if source_name is None:
-        if fmt == "huggingface":
-            source_name = source
-        else:
-            source_name = Path(source).stem
+        source_name = source if fmt == "huggingface" else Path(source).stem
 
     logger.info("Starting ingestion: source=%s format=%s output=%s", source, fmt, output)
     start_time = time.time()
@@ -290,7 +309,7 @@ def cli(
     logger.info("SHA-256: %s", file_sha256)
 
     # Print summary
-    click.echo(f"\n--- Ingestion Summary ---")
+    click.echo("\n--- Ingestion Summary ---")
     click.echo(f"Records read:    {total_read:>10,}")
     click.echo(f"Records written: {total_written:>10,}")
     click.echo(f"Records skipped: {total_skipped:>10,}")
@@ -308,6 +327,7 @@ def _download_file(url: str, dest_dir: Path) -> Path:
     logger.info("Downloading %s -> %s", url, dest)
 
     with tqdm(unit="B", unit_scale=True, desc="Downloading") as pbar:
+
         def _reporthook(block_num: int, block_size: int, total_size: int) -> None:
             if total_size > 0:
                 pbar.total = total_size

@@ -206,7 +206,10 @@ const isTestEnvironment = process.env.NODE_ENV === 'test';
 const gatewayExplicitlyEnabled = process.env.GATEWAY_MIDDLEWARE_ENABLED === 'true';
 const gatewayExplicitlyDisabled = process.env.GATEWAY_MIDDLEWARE_ENABLED === 'false';
 
-// By default: enabled in production, disabled in test, optional in development
+// By default: enabled everywhere except NODE_ENV=test (development included).
+// When enabled, quota/signature checks fail closed (503) if the external
+// quota-service / signature-verifier are unreachable, so set
+// GATEWAY_MIDDLEWARE_ENABLED=false when running without those services.
 const GATEWAY_MIDDLEWARE_ENABLED = gatewayExplicitlyEnabled
   ? true
   : gatewayExplicitlyDisabled

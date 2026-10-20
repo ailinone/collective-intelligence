@@ -17,7 +17,11 @@ import type {
   ModelExecution,
   Model,
 } from '@/types';
-import { getResponseAggregator, type ModelResponse } from '@/core/aggregation/response-aggregator';
+import {
+  getResponseAggregator,
+  type AggregatedResponse,
+  type ModelResponse,
+} from '@/core/aggregation/response-aggregator';
 import { buildEnsembleRequest } from '@/core/coordination/ensemble-coordinator-client';
 import { runEnsembleInShadow } from '@/core/coordination/ensemble-coordinator-shadow';
 import { logger } from '@/utils/logger';
@@ -98,6 +102,83 @@ export class ConsensusStrategy extends BaseStrategy {
    */
   protected getEvaluator(): StrategyOutputEvaluator {
     return this.evaluator ?? DEFAULT_CONSENSUS_EVALUATOR;
+  }
+
+  /**
+   * Execute the strict-majority quorum tool_call preserved by the aggregator,
+   * exactly once, server-side.
+   *
+   * The synthesis aggregation only writes `finish_reason: 'tool_calls'` onto
+   * `aggregated.response` when a tool call reached strict majority across the
+   * voters — so the presence of that call IS the quorum proof; re-running
+   * `computeQuorumToolCall` here is unnecessary (and impossible: the
+   * consensus-validation config mocks this module without it).
+   *
+   * Without this step, quorumOnly tools (media_plan, generate_media,
+   * generate_video) NEVER execute: the chat layer's auto-execution requires
+   * `safeForStrategies === true`, so an unstripped tool_call is handed back to
+   * the client unexecuted (client-side re-execution risk, zero billable
+   * server-side generation). The call is therefore neutralized IN PLACE
+   * (stripped, finish_reason reset, content replaced with the executed
+   * result) and folded into cost accounting as a synthetic
+   * `quorum-tool:<name>` ModelExecution so `totalCost === sum(modelsUsed.cost)`
+   * keeps holding.
+   */
+  private async executeQuorumToolCall(
+    aggregated: AggregatedResponse,
+    context: OrchestrationContext,
+    request: ChatRequest,
+    executions: ModelExecution[]
+  ): Promise<void> {
+    const choice = aggregated.response?.choices?.[0];
+    const message = choice?.message;
+    const quorumCall =
+      choice?.finish_reason === 'tool_calls' ? message?.tool_calls?.[0] : undefined;
+    if (!quorumCall || !message) return;
+
+    const toolName = quorumCall.function?.name ?? 'unknown-tool';
+    const { executeQuorumApprovedToolForStrategy } = await import('@/services/strategy-tool-executor');
+    const startedAt = Date.now();
+    const result = await executeQuorumApprovedToolForStrategy(quorumCall, this.log, {
+      organizationId: context.organizationId,
+      userId: context.userId,
+      // generate_video routinely exceeds the executor's 30s default.
+      timeout: 120_000,
+    });
+    const durationMs = Date.now() - startedAt;
+
+    this.log.info(
+      { toolName, success: result.success, durationMs, requestId: context.requestId },
+      'Executed quorum-approved tool call'
+    );
+
+    // Neutralize in place: `aggregated.response` is shared by the synthesizer
+    // ModelExecution and (on the synthesis path) the served finalResponse, so
+    // one mutation covers every consumer downstream.
+    message.tool_calls = [];
+    choice.finish_reason = 'stop';
+    message.content = JSON.stringify({
+      quorum_tool_executed: toolName,
+      success: result.success,
+      ...(result.output ? { result: result.output } : {}),
+      ...(result.error ? { error: result.error } : {}),
+      ...(result.artifact ? { artifact: result.artifact } : {}),
+    });
+
+    executions.push({
+      modelId: `quorum-tool:${toolName}`,
+      modelName: toolName,
+      role: 'quorum_tool',
+      request,
+      response: aggregated.response,
+      cost: result.cost ?? 0,
+      durationMs,
+      success: result.success !== false,
+      error: result.success === false ? result.error : undefined,
+      ...(result.artifact
+        ? { artifacts: [{ ...result.artifact, sourceToolCallId: quorumCall.id, role: 'quorum_tool' }] }
+        : {}),
+    });
   }
 
   getMetadata(): StrategyMetadata {
@@ -293,6 +374,24 @@ export class ConsensusStrategy extends BaseStrategy {
     });
 
     await Promise.all(executionPromises);
+
+    // ci#752: a failed voter is a narratable milestone, not just a log line.
+    // The catch above builds a success:false execution, and `executeModel`
+    // returns one for provider/empty-response failures without throwing —
+    // filtering the settled executions covers BOTH paths with the same
+    // structured facts (modelId/provider/role/errorCode).
+    const successfulVoters = executions.filter((e) => e.success).length;
+    for (const failed of executions.filter((e) => !e.success)) {
+      const selected = selectedModels.find((m) => m.id === failed.modelId);
+      this.emitModelFailedEvent(context, {
+        modelId: failed.modelId,
+        modelName: failed.modelName,
+        provider: selected?.provider,
+        role: failed.role,
+        errorMessage: failed.error,
+        remaining: successfulVoters,
+      });
+    }
 
     // ─── Evaluate each voter via the injected (or default) evaluator ───
     // The default is `UnavailableStrategyOutputEvaluator`, which refuses
@@ -667,6 +766,13 @@ export class ConsensusStrategy extends BaseStrategy {
       };
       executions.push(synthExecution);
     }
+
+    // Execute the voters' strict-majority tool call (if any) BEFORE the cost
+    // reduce and the synthesis evaluation, so the tool's cost lands in
+    // totalCost and the evaluator scores the executed result, not the call
+    // intent.
+    await this.executeQuorumToolCall(aggregated, context, request, executions);
+
     const totalCost = executions.reduce((sum, e) => sum + e.cost, 0);
 
     // Evaluate synthesis with the SAME evaluator so comparison is apples-

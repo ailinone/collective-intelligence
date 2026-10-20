@@ -13,6 +13,7 @@
  */
 
 import { BaseStrategy, safeResponseContent } from './base-strategy';
+import { ensureArtifactDeliveryUrl } from './artifact-delivery';
 // StrategyLeader removed — was a no-op pass-through
 import { SingleModelStrategy } from './strategies/single-model-strategy';
 import { ParallelStrategy } from './strategies/parallel-strategy';
@@ -48,9 +49,13 @@ import { SensitivityConsensusStrategy } from './strategies/sensitivity-consensus
 import { TriRoleCollectiveStrategy } from './strategies/tri-role-collective-strategy';
 import { MediaPlannerStrategy } from './strategies/media-planner-strategy';
 import { MediaConsensusStrategy } from './strategies/media-consensus-strategy';
+import { DocumentReviewStrategy } from './strategies/document-review-strategy';
+import { buildMediaCritics } from '@/core/orchestration/strategies/media-critics-factory';
+import { buildDocumentCritics } from '@/core/orchestration/strategies/document-critics-factory';
 import {
   evaluateMediaPlannerGate,
   resolveEffectiveMediaPlannerEnabled,
+  resolveMediaPlanRouting,
 } from './strategies/media-planner-gate';
 import { MEDIA_GENERATION_CAPABILITIES } from './strategies/media-planner-types';
 import { resolveAilinAlias, applyAliasToRequest } from './ailin-alias-resolver';
@@ -60,12 +65,24 @@ import {
   createNoOpObserverFeed,
   buildObserverChunk,
   buildInlineNarrationChunk,
+  toPublicNarration,
 } from './observer/observer-service';
-import { buildImmediateOpeningNarration } from './observer/observer-templates';
+import { buildImmediateOpeningNarration, buildRequestReceivedNarration } from './observer/observer-templates';
 import type { ObserverFeed } from './observer/observer-types';
 import { ProviderRegistry } from '@/providers/provider-registry';
+import { config } from '@/config';
 import { VideoOrchestrationService } from '@/services/video-orchestration-service';
+import { emitStreamTraceToSystems } from '@/services/systems-stream-trace';
 import { ImagesOrchestrationService } from '@/services/images-orchestration-service';
+import { AudioOrchestrationService } from '@/services/audio-orchestration-service';
+import { MusicOrchestrationService } from '@/services/music-orchestration-service';
+import { VideoUnderstandingService } from '@/services/video-understanding-service';
+import { SearchOrchestrationService } from '@/services/search-orchestration-service';
+import { ModerationsOrchestrationService } from '@/services/moderations-orchestration-service';
+import { VisionOrchestrationService } from '@/services/vision-orchestration-service';
+import { PDFService } from '@/services/pdf-service';
+import { CodeExecutionService } from '@/services/code-execution-service';
+import { executeCapabilityByPlan } from '@/routes/capabilities/capabilities-routes';
 import { getErrorMessage } from '@/utils/type-guards';
 import { ContextWindowExceededError } from '@/utils/custom-errors';
 import { toolRegistry } from '@/core/tools/tool-registry';
@@ -157,7 +174,16 @@ import {
   getBestFromFrontier,
   loadFrontiersFromOutcomes,
 } from '@/core/learning/pareto-champion-challenger';
-import { buildExecutionSystemPrompt } from './execution-system-prompt';
+import {
+  buildExecutionSystemPrompt,
+  extractLastUserTurnText,
+  withExecutionSystemPrompt,
+} from './execution-system-prompt';
+import {
+  AILIN_EXECUTION_POLICY_VERSION,
+  buildAilinIdentityResponse,
+  isAilinIdentityQuestion,
+} from './prompts/identity-policy';
 import { maybeExecuteDetectedCode } from './code-execution-orchestration';
 import {
   explicitlyLacksFunctionCalling,
@@ -839,6 +865,7 @@ export class OrchestrationEngine {
   private log = logger.child({ component: 'orchestration-engine' });
   private triageService?: TriagingService;
   private mediaPlannerStrategy?: MediaPlannerStrategy;
+  private mediaPlannerStrategyPromise?: Promise<MediaPlannerStrategy>;
   private feedbackLoop: RealtimeFeedbackLoop;
   private qualityScorer = getQualityScorer();
   private reasoningTransparency = getReasoningTransparency();
@@ -1064,28 +1091,114 @@ export class OrchestrationEngine {
    * no-arg-constructible services — the same ones `capabilities-routes.ts`
    * constructs once at route-registration time for the dedicated route.
    *
-   * Deliberately wires ONLY `mediaConsensusExecutor` (video/image
-   * generation) and leaves `capabilityDispatcher` unset:
-   * `evaluateMediaPlannerGate` only ever routes when a
-   * `video_generation`/`image_generation` capability is involved, so a
-   * `generate` action is the only action kind this safety-net path can
-   * ever need. `capabilityDispatcher` requires a live `FastifyRequest`
-   * bound by the HTTP route layer (see `media-planner-strategy.ts`'s doc
-   * comment on `CapabilityDispatcher`), which this engine's `execute()`
-   * does not have and should not be given just for this. A `capability_call`
-   * action the planner emits anyway degrades to a documented "capability
-   * dispatcher not wired" unmet-constraint entry rather than throwing —
-   * the same fallback the dedicated route would hit for the same missing
-   * dependency, so this is not a new gap.
+   * Wires `mediaConsensusExecutor` (video/image generation) AND
+   * `capabilityDispatcher` (non-generation `capability_call` actions —
+   * e.g. `pdf_understanding`, `web_search` — the planner may still emit
+   * alongside a `generate` action for a mixed request).
+   *
+   * `capabilityDispatcher` reuses `capabilities-routes.ts`'s own
+   * `executeCapabilityByPlan`, passed `request: undefined` — this engine's
+   * `execute()` has no live `FastifyRequest` to hand it. That's fine for
+   * the 3 modes (`tool_pipeline`/`native_adapter`/`orchestration`) that
+   * only ever used a request to derive an `OrchestrationContext`, which
+   * `CapabilityDispatcher`'s call-time `context` argument now supplies
+   * directly (see media-planner-strategy.ts's doc comment on
+   * `CapabilityDispatcher`). The 4 modes that genuinely need a live
+   * request (`proxy_route`, `sandbox_workflow`, `agentic_sandbox`,
+   * `code_execution_sandbox`) reject with a specific
+   * `capability_requires_http_context` error when `request` is undefined,
+   * which `executeCapabilityByPlan`'s own fallback-to-next-mode loop
+   * treats like any other mode-unavailable failure — a capability whose
+   * `executionPath` starts with one of those 4 modes still degrades
+   * cleanly here, exactly as it always did, but capabilities routed
+   * through the other 3 (the realistic ones for a media-generation-
+   * adjacent request) now actually work.
+   *
+   * All 8 non-generation services below are stateless and no-arg
+   * constructible (mirrors `capabilities-routes.ts`'s own route-registration-
+   * time construction); `video`/`image` reuse the SAME instances already
+   * built for `mediaConsensusExecutor` rather than constructing duplicates.
    */
-  private getMediaPlannerStrategy(): MediaPlannerStrategy {
-    if (!this.mediaPlannerStrategy) {
-      const videoService = new VideoOrchestrationService();
-      const imagesService = new ImagesOrchestrationService();
-      this.mediaPlannerStrategy = new MediaPlannerStrategy({
-        mediaConsensusExecutor: new MediaConsensusStrategy({ videoService, imagesService }),
+  private async getMediaPlannerStrategy(): Promise<MediaPlannerStrategy> {
+    if (this.mediaPlannerStrategy) {
+      return this.mediaPlannerStrategy;
+    }
+    // Memoize the in-flight PROMISE, not just the resolved value: this method
+    // is async (buildMediaCritics/buildDocumentCritics await judge-model
+    // resolution), and getOrchestrationEngine() returns a process-wide
+    // singleton, so concurrent chat requests can land here before the first
+    // build resolves. Caching only `this.mediaPlannerStrategy` left a
+    // check-then-set race across that await -- every concurrent caller would
+    // pass the `if` guard and independently re-run judge-model resolution and
+    // reconstruct every media/pdf service, wasting judge-catalog calls under
+    // concurrent cold-start load. Sharing one in-flight promise closes that.
+    if (!this.mediaPlannerStrategyPromise) {
+      this.mediaPlannerStrategyPromise = this.buildMediaPlannerStrategy().catch((err) => {
+        // Don't poison the singleton on a transient failure -- let the next
+        // call retry the build instead of rejecting forever.
+        this.mediaPlannerStrategyPromise = undefined;
+        throw err;
       });
     }
+    return this.mediaPlannerStrategyPromise;
+  }
+
+  private async buildMediaPlannerStrategy(): Promise<MediaPlannerStrategy> {
+    const videoService = new VideoOrchestrationService();
+    const imagesService = new ImagesOrchestrationService();
+    const audioService = new AudioOrchestrationService();
+    const searchService = new SearchOrchestrationService();
+    const pdfService = new PDFService();
+    const services = {
+      audio: audioService,
+      music: new MusicOrchestrationService(),
+      image: imagesService,
+      video: videoService,
+      videoUnderstanding: new VideoUnderstandingService(audioService),
+      search: searchService,
+      moderation: new ModerationsOrchestrationService(),
+      code: new CodeExecutionService(),
+      vision: new VisionOrchestrationService(),
+      pdf: pdfService,
+    };
+
+    // Sections A/C/D (wired 2026-09-27) — same `judgeEnabled` gate and same
+    // buildMediaCritics()/buildDocumentCritics() factories as
+    // capabilities-routes.ts's media-plan/execute route, so this safety-net
+    // entry point (the one real chat traffic actually goes through, per
+    // Section E) gets the same real judging instead of silently staying at
+    // the pre-completion defaults (critics: [], no documentReviewExecutor,
+    // no imageEditJudge) forever. See media-critics-factory.ts /
+    // document-critics-factory.ts module docs for the degrade contract
+    // when no judge model resolves.
+    let critics: Awaited<ReturnType<typeof buildMediaCritics>>['critics'] = [];
+    let qualityJudgingUnavailableReason: string | undefined;
+    let imageEditJudge: Awaited<ReturnType<typeof buildMediaCritics>>['imageEditJudge'];
+    let documentCritics: Awaited<ReturnType<typeof buildDocumentCritics>>['critics'] = [];
+    if (config.mediaPlanner.judgeEnabled) {
+      const providerRegistry = this.getProviderRegistry();
+      const [builtMedia, builtDocument] = await Promise.all([
+        buildMediaCritics({ providerRegistry }),
+        buildDocumentCritics({ providerRegistry }),
+      ]);
+      critics = builtMedia.critics;
+      qualityJudgingUnavailableReason = builtMedia.qualityJudgingUnavailableReason;
+      imageEditJudge = builtMedia.imageEditJudge;
+      documentCritics = builtDocument.critics;
+    }
+
+    this.mediaPlannerStrategy = new MediaPlannerStrategy({
+      mediaConsensusExecutor: new MediaConsensusStrategy({
+        videoService,
+        imagesService,
+        critics,
+        qualityJudgingUnavailableReason,
+      }),
+      imageEditJudge,
+      documentReviewExecutor: new DocumentReviewStrategy({ critics: documentCritics }),
+      capabilityDispatcher: (plan, body, context) =>
+        executeCapabilityByPlan(plan, body, {}, undefined, context.requestId || '', context, services),
+    });
     return this.mediaPlannerStrategy;
   }
 
@@ -1133,7 +1246,8 @@ export class OrchestrationEngine {
         { requestId, reason: gate.reason, detectedCapabilities: gate.detectedCapabilities },
         'Routing request into MediaPlannerStrategy safety net'
       );
-      return await this.getMediaPlannerStrategy().execute(request, context);
+      const strategy = await this.getMediaPlannerStrategy();
+      return await strategy.execute(request, context);
     }
 
     const gateDetectedMediaGeneration = gate.detectedCapabilities.some((cap) =>
@@ -1144,6 +1258,108 @@ export class OrchestrationEngine {
     }
 
     return undefined;
+  }
+
+  /**
+   * Sold-target entry (2026-10-02): `strategy === 'media-planner'` resolved
+   * from a sold `media-planner:<tier>` composite cell (see
+   * `strategyTierToExecution` in ailin-virtual-model-service.ts). Runs the
+   * SAME `resolveMediaPlanRouting` choke point as the REST route and the
+   * Section E safety net — a sold cell still executes nothing while
+   * `MEDIA_PLANNER_ENABLED` is off and no per-org canary is set (fail-closed
+   * degraded result, never a silent fall-through to another strategy).
+   */
+  private async executeSoldMediaPlannerTarget(
+    request: ChatRequest,
+    organizationId: string,
+    userId?: string
+  ): Promise<OrchestrationResult> {
+    const startTime = Date.now();
+    const requestId = nanoid();
+    const context = await this.buildContext(request, organizationId, userId, requestId);
+    const mediaPlannerEnabled = await resolveEffectiveMediaPlannerEnabled(organizationId);
+    const gate = resolveMediaPlanRouting(request, context, mediaPlannerEnabled);
+    if (!gate.route) {
+      this.log.info(
+        { requestId, organizationId, reason: gate.reason },
+        'media-planner target refused by gate (flag off / heuristic not met)'
+      );
+      return {
+        strategyUsed: 'media-planner',
+        modelsUsed: [],
+        finalResponse: {
+          id: `media-planner-refused-${requestId}`,
+          object: 'chat.completion',
+          created: Math.floor(Date.now() / 1000),
+          model: 'media-planner',
+          choices: [
+            {
+              index: 0,
+              message: {
+                role: 'assistant',
+                content: `Media composition is not available for this request (${gate.reason}). Retry with an explicit multi-capability or constraint-bearing request.`,
+              },
+              finish_reason: 'stop',
+            },
+          ],
+        },
+        totalCost: 0,
+        totalDuration: Date.now() - startTime,
+        metadata: { degraded: true, mediaPlannerNotRoutedReason: gate.reason },
+      };
+    }
+    const strategy = await this.getMediaPlannerStrategy();
+    const preparedRequest = withExecutionSystemPrompt(request, {
+      ...context,
+      isCollectiveStrategy: true,
+    });
+    return strategy.execute(preparedRequest, context);
+  }
+
+  /**
+   * Programmatic MediaPlanner entry point for explicit invocations that have
+   * no live HTTP request (the `media_plan` tool registered in
+   * chat-request-processor's tool registry). Reuses the same memoized
+   * strategy instance and the SAME `resolveMediaPlanRouting` choke point as
+   * the REST route and the Section E safety net — the
+   * `MEDIA_PLANNER_ENABLED` flag / per-org canary can never be bypassed by
+   * routing through this method.
+   *
+   * Returns `routed: false` + the gate's reason instead of throwing, so the
+   * tool layer can shape its own `media_planner_not_applicable` ToolResult
+   * without try/catch control flow.
+   */
+  async runMediaPlannerRequest(
+    request: ChatRequest,
+    context: OrchestrationContext
+  ): Promise<{
+    routed: boolean;
+    reason: string;
+    detectedCapabilities: readonly string[];
+    result?: OrchestrationResult;
+  }> {
+    const mediaPlannerEnabled = await resolveEffectiveMediaPlannerEnabled(
+      context.organizationId
+    );
+    const gate = resolveMediaPlanRouting(request, context, mediaPlannerEnabled);
+    if (!gate.route) {
+      return {
+        routed: false,
+        reason: gate.reason,
+        detectedCapabilities: gate.detectedCapabilities,
+      };
+    }
+    const strategy = await this.getMediaPlannerStrategy();
+    const preparedRequest = withExecutionSystemPrompt(request, {
+      ...context,
+      isCollectiveStrategy: true,
+    });
+    return {
+      routed: true,
+      reason: gate.reason,
+      detectedCapabilities: gate.detectedCapabilities,
+      result: await strategy.execute(preparedRequest, context),
+    };
   }
 
   /**
@@ -1443,6 +1659,14 @@ export class OrchestrationEngine {
       request.strategy = resolvedExecutionStrategy;
     }
 
+    // Sold `media-planner:<tier>` target (2026-10-02): branch BEFORE strategy
+    // selection — 'media-planner' is not in the selectable strategies map and
+    // must never fall through to a generic mechanism. Flag/heuristic gating
+    // stays inside executeSoldMediaPlannerTarget.
+    if (resolvedExecutionStrategy === 'media-planner') {
+      return this.executeSoldMediaPlannerTarget(request, organizationId, userId);
+    }
+
     const requestedCanonicalStrategy =
       canonicalizeStrategyInput(strategyInput) ??
       mapExecutionToCanonical(
@@ -1489,6 +1713,43 @@ export class OrchestrationEngine {
         // Start reasoning transparency trace
         this.reasoningTransparency.startTrace(requestId, request);
 
+        // Direct identity questions are policy-governed, not generative. Serving
+        // a deterministic answer avoids model cost and guarantees that no
+        // underlying provider/model identity can leak through an old cache entry
+        // or a provider's trained self-identification.
+        if (isAilinIdentityQuestion(extractLastUserTurnText(request.messages))) {
+          this.reasoningTransparency.completeTrace(requestId);
+          return {
+            strategyUsed: 'single' as ExecutionStrategyName,
+            modelsUsed: [],
+            finalResponse: {
+              id: `chatcmpl-${requestId}`,
+              object: 'chat.completion',
+              created: Math.floor(Date.now() / 1000),
+              model: 'ailin-identity',
+              choices: [
+                {
+                  index: 0,
+                  message: {
+                    role: 'assistant',
+                    content: buildAilinIdentityResponse(extractLastUserTurnText(request.messages)),
+                  },
+                  finish_reason: 'stop',
+                  logprobs: null,
+                },
+              ],
+              usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 },
+            } as ChatResponse,
+            totalCost: 0,
+            totalDuration: Date.now() - startTime,
+            qualityScore: 1,
+            metadata: {
+              identity_response: true,
+              execution_policy_version: AILIN_EXECUTION_POLICY_VERSION,
+            },
+          };
+        }
+
         const CACHEABLE_STRATEGIES = new Set<string | undefined>([
           'dynamic',
           'single',
@@ -1498,7 +1759,9 @@ export class OrchestrationEngine {
           'debate',
         ]);
         const allowSemanticCache =
-          CACHEABLE_STRATEGIES.has(requestedCanonicalStrategy) && !request.no_cache;
+          CACHEABLE_STRATEGIES.has(requestedCanonicalStrategy) &&
+          !request.no_cache &&
+          !isAilinIdentityQuestion(extractLastUserTurnText(request.messages));
 
         // LAT-2 (2026-06-11): kick off the semantic-memory lookup concurrently
         // with the semantic-cache lookup — independent reads that were previously
@@ -2457,12 +2720,9 @@ export class OrchestrationEngine {
             if (observerNarrations.length > 0) {
               result.metadata = {
                 ...result.metadata,
-                observer_narrations: observerNarrations.map((n) => ({
-                  event: n.event.type,
-                  narration: n.narration,
-                  reasoning: n.reasoning,
-                  duration_ms: n.durationMs,
-                })),
+                // Public projection only (CI-CHAT-0005): narrator reasoning
+                // stays internal.
+                observer_narrations: observerNarrations.map(toPublicNarration),
               };
             }
           }
@@ -2796,6 +3056,7 @@ export class OrchestrationEngine {
             if (
               isCacheEnabled() &&
               !request.stream &&
+              !isAilinIdentityQuestion(extractLastUserTurnText(request.messages)) &&
               result.qualityScore &&
               result.qualityScore >= cacheStoreThreshold
             ) {
@@ -3659,11 +3920,17 @@ export class OrchestrationEngine {
       triage: triageDecision,
     };
 
+    // This fast streaming path invokes provider adapters directly in
+    // chat-routes. Prepare it here, at the shared planning boundary, so the
+    // primary and every fallback receive the same identity/guardrail prompt as
+    // execute() and executeStream().
+    const preparedRequest = withExecutionSystemPrompt(
+      this.applyRecommendedTools(planningRequest, enrichedContext),
+      { ...enrichedContext, isCollectiveStrategy: false }
+    );
+
     return {
-      // Review fix: this SSE single-model path never attached
-      // triage-recommended tools — same wrapper as the other paths
-      // (no-op when the client already supplied its own tools).
-      request: this.applyRecommendedTools(planningRequest, enrichedContext),
+      request: preparedRequest,
       model: selection.model,
       adapter: selection.adapter,
       context: enrichedContext,
@@ -3683,9 +3950,45 @@ export class OrchestrationEngine {
   async *executeStream(
     request: ChatRequest,
     organizationId: string,
-    userId?: string
+    userId?: string,
+    /**
+     * Optional caller-owned cancellation signal (ci#751): the collective SSE
+     * consumer in chat-routes.ts aborts it when the client disconnects
+     * mid-stream. It feeds the SAME requestController that the whole-request
+     * deadline drives below — one cancellation channel, not a second one — so
+     * every existing consumer of `context.signal` (boundModelExecution's
+     * parent-signal race, the per-strategy `context.signal?.aborted` gates in
+     * base-strategy.ts) cancels identically whether the trigger is the
+     * deadline or a dead socket. In-flight provider calls are aborted (their
+     * cost is absorbed by the platform, per the 2026-10-04 product decision);
+     * steps not yet started never start.
+     */
+    externalSignal?: AbortSignal
   ): AsyncGenerator<ChatResponse, void, unknown> {
     const requestId = nanoid();
+    const lastUserTurn = extractLastUserTurnText(request.messages);
+
+    // Direct identity questions do not need selection, triage, cache, or a
+    // provider call. Keep the streaming contract while enforcing the same
+    // cost-zero, model-free answer as execute().
+    if (isAilinIdentityQuestion(lastUserTurn)) {
+      yield {
+        id: `chatcmpl-${requestId}`,
+        object: 'chat.completion.chunk' as const,
+        created: Math.floor(Date.now() / 1000),
+        model: 'ailin-identity',
+        choices: [
+          {
+            index: 0,
+            delta: { role: 'assistant' as const, content: buildAilinIdentityResponse(lastUserTurn) },
+            finish_reason: 'stop',
+            logprobs: null,
+          },
+        ],
+        usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 },
+      } as ChatResponse;
+      return;
+    }
 
     // Latency (audited 2026-07-12): buildContext()/triage/memory-search can
     // take ~2.5-5s+ cold before ANY strategy gets to run, let alone yield —
@@ -3714,7 +4017,9 @@ export class OrchestrationEngine {
       ailin_metadata: {
         type: 'observer',
         event: 'request_received',
-        narration: 'Your request has been received — analyzing it now.',
+        narration: buildRequestReceivedNarration(
+          ObserverService.extractUserSample(request.messages)
+        ),
         observer_duration_ms: 0,
       },
     } as ChatResponse;
@@ -3739,6 +4044,17 @@ export class OrchestrationEngine {
     // the next fix targets the real rung, not a guess.
     const wfT0 = Date.now();
     const requestController = new AbortController();
+    // ci#751: forward a caller-owned disconnect signal through the SAME
+    // controller the deadline uses (see the externalSignal param doc).
+    let externalAbortListener: (() => void) | undefined;
+    if (externalSignal) {
+      if (externalSignal.aborted) {
+        requestController.abort();
+      } else {
+        externalAbortListener = () => requestController.abort();
+        externalSignal.addEventListener('abort', externalAbortListener, { once: true });
+      }
+    }
     const requestDeadlineTimer = setTimeout(() => {
       this.log.warn(
         { requestId, requestDeadlineMs },
@@ -3790,6 +4106,21 @@ export class OrchestrationEngine {
       const context = await this.buildContext(request, organizationId, userId, requestId);
       const wfBuildContextMs = Date.now() - wfT0;
       context.signal = requestController.signal;
+
+      // Sold `media-planner:<tier>` target on the streaming path: the planner
+      // has no executeStream (STRATEGY_STREAMING_SUPPORT['media-planner'] is
+      // false — the catalog never advertises streaming for it). Run the
+      // terminal execution and emit its final response as a single chunk, the
+      // same contract the non-streaming-strategy ELSE branch below uses.
+      if (request.strategy === 'media-planner') {
+        const outcome = await this.executeSoldMediaPlannerTarget(
+          request,
+          organizationId,
+          userId
+        );
+        yield outcome.finalResponse;
+        return;
+      }
 
       // Speculative parallel selection (2026-07-14, kill-switch
       // ORCHESTRATION_SPECULATIVE_SELECTION — default OFF until validated in
@@ -4257,10 +4588,16 @@ export class OrchestrationEngine {
         result = this.applyDegradedFallback(result, requestId);
         strategy.recordExecution(enrichedContext, result).catch(() => {});
         this.recordSessionAffinityOutcome(enrichedContext, result);
+        // Mirror the finished stream to the ailin.systems request trace
+        // (stages, verdicts, narration; no request_logs row). Fire-and-forget.
+        emitStreamTraceToSystems(result, request, { requestId, organizationId, userId });
         yield result.finalResponse;
       }
     } finally {
       clearTimeout(requestDeadlineTimer);
+      if (externalSignal && externalAbortListener) {
+        externalSignal.removeEventListener('abort', externalAbortListener);
+      }
     }
   }
 
@@ -4860,6 +5197,7 @@ export class OrchestrationEngine {
     const videoOrchestrationImport = import('@/services/video-orchestration-service.js');
     const imagesOrchestrationImport = import('@/services/images-orchestration-service.js');
     const fileGenerationServiceImport = import('@/services/file-generation-service.js');
+    const filesServiceImport = import('@/services/files-service.js');
 
     // ✅ FIX: Check if model was explicitly specified by user
     // Use type-safe helper instead of type casting
@@ -5441,12 +5779,14 @@ export class OrchestrationEngine {
         { VideoOrchestrationService },
         { ImagesOrchestrationService },
         { FileGenerationService },
+        { FilesService },
       ] = await Promise.all([
         audioOrchestrationImport,
         translationServiceImport,
         videoOrchestrationImport,
         imagesOrchestrationImport,
         fileGenerationServiceImport,
+        filesServiceImport,
       ]);
 
       context.invoker = createCapabilityInvoker({
@@ -5482,6 +5822,11 @@ export class OrchestrationEngine {
         videoService: new VideoOrchestrationService(),
         imageService: new ImagesOrchestrationService(),
         fileService: new FileGenerationService(),
+        // GCS uploads + signed URLs for storeArtifact — media-stage delivery
+        // by URL instead of inline base64 (see executeMediaGenerationStage).
+        // Zero-arg constructor; an unconfigured bucket surfaces later, as a
+        // per-artifact graceful fallback, NOT here as a context-wide failure.
+        filesService: new FilesService(),
         context,
       });
     } catch (invokerError) {
@@ -6339,6 +6684,13 @@ export class OrchestrationEngine {
             prompt
           );
         }
+        const imageData = {
+          url: first.url,
+          b64Json: first.b64_json,
+          revisedPrompt: first.revised_prompt,
+          provider: result.provider,
+          model: result.model,
+        };
         return this.mediaStageSuccess(
           modality,
           stage,
@@ -6347,11 +6699,8 @@ export class OrchestrationEngine {
           startedAt,
           prompt,
           {
-            url: first.url,
-            b64Json: first.b64_json,
-            revisedPrompt: first.revised_prompt,
-            provider: result.provider,
-            model: result.model,
+            ...imageData,
+            ...(await this.ensureArtifactDeliveryUrl(modality, imageData, context)),
           }
         );
       }
@@ -6411,6 +6760,12 @@ export class OrchestrationEngine {
             prompt
           );
         }
+        const videoData = {
+          url: first.url,
+          b64Json: first.b64_json,
+          provider: result.provider,
+          model: result.model,
+        };
         return this.mediaStageSuccess(
           modality,
           stage,
@@ -6419,10 +6774,8 @@ export class OrchestrationEngine {
           startedAt,
           prompt,
           {
-            url: first.url,
-            b64Json: first.b64_json,
-            provider: result.provider,
-            model: result.model,
+            ...videoData,
+            ...(await this.ensureArtifactDeliveryUrl(modality, videoData, context)),
           }
         );
       }
@@ -6439,6 +6792,12 @@ export class OrchestrationEngine {
             prompt
           );
         }
+        const fileData = {
+          b64Json: result.buffer.toString('base64'),
+          mimeType: result.mimeType,
+          filename: result.filename,
+          model: result.model,
+        };
         return this.mediaStageSuccess(
           modality,
           stage,
@@ -6447,10 +6806,8 @@ export class OrchestrationEngine {
           startedAt,
           prompt,
           {
-            b64Json: result.buffer.toString('base64'),
-            mimeType: result.mimeType,
-            filename: result.filename,
-            model: result.model,
+            ...fileData,
+            ...(await this.ensureArtifactDeliveryUrl(modality, fileData, context)),
           }
         );
       }
@@ -6471,11 +6828,15 @@ export class OrchestrationEngine {
           prompt
         );
       }
-      return this.mediaStageSuccess(modality, stage, stageIndex, artifactIndex, startedAt, prompt, {
+      const audioData = {
         b64Json: result.audioBuffer.toString('base64'),
         mimeType: `audio/${result.format}`,
         provider: result.provider,
         model: result.model,
+      };
+      return this.mediaStageSuccess(modality, stage, stageIndex, artifactIndex, startedAt, prompt, {
+        ...audioData,
+        ...(await this.ensureArtifactDeliveryUrl(modality, audioData, context)),
       });
     } catch (err) {
       return this.mediaStageFailure(
@@ -6489,13 +6850,41 @@ export class OrchestrationEngine {
     }
   }
 
+  /**
+   * Convert an inline base64 media payload into a real, fetchable delivery
+   * URL by persisting the bytes to files storage (GCS + signed URL via the
+   * invoker's storeArtifact). Full contract, rationale (2026-09-30
+   * production incident) and the graceful-degradation rules live on the
+   * shared implementation — see artifact-delivery.ts — so
+   * MediaPlannerStrategy's artifact sites apply the SAME normalization.
+   */
+  private async ensureArtifactDeliveryUrl(
+    modality: 'image' | 'video' | 'audio' | 'file',
+    data: { url?: string; b64Json?: string; mimeType?: string; filename?: string },
+    context: OrchestrationContext
+  ): Promise<{ url?: string; b64Json?: string }> {
+    return ensureArtifactDeliveryUrl(modality, data, {
+      invoker: context.invoker,
+      log: this.log,
+      requestId: context.requestId,
+    });
+  }
+
   private buildMediaSyntheticResponse(
     stage: TriageStage,
     model: string | undefined,
     contentText: string,
     url: string | undefined
   ): ChatResponse {
-    const content = url ? `${contentText}\n${url}` : contentText;
+    // Append the URL for clickability ONLY when it is a real http(s)
+    // reference. This suffix used to embed whatever `url` held — including,
+    // in the 2026-09-30 production incident, a ~2.2MB fabricated
+    // `data:image/png;base64,...` data URI, duplicating the payload that was
+    // ALSO in ailin_metadata.artifacts[0].url and pushing a single SSE line
+    // to 4.4MB (see utils/sse.ts). data:/blob: values carry no click value
+    // and unbounded size; they never belong in user-visible content.
+    const clickableUrl = url && /^https?:\/\//i.test(url) ? url : undefined;
+    const content = clickableUrl ? `${contentText}\n${clickableUrl}` : contentText;
     return {
       id: `media-stage-${stage.name}-${Date.now()}`,
       object: 'chat.completion',

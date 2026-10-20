@@ -32,4 +32,14 @@ export interface ToolResult {
     mimeType?: string;
     meta?: Record<string, unknown>;
   };
+  /**
+   * Real cost of this tool call, when known (e.g. `generate_media`'s
+   * generation + judge spend via `computeModalityCost`). Absent rather than
+   * `0` when no cost signal is known — a chat-completion tool call (no
+   * billable provider spend of its own) legitimately has no `cost` field at
+   * all, which must not be confused with "confirmed free". Aggregated into
+   * `OrchestrationResult.totalCost` by the tool-execution loop in
+   * `base-strategy.ts`.
+   */
+  cost?: number;
 }

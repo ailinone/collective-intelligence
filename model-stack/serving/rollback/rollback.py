@@ -16,6 +16,7 @@ restores it, verifies health, and records the rollback in the log.
 
 from __future__ import annotations
 
+import contextlib
 import json
 import logging
 import subprocess
@@ -23,7 +24,7 @@ import sys
 import time
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional
+from typing import Any
 
 import click
 import httpx
@@ -32,29 +33,38 @@ import yaml
 logger = logging.getLogger("rollback")
 
 ROLLOUT_LOG_PATH = Path(__file__).resolve().parents[1] / "rollout" / "rollout_log.json"
-DEFAULT_REGISTRY_PATH = Path(__file__).resolve().parents[2] / "registry" / "models" / "registry.yaml"
+DEFAULT_REGISTRY_PATH = (
+    Path(__file__).resolve().parents[2] / "registry" / "models" / "registry.yaml"
+)
 
 
 # ---------------------------------------------------------------------------
 # Helpers (shared with deploy.py, duplicated for standalone use)
 # ---------------------------------------------------------------------------
 
-def load_rollout_log() -> list[dict]:
+
+def load_rollout_log() -> list[dict[str, Any]]:
     if not ROLLOUT_LOG_PATH.exists():
         return []
-    return json.loads(ROLLOUT_LOG_PATH.read_text())
+    # 2026-10-18 — typed local: json.loads is Any; this anchors the element
+    # type for every caller without runtime conversion.
+    entries: list[dict[str, Any]] = json.loads(ROLLOUT_LOG_PATH.read_text())
+    return entries
 
 
-def append_rollout_log(entry: dict) -> None:
+def append_rollout_log(entry: dict[str, Any]) -> None:
     log = load_rollout_log()
     log.append(entry)
     ROLLOUT_LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
     ROLLOUT_LOG_PATH.write_text(json.dumps(log, indent=2))
 
 
-def find_previous_healthy(current_version: str | None = None) -> dict | None:
+def find_previous_healthy(current_version: str | None = None) -> dict[str, Any] | None:
     """Return the most recent healthy deployment that is not *current_version*."""
     log = load_rollout_log()
+    # 2026-10-18 — pre-declared loop var: mypy 2.4 infers Any for reversed()
+    # over generic lists (overload-resolution gap); this restores the type.
+    entry: dict[str, Any]
     for entry in reversed(log):
         if entry.get("status") != "healthy":
             continue
@@ -64,23 +74,29 @@ def find_previous_healthy(current_version: str | None = None) -> dict | None:
     return None
 
 
-def find_current_deployment() -> dict | None:
+def find_current_deployment() -> dict[str, Any] | None:
     """Return the most recent healthy deployment (i.e., what is running now)."""
     log = load_rollout_log()
+    entry: dict[str, Any]  # 2026-10-18 — see find_previous_healthy re: reversed()
     for entry in reversed(log):
         if entry.get("status") == "healthy":
             return entry
     return None
 
 
-def start_serving_instance(model_path: str, port: int, tensor_parallel: int = 1) -> subprocess.Popen:
+def start_serving_instance(
+    model_path: str, port: int, tensor_parallel: int = 1
+) -> subprocess.Popen[bytes]:
     serve_script = Path(__file__).resolve().parents[1] / "runtime" / "serve.py"
     cmd = [
         sys.executable,
         str(serve_script),
-        "--model-path", model_path,
-        "--port", str(port),
-        "--tensor-parallel", str(tensor_parallel),
+        "--model-path",
+        model_path,
+        "--port",
+        str(port),
+        "--tensor-parallel",
+        str(tensor_parallel),
     ]
     logger.info("Starting serving instance: %s", " ".join(cmd))
     return subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
@@ -103,20 +119,19 @@ def wait_for_health(url: str, timeout: int = 300, interval: int = 5) -> bool:
 
 def stop_serving_instance(port: int) -> None:
     """Best-effort stop of the serving instance listening on *port*."""
-    try:
+    with contextlib.suppress(httpx.RequestError):
         httpx.post(f"http://localhost:{port}/shutdown", timeout=5)
-    except httpx.RequestError:
-        pass
 
 
-def load_registry(registry_path: Path) -> dict:
+def load_registry(registry_path: Path) -> dict[str, Any]:
     if not registry_path.exists():
         return {"models": []}
-    return yaml.safe_load(registry_path.read_text()) or {"models": []}
+    return dict(yaml.safe_load(registry_path.read_text()) or {"models": []})
 
 
-def find_model_version(registry: dict, name: str, version: str) -> dict | None:
-    for entry in registry.get("models", []):
+def find_model_version(registry: dict[str, Any], name: str, version: str) -> dict[str, Any] | None:
+    models: list[dict[str, Any]] = registry.get("models", [])
+    for entry in models:
         if entry.get("name") == name and entry.get("version") == version:
             return entry
     return None
@@ -126,8 +141,9 @@ def find_model_version(registry: dict, name: str, version: str) -> dict | None:
 # CLI
 # ---------------------------------------------------------------------------
 
+
 @click.group()
-def cli():
+def cli() -> None:
     """Model rollback toolkit."""
     logging.basicConfig(
         level=logging.INFO,
@@ -136,7 +152,11 @@ def cli():
 
 
 @cli.command()
-@click.option("--target-version", default=None, help="Specific version to roll back to (default: previous healthy)")
+@click.option(
+    "--target-version",
+    default=None,
+    help="Specific version to roll back to (default: previous healthy)",
+)
 @click.option("--port", type=int, default=8000, help="Port for the restored instance")
 @click.option("--tensor-parallel", type=int, default=1)
 @click.option("--health-timeout", type=int, default=300)
@@ -147,7 +167,7 @@ def rollback(
     tensor_parallel: int,
     health_timeout: int,
     registry_path: str,
-):
+) -> None:
     """Roll back to a previous model version."""
     current = find_current_deployment()
     current_version = current["model_version"] if current else None
@@ -163,11 +183,16 @@ def rollback(
         if entry is None:
             # Fall back to rollout log
             for log_entry in reversed(load_rollout_log()):
-                if log_entry.get("model_version") == target_version and log_entry.get("status") == "healthy":
+                if (
+                    log_entry.get("model_version") == target_version
+                    and log_entry.get("status") == "healthy"
+                ):
                     entry = log_entry
                     break
         if entry is None:
-            raise click.ClickException(f"Version {target_version} not found in registry or rollout log")
+            raise click.ClickException(
+                f"Version {target_version} not found in registry or rollout log"
+            )
         checkpoint_path = entry.get("checkpoint_path")
         model_name = entry.get("model_name", entry.get("name", "unknown"))
     else:
@@ -225,7 +250,7 @@ def rollback(
 
 
 @cli.command()
-def history():
+def history() -> None:
     """Print recent rollout / rollback history."""
     log = load_rollout_log()
     if not log:

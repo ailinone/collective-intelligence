@@ -30,6 +30,7 @@
 import { prisma } from '@/database/client';
 import { Prisma } from '@/generated/prisma/index.js';
 import { logger } from '@/utils/logger';
+import { pushAnonymousChatOperational } from './systems-push';
 
 const log = logger.child({ component: 'anonymous-chat-audit' });
 
@@ -176,6 +177,23 @@ export function recordAnonymousChat(input: AnonymousChatAuditInput): void {
       if (ip && !isPrivateIp(ip)) {
         void enrichWithGeo(row.id, ip);
       }
+
+      // Mirror METADATA ONLY to Ailin Systems for the abuse-monitoring view
+      // (fingerprint/IP are pseudonymized on ingest there; messages and
+      // response text never leave this service). Same fire-and-forget
+      // contract as everything else in this module.
+      pushAnonymousChatOperational({
+        requestId: input.requestId,
+        apiKeyId: input.apiKeyId,
+        visitorFingerprint: input.visitorFingerprint,
+        visitorIp: ip,
+        modelRequested: input.modelRequested,
+        modelsServed: input.modelsServed,
+        inputTokens: input.inputTokens,
+        outputTokens: input.outputTokens,
+        status: input.status,
+        errorCode: input.errorCode,
+      });
     } catch (error) {
       log.error(
         { error: error instanceof Error ? error.message : String(error), requestId: input.requestId },

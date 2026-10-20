@@ -18,30 +18,33 @@ Usage
     python train_dpo.py --config dpo_config.yaml
     accelerate launch train_dpo.py --config dpo_config.yaml
 """
+
 from __future__ import annotations
 
 import json
 import logging
 import os
-import sys
 from pathlib import Path
-from typing import Dict, Optional
+from typing import Any
 
 import click
 import numpy as np
 import torch
 import yaml
-from datasets import Dataset, load_dataset, load_from_disk
 from peft import LoraConfig, TaskType
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from trl import DPOConfig, DPOTrainer
+
+# 2026-10-18 datasets ships no py.typed and the repo's datasets/ data directory
+# shadows the installed package for mypy, so the imports below resolve to Any.
+from datasets import DatasetDict, load_dataset, load_from_disk  # type: ignore[attr-defined]
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 
 
 # ── Dataset loading ──────────────────────────────────────────
-def load_preference_dataset(cfg: dict) -> dict:
+def load_preference_dataset(cfg: dict[str, Any]) -> DatasetDict:
     """Load preference pairs for DPO training.
 
     Expected format:
@@ -71,7 +74,7 @@ def load_preference_dataset(cfg: dict) -> dict:
     logger.info("Loaded %d preference pairs", len(dataset))
 
     # Format for DPOTrainer: needs prompt, chosen, rejected as text
-    def format_for_dpo(example):
+    def format_for_dpo(example: dict[str, Any]) -> dict[str, str]:
         prompt = example.get("prompt", "")
         chosen = example.get("chosen", "")
         rejected = example.get("rejected", "")
@@ -95,7 +98,7 @@ def load_preference_dataset(cfg: dict) -> dict:
 
 
 # ── Win rate evaluation ──────────────────────────────────────
-def compute_dpo_metrics(eval_pred) -> Dict[str, float]:
+def compute_dpo_metrics(eval_pred: Any) -> dict[str, float]:
     """
     Compute win rate and other DPO-specific metrics.
     DPOTrainer provides chosen and rejected rewards in predictions.
@@ -125,9 +128,11 @@ def compute_dpo_metrics(eval_pred) -> Dict[str, float]:
 
 # ── Main ─────────────────────────────────────────────────────
 @click.command()
-@click.option("--config", required=True, type=click.Path(exists=True), help="Path to DPO config YAML.")
+@click.option(
+    "--config", required=True, type=click.Path(exists=True), help="Path to DPO config YAML."
+)
 @click.option("--resume-from", default=None, type=str, help="Resume from a checkpoint.")
-def main(config: str, resume_from: Optional[str]):
+def main(config: str, resume_from: str | None) -> None:
     """Train with DPO using TRL."""
     with open(config) as f:
         cfg = yaml.safe_load(f)
@@ -170,7 +175,9 @@ def main(config: str, resume_from: Optional[str]):
 
     # Tokenizer
     tokenizer = AutoTokenizer.from_pretrained(
-        tokenizer_path, trust_remote_code=True, padding_side="left",
+        tokenizer_path,
+        trust_remote_code=True,
+        padding_side="left",
     )
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
@@ -214,7 +221,8 @@ def main(config: str, resume_from: Optional[str]):
         loss_type=dpo_cfg.get("loss_type", "sigmoid"),
         label_smoothing=dpo_cfg.get("label_smoothing", 0.0),
         max_length=data_cfg.get("max_length", 4096),
-        max_prompt_length=data_cfg.get("max_prompt_length", 1024),
+        # NOTE: no max_prompt_length — DPOConfig dropped it before trl 1.16
+        # (only max_length remains; validated against trl dpo_config.py v1.16.0).
         # Training
         num_train_epochs=train_cfg.get("epochs", 1),
         per_device_train_batch_size=train_cfg.get("per_device_train_batch_size", 2),
@@ -259,7 +267,11 @@ def main(config: str, resume_from: Optional[str]):
     )
 
     # Train
-    logger.info("Starting DPO training (beta=%.2f, loss=%s)...", dpo_cfg.get("beta", 0.1), dpo_cfg.get("loss_type", "sigmoid"))
+    logger.info(
+        "Starting DPO training (beta=%.2f, loss=%s)...",
+        dpo_cfg.get("beta", 0.1),
+        dpo_cfg.get("loss_type", "sigmoid"),
+    )
     if resume_from:
         trainer.train(resume_from_checkpoint=resume_from)
     else:
@@ -277,7 +289,9 @@ def main(config: str, resume_from: Optional[str]):
 
     # Save final model
     output_cfg = cfg.get("output", {})
-    final_dir = output_cfg.get("final_model_dir", ckpt_cfg.get("output_dir", "./models/ailin-1b-dpo"))
+    final_dir = output_cfg.get(
+        "final_model_dir", ckpt_cfg.get("output_dir", "./models/ailin-1b-dpo")
+    )
     logger.info("Saving final DPO model to %s", final_dir)
     trainer.save_model(final_dir)
     tokenizer.save_pretrained(final_dir)

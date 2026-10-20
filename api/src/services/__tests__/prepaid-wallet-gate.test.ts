@@ -47,6 +47,20 @@ vi.mock('@/services/prepaid-wallet-prisma-store', () => ({
   },
 }));
 
+// The wallet-debit mirror's outbound leg, mocked the same resetModules-safe
+// way: the factory delegates to a swappable hoisted fn.
+hoisted.reportUsage = undefined as
+  | ((...args: unknown[]) => Promise<boolean>)
+  | undefined;
+vi.mock('@/services/billing-usage-report-client', () => ({
+  reportUsageToBilling: (...args: unknown[]) => {
+    if (!hoisted.reportUsage) {
+      return Promise.resolve(false);
+    }
+    return hoisted.reportUsage(...args);
+  },
+}));
+
 type Gate = typeof import('@/services/prepaid-wallet-gate');
 
 /**
@@ -237,6 +251,43 @@ describe('prepaid-wallet-gate', () => {
       expect(await store.getAvailableUsd(ORG)).toBeCloseTo(97.6, 6); // remainder released
     });
 
+    // credits-continue: the request is authenticated by the chat-free-tier key
+    // (whose org wallet is empty by design) on behalf of a REAL user. The
+    // server-set `ailin_wallet_org` must route BOTH the hold and the debit to
+    // the acting user's org — charging the key's org would silently no-op.
+    it('gates and debits the ailin_wallet_org, not the authenticated key org', async () => {
+      const USER_ORG = 'org-acting-user';
+      hoisted.store = new InMemoryBalanceStore({ [ORG]: 100, [USER_ORG]: 100 });
+      store = hoisted.store as InMemoryBalanceStore;
+      const userOrgRequest = req({
+        model: 'auto',
+        ailin_alias: 'auto:base',
+        ailin_tier: 'base',
+        ailin_tier_rate: { inputPer1MUsd: 1, outputPer1MUsd: 4 },
+        ailin_wallet_org: USER_ORG,
+      });
+
+      const gated = await gate.gateChatRequest(ORG, userOrgRequest);
+      expect(gated.allowed).toBe(true);
+      expect(gated.holdId).toMatch(/^hold_/);
+      // The hold landed on the USER org: their spendable balance is reduced
+      // while the (rich) key org is untouched.
+      expect(await store.getAvailableUsd(USER_ORG)).toBeLessThan(100);
+      expect(await store.getBalanceUsd(ORG)).toBe(100);
+
+      await gate.debitChatRequest({
+        organizationId: ORG,
+        request: userOrgRequest,
+        promptTokens: 100_000,
+        completionTokens: 100_000,
+        requestId: 'req-user-org',
+        holdId: gated.holdId,
+      });
+      // 100k in @ $1/1M = $0.10, 100k out @ $4/1M = $0.40 → $0.50 settled on USER_ORG.
+      expect(await store.getBalanceUsd(USER_ORG)).toBeCloseTo(99.5, 6);
+      expect(await store.getBalanceUsd(ORG)).toBe(100);
+    });
+
     it('rejects a composite cell with 402 when the balance cannot cover the hold', async () => {
       hoisted.store = new InMemoryBalanceStore({ [ORG]: 0 });
       const gated = await gate.gateChatRequest(ORG, composite());
@@ -310,6 +361,9 @@ describe('prepaid-wallet-gate', () => {
           throw new Error('relation "organization_balance" does not exist');
         },
         adjustBalanceUsd: async () => 0,
+        applyTopup: async () => {
+          throw new Error('store down');
+        },
         applyDebit: async () => {
           throw new Error('store down');
         },
@@ -323,6 +377,56 @@ describe('prepaid-wallet-gate', () => {
         recordFailedDebit: async () => undefined,
       } satisfies BalanceStore;
       expect(await gate.gateChatRequest(ORG, composite())).toEqual({ allowed: true });
+    });
+
+    // The operator-selectable counterpart (PREPAID_WALLET_GATE_RESERVE_FAIL_MODE=closed):
+    // a PAID request never executes without a reservation — the wallet-store
+    // outage becomes a 503 instead of a bounded revenue window. Read at request
+    // time, so no fresh module load is needed here, only the env flip.
+    it('FAILS CLOSED with 503 wallet_unavailable when the mode env is set', async () => {
+      const previous = process.env.PREPAID_WALLET_GATE_RESERVE_FAIL_MODE;
+      process.env.PREPAID_WALLET_GATE_RESERVE_FAIL_MODE = 'closed';
+      try {
+        hoisted.store = {
+          getBalanceUsd: async () => {
+            throw new Error('relation "organization_balance" does not exist');
+          },
+          getAvailableUsd: async () => {
+            throw new Error('relation "organization_balance" does not exist');
+          },
+          adjustBalanceUsd: async () => 0,
+          applyTopup: async () => {
+            throw new Error('store down');
+          },
+          applyDebit: async () => {
+            throw new Error('store down');
+          },
+          reserveHold: async () => {
+            throw new Error('store down');
+          },
+          settleHold: async () => {
+            throw new Error('store down');
+          },
+          releaseHold: async () => undefined,
+          recordFailedDebit: async () => undefined,
+        } satisfies BalanceStore;
+        expect(await gate.gateChatRequest(ORG, composite())).toEqual({
+          allowed: false,
+          status: 503,
+          body: {
+            error: {
+              code: 'wallet_unavailable',
+              message: 'Prepaid wallet is temporarily unavailable. Please retry shortly.',
+            },
+          },
+        });
+      } finally {
+        if (previous === undefined) {
+          delete process.env.PREPAID_WALLET_GATE_RESERVE_FAIL_MODE;
+        } else {
+          process.env.PREPAID_WALLET_GATE_RESERVE_FAIL_MODE = previous;
+        }
+      }
     });
   });
 
@@ -341,8 +445,10 @@ describe('prepaid-wallet-gate', () => {
    * `ailin-expert-panel` exactly like `expert-panel`. Both directions are asserted.
    */
   describe('alias resolution invariant (the carrier the gate keys off)', () => {
-    // Configured virtual-model profiles → no carrier → never touched by the wallet.
-    it.each(['ailin-best', 'ailin-economy', 'ailin-auto', 'ailin-fast', 'ailin-consensus'])(
+    // Configured virtual-model profiles WITHOUT a profile.tier → no carrier → never
+    // touched by the wallet. (ailin-best/ailin-consensus left this list: they now
+    // declare tier 'medium' -- the billed-preset change -- and are asserted below.)
+    it.each(['ailin-economy', 'ailin-auto', 'ailin-fast'])(
       'configured profile %s resolves with NO tier carrier',
       (alias) => {
         const resolved = resolveAilinVirtualModelAlias(alias);
@@ -350,6 +456,25 @@ describe('prepaid-wallet-gate', () => {
         expect(resolved?.model).toBe('auto'); // the rewrite that caused the defect
         expect(resolved?.tier).toBeUndefined();
         expect(resolved?.tierRate).toBeUndefined();
+      }
+    );
+
+    // Billed presets: profiles that DECLARE a tier resolve WITH the billing carrier
+    // (same rate as their composite cell) while keeping profile semantics. This is
+    // the deliberate product change that closed the OPEN PRODUCT DECISION in the
+    // module header -- the heavy fan-out presets no longer run free while their
+    // byte-identical composite cells charge.
+    it.each([
+      ['ailin-best', 'medium', 2, 8],
+      ['ailin-consensus', 'medium', 2, 8],
+    ] as Array<[string, string, number, number]>)(
+      'billed preset %s resolves WITH the %s tier carrier',
+      (alias, tier, inputPer1MUsd, outputPer1MUsd) => {
+        const resolved = resolveAilinVirtualModelAlias(alias);
+        expect(resolved).not.toBeNull();
+        expect(resolved?.model).toBe('auto');
+        expect(resolved?.tier).toBe(tier);
+        expect(resolved?.tierRate).toEqual({ inputPer1MUsd, outputPer1MUsd });
       }
     );
 
@@ -388,5 +513,110 @@ describe('prepaid-wallet-gate', () => {
     it('a shadow-wired cell does not resolve at all (never routed, never sold)', () => {
       expect(resolveAilinVirtualModelAlias('war-room:large')).toBeNull();
     });
+  });
+});
+
+// ── mirrorWalletDebitToBilling: wallet debit -> billing Credit ledger ──
+
+describe('wallet debit mirror to billing (BILLING_WALLET_CONSUMPTION_REPORT_ENABLED)', () => {
+  let gate: Gate;
+  let store: InMemoryBalanceStore;
+
+  beforeEach(async () => {
+    gate = await loadGate(true);
+    store = new InMemoryBalanceStore({ [ORG]: 100 });
+    hoisted.store = store;
+    hoisted.reportUsage = vi.fn(async () => true);
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.useRealTimers();
+  });
+
+  it('mirrors a settled debit as integer micro-USD under the requestId idempotency key', async () => {
+    vi.stubEnv('BILLING_WALLET_CONSUMPTION_REPORT_ENABLED', 'true');
+    await gate.debitChatRequest({
+      organizationId: ORG,
+      request: composite(),
+      promptTokens: 100_000,
+      completionTokens: 100_000,
+      requestId: 'req-mirror',
+    });
+    // $2.40 charge (100k in @ $4/1M + 100k out @ $20/1M) -> 2,400,000 micros.
+    // The mirror is fire-and-forget (invoked with `void`), so poll for it.
+    await vi.waitFor(() =>
+      expect(hoisted.reportUsage).toHaveBeenCalledWith(ORG, 'req-mirror', [
+        { resourceType: 'wallet_debit_usd_micros', amount: 2_400_000 },
+      ])
+    );
+  });
+
+  it('is a no-op when the flag is off (the debit itself still applies)', async () => {
+    await gate.debitChatRequest({
+      organizationId: ORG,
+      request: composite(),
+      promptTokens: 100_000,
+      completionTokens: 100_000,
+      requestId: 'req-mirror-off',
+    });
+    expect(await store.getBalanceUsd(ORG)).toBeCloseTo(97.6, 6);
+    expect(hoisted.reportUsage).not.toHaveBeenCalled();
+  });
+
+  it('never throws and never rolls the debit back when every mirror attempt fails', async () => {
+    vi.stubEnv('BILLING_WALLET_CONSUMPTION_REPORT_ENABLED', 'true');
+    hoisted.reportUsage = vi.fn(async () => false);
+    vi.useFakeTimers();
+
+    await gate.debitChatRequest({
+      organizationId: ORG,
+      request: composite(),
+      promptTokens: 100_000,
+      completionTokens: 100_000,
+      requestId: 'req-mirror-fail',
+    });
+    await vi.runAllTimersAsync(); // exhaust the [0,1s,5s,15s,30s] ladder
+
+    expect(hoisted.reportUsage).toHaveBeenCalledTimes(5);
+    // The wallet debit stands: the mirror is accounting, not a transaction.
+    expect(await store.getBalanceUsd(ORG)).toBeCloseTo(97.6, 6);
+  });
+
+  it('sheds mirrors beyond the in-flight cap instead of piling up promises and timers', async () => {
+    vi.stubEnv('BILLING_WALLET_CONSUMPTION_REPORT_ENABLED', 'true');
+    vi.stubEnv('BILLING_WALLET_MIRROR_MAX_IN_FLIGHT', '2');
+    let release!: () => void;
+    const open = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    hoisted.reportUsage = vi.fn(async () => {
+      await open;
+      return true;
+    });
+
+    try {
+      const first = gate.mirrorWalletDebitToBilling({ organizationId: ORG, requestId: 'r1', chargeUsd: 1 });
+      const second = gate.mirrorWalletDebitToBilling({ organizationId: ORG, requestId: 'r2', chargeUsd: 1 });
+      const third = gate.mirrorWalletDebitToBilling({ organizationId: ORG, requestId: 'r3', chargeUsd: 1 });
+      await Promise.resolve();
+
+      // r3 is shed: it never reaches billing. Billing-side reconciliation
+      // (org-balance) surfaces the gap, the wallet debit itself is untouched.
+      expect(hoisted.reportUsage).toHaveBeenCalledTimes(2);
+
+      release();
+      expect(await third).toBe(false);
+      expect(await first).toBe(true);
+      expect(await second).toBe(true);
+    } finally {
+      release();
+    }
+
+    // capacity is released once the in-flight mirrors settle
+    hoisted.reportUsage = vi.fn(async () => true);
+    expect(
+      await gate.mirrorWalletDebitToBilling({ organizationId: ORG, requestId: 'r4', chargeUsd: 1 })
+    ).toBe(true);
   });
 });

@@ -17,10 +17,14 @@ SFT output format (compatible with alignment/sft/train_sft.py):
   {"messages": [{"role": "user", "content": "..."}, {"role": "assistant", "content": "..."}]}
 
 DPO output format (compatible with alignment/dpo/train_dpo.py):
-  {"prompt": "...", "chosen": "...", "rejected": "...", "chosen_score": 0.88, "rejected_score": 0.72}
+  {"prompt": "...", "chosen": "...", "rejected": "...",
+   "chosen_score": 0.88, "rejected_score": 0.72}
 
 Usage:
-  python data/feedback/transform.py --input ./data/feedback/validated --config ./data/feedback/config.yaml --output ./data/feedback/staging
+  python data/feedback/transform.py \
+    --input ./data/feedback/validated \
+    --config ./data/feedback/config.yaml \
+    --output ./data/feedback/staging
 """
 
 from __future__ import annotations
@@ -42,10 +46,13 @@ logger = logging.getLogger(__name__)
 
 # ─── Quality Gates ────────────────────────────────────────────────────────────
 
+
 def load_config(config_path: Path) -> dict[str, Any]:
     """Load quality gate configuration."""
     with open(config_path) as f:
-        return yaml.safe_load(f)
+        # 2026-10-18 boundary conversion: yaml.safe_load returns Any; the
+        # config contract is a mapping, so coerce at the edge.
+        return dict(yaml.safe_load(f))
 
 
 def passes_sft_gate(record: dict[str, Any], config: dict[str, Any]) -> bool:
@@ -70,10 +77,9 @@ def passes_sft_gate(record: dict[str, Any], config: dict[str, Any]) -> bool:
             return False
 
     # Feedback iterations limit
-    if record.get("feedback_iterations", 1) > gates.get("max_feedback_iterations", 2):
-        return False
-
-    return True
+    # 2026-10-18 bool() boundary conversion: dict.get() yields Any, so the
+    # comparison result is Any; coerce to the declared bool return type.
+    return bool(record.get("feedback_iterations", 1) <= gates.get("max_feedback_iterations", 2))
 
 
 def passes_dpo_gate(record: dict[str, Any], config: dict[str, Any]) -> bool:
@@ -87,10 +93,8 @@ def passes_dpo_gate(record: dict[str, Any], config: dict[str, Any]) -> bool:
     floor = gates.get("min_quality_floor", 0.30)
     if record.get("chosen_quality", 0) < floor:
         return False
-    if record.get("shadow_quality", 0) < floor:
-        return False
-
-    return True
+    # 2026-10-18 bool() boundary conversion: operand from dict.get() is Any.
+    return bool(record.get("shadow_quality", 0) >= floor)
 
 
 def passes_staleness_gate(record: dict[str, Any], config: dict[str, Any]) -> bool:
@@ -108,6 +112,7 @@ def passes_staleness_gate(record: dict[str, Any], config: dict[str, Any]) -> boo
 
 
 # ─── SFT Builder ──────────────────────────────────────────────────────────────
+
 
 def build_sft_record(outcome: dict[str, Any]) -> dict[str, Any]:
     """Build an SFT training record from an outcome.
@@ -155,14 +160,14 @@ def build_sft_record(outcome: dict[str, Any]) -> dict[str, Any]:
 
 # ─── DPO Builder ──────────────────────────────────────────────────────────────
 
+
 def build_dpo_record(shadow: dict[str, Any]) -> dict[str, Any]:
     """Build a DPO preference pair from a shadow evaluation."""
     task_type = shadow.get("task_type", "general")
     complexity = shadow.get("complexity", "medium")
 
     prompt = (
-        f"Task: {task_type} (complexity: {complexity})\n"
-        f"Select the best orchestration strategy."
+        f"Task: {task_type} (complexity: {complexity})\nSelect the best orchestration strategy."
     )
 
     # Winner is "chosen", loser is "rejected"
@@ -199,7 +204,11 @@ def build_dpo_record(shadow: dict[str, Any]) -> dict[str, Any]:
 
 # ─── Contradiction Filter ─────────────────────────────────────────────────────
 
-def filter_contradictions(records: list[dict[str, Any]], max_variance: float = 0.09) -> list[dict[str, Any]]:
+
+def filter_contradictions(
+    records: list[dict[str, Any]],
+    max_variance: float = 0.09,
+) -> list[dict[str, Any]]:
     """Remove records with contradictory quality scores for the same input."""
     by_hash: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for r in records:
@@ -215,15 +224,21 @@ def filter_contradictions(records: list[dict[str, Any]], max_variance: float = 0
             variance = sum((s - mean) ** 2 for s in scores) / len(scores)
             if variance > max_variance:
                 excluded_hashes.add(ih)
-                logger.info(f"Excluding input_hash {ih[:8]}...: variance {variance:.4f} > {max_variance}")
+                logger.info(
+                    f"Excluding input_hash {ih[:8]}...: variance {variance:.4f} > {max_variance}"
+                )
 
     before = len(records)
     records = [r for r in records if r.get("input_hash") not in excluded_hashes]
-    logger.info(f"Contradiction filter: {before} → {len(records)} records ({before - len(records)} excluded)")
+    logger.info(
+        f"Contradiction filter: {before} → {len(records)} records "
+        f"({before - len(records)} excluded)"
+    )
     return records
 
 
 # ─── Staging Report ───────────────────────────────────────────────────────────
+
 
 def build_staging_report(
     sft_records: list[dict[str, Any]],
@@ -235,8 +250,12 @@ def build_staging_report(
     """Build a staging report for human review."""
     sample_size = config.get("staging", {}).get("sample_size", 20)
 
-    sft_sample = random.sample(sft_records, min(sample_size, len(sft_records))) if sft_records else []
-    dpo_sample = random.sample(dpo_records, min(sample_size, len(dpo_records))) if dpo_records else []
+    sft_sample = (
+        random.sample(sft_records, min(sample_size, len(sft_records))) if sft_records else []
+    )
+    dpo_sample = (
+        random.sample(dpo_records, min(sample_size, len(dpo_records))) if dpo_records else []
+    )
 
     # Quality distribution
     sft_scores = [r["metadata"]["quality_score"] for r in sft_records if "metadata" in r]
@@ -268,10 +287,29 @@ def build_staging_report(
 
 # ─── CLI ──────────────────────────────────────────────────────────────────────
 
+
 @click.command()
-@click.option("--input", "input_dir", required=True, type=click.Path(exists=True), help="Validated records directory")
-@click.option("--config", "config_path", required=True, type=click.Path(exists=True), help="Config YAML path")
-@click.option("--output", "output_dir", required=True, type=click.Path(), help="Staging output directory")
+@click.option(
+    "--input",
+    "input_dir",
+    required=True,
+    type=click.Path(exists=True),
+    help="Validated records directory",
+)
+@click.option(
+    "--config",
+    "config_path",
+    required=True,
+    type=click.Path(exists=True),
+    help="Config YAML path",
+)
+@click.option(
+    "--output",
+    "output_dir",
+    required=True,
+    type=click.Path(),
+    help="Staging output directory",
+)
 def main(input_dir: str, config_path: str, output_dir: str) -> None:
     """Apply quality gates and build SFT/DPO training pairs."""
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")

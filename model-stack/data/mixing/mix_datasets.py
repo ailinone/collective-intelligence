@@ -19,7 +19,6 @@ from __future__ import annotations
 
 import json
 import logging
-import math
 import random
 import time
 from pathlib import Path
@@ -37,6 +36,7 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # Config models
 # ---------------------------------------------------------------------------
+
 
 class DatasetSource(BaseModel):
     """A single dataset source in the mix."""
@@ -79,6 +79,7 @@ class MixConfig(BaseModel):
 # Counting utilities
 # ---------------------------------------------------------------------------
 
+
 def count_records(path: Path) -> int:
     """Count records in a JSONL file."""
     count = 0
@@ -96,6 +97,7 @@ def estimate_tokens(text: str) -> int:
 # ---------------------------------------------------------------------------
 # Temperature-based weight adjustment
 # ---------------------------------------------------------------------------
+
 
 def apply_temperature(weights: list[float], temperature: float) -> list[float]:
     """
@@ -117,6 +119,7 @@ def apply_temperature(weights: list[float], temperature: float) -> list[float]:
 # ---------------------------------------------------------------------------
 # Core mixing
 # ---------------------------------------------------------------------------
+
 
 def run_mix_datasets(
     config: MixConfig,
@@ -147,7 +150,9 @@ def run_mix_datasets(
     effective_weights = apply_temperature(normalized, config.temperature)
 
     logger.info("Effective weights (temp=%.2f):", config.temperature)
-    for src, w, ew in zip(config.sources, normalized, effective_weights):
+    # zip lengths are equal by construction: normalized/effective_weights are
+    # list comprehensions derived 1:1 from config.sources.
+    for src, w, ew in zip(config.sources, normalized, effective_weights, strict=True):
         logger.info("  %s: raw=%.4f effective=%.4f", src.name, w, ew)
 
     # Phase 3: Compute sample counts per source
@@ -161,7 +166,7 @@ def run_mix_datasets(
         total_budget = sum(source_sizes.values())
 
     samples_per_source: dict[str, int] = {}
-    for src, ew in zip(config.sources, effective_weights):
+    for src, ew in zip(config.sources, effective_weights, strict=True):
         src_name = src.name or src.path
         desired = int(total_budget * ew)
         src_size = source_sizes[src_name]
@@ -178,9 +183,7 @@ def run_mix_datasets(
 
         samples_per_source[src_name] = actual
         epochs_used = actual / max(src_size, 1)
-        logger.info(
-            "  %s: %d samples (%.2f epochs of %d)", src_name, actual, epochs_used, src_size
-        )
+        logger.info("  %s: %d samples (%.2f epochs of %d)", src_name, actual, epochs_used, src_size)
 
     # Phase 4: Sample from each source
     logger.info("Phase 4: Sampling records...")
@@ -283,7 +286,7 @@ def run_mix_datasets(
                     3,
                 ),
             }
-            for src, ew in zip(config.sources, effective_weights)
+            for src, ew in zip(config.sources, effective_weights, strict=True)
         },
         "total_records_output": len(all_records),
         "elapsed_seconds": round(elapsed, 2),
@@ -300,14 +303,27 @@ def run_mix_datasets(
 # CLI
 # ---------------------------------------------------------------------------
 
+
 @click.command("mix-datasets")
-@click.option("--config", "config_path", required=True, type=click.Path(exists=True), help="Mix config YAML file")
-@click.option("--report", "report_path", default=None, type=click.Path(), help="Output report JSON path")
+@click.option(
+    "--config",
+    "config_path",
+    required=True,
+    type=click.Path(exists=True),
+    help="Mix config YAML file",
+)
+@click.option(
+    "--report", "report_path", default=None, type=click.Path(), help="Output report JSON path"
+)
 @click.option("--seed", default=None, type=int, help="Override random seed from config")
 @click.option("--temperature", default=None, type=float, help="Override temperature from config")
 @click.option("--total-samples", default=None, type=int, help="Override total sample count")
 @click.option("--total-tokens", default=None, type=int, help="Override total token budget")
-@click.option("--log-level", default="INFO", type=click.Choice(["DEBUG", "INFO", "WARNING", "ERROR"]))
+@click.option(
+    "--log-level",
+    default="INFO",
+    type=click.Choice(["DEBUG", "INFO", "WARNING", "ERROR"]),
+)
 def cli(
     config_path: str,
     report_path: str | None,
@@ -323,7 +339,7 @@ def cli(
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
     )
 
-    with open(config_path, "r", encoding="utf-8") as f:
+    with open(config_path, encoding="utf-8") as f:
         raw_config = yaml.safe_load(f)
 
     config = MixConfig(**raw_config)
@@ -346,9 +362,9 @@ def cli(
 
     report = run_mix_datasets(config, report_p)
 
-    click.echo(f"\n--- Dataset Mix Report ---")
+    click.echo("\n--- Dataset Mix Report ---")
     click.echo(f"Total output records: {report['total_records_output']:>10,}")
-    click.echo(f"\nSource breakdown:")
+    click.echo("\nSource breakdown:")
     for name, info in report["sources"].items():
         click.echo(
             f"  {name:30s} "

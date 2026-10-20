@@ -20,26 +20,27 @@ Usage
     python train_sft.py --config sft_config.yaml --no-lora  # full fine-tune
     accelerate launch train_sft.py --config sft_config.yaml
 """
+
 from __future__ import annotations
 
 import logging
 import os
-import sys
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Any
 
 import click
 import torch
 import yaml
-from datasets import Dataset, DatasetDict, load_dataset, load_from_disk
-from peft import LoraConfig, TaskType, get_peft_model, PeftModel
+from peft import LoraConfig, PeftModel, TaskType, get_peft_model
 from transformers import (
     AutoModelForCausalLM,
     AutoTokenizer,
-    BitsAndBytesConfig,
-    TrainingArguments,
 )
-from trl import SFTTrainer, SFTConfig
+from trl import SFTConfig, SFTTrainer
+
+# 2026-10-18 datasets ships no py.typed and the repo's datasets/ data directory
+# shadows the installed package for mypy, so the imports below resolve to Any.
+from datasets import DatasetDict, load_dataset, load_from_disk  # type: ignore[attr-defined]
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
@@ -61,21 +62,18 @@ CHAT_TEMPLATE = (
 
 
 # ── Data formatting ──────────────────────────────────────────
-def format_alpaca(example: Dict) -> str:
+def format_alpaca(example: dict[str, Any]) -> str:
     """Format Alpaca-style instruction data into a chat string."""
     instruction = example.get("instruction", "")
     input_text = example.get("input", "")
     output_text = example.get("output", "")
 
-    if input_text:
-        prompt = f"{instruction}\n\nInput:\n{input_text}"
-    else:
-        prompt = instruction
+    prompt = f"{instruction}\n\nInput:\n{input_text}" if input_text else instruction
 
     return f"<|user|>\n{prompt}\n<|assistant|>\n{output_text}\n"
 
 
-def format_sharegpt(example: Dict) -> str:
+def format_sharegpt(example: dict[str, Any]) -> str:
     """Format ShareGPT-style multi-turn conversations."""
     conversations = example.get("conversations", [])
     text_parts = []
@@ -91,7 +89,7 @@ def format_sharegpt(example: Dict) -> str:
     return "".join(text_parts)
 
 
-def format_messages(example: Dict) -> str:
+def format_messages(example: dict[str, Any]) -> str:
     """Format OpenAI messages-style data."""
     messages = example.get("messages", [])
     text_parts = []
@@ -110,7 +108,7 @@ FORMAT_FNS = {
 
 
 # ── Dataset loading ──────────────────────────────────────────
-def load_sft_dataset(cfg: dict) -> DatasetDict:
+def load_sft_dataset(cfg: dict[str, Any]) -> DatasetDict:
     """Load and split dataset for SFT training."""
     data_cfg = cfg["data"]
     dataset_path = data_cfg["dataset_path"]
@@ -141,7 +139,7 @@ def load_sft_dataset(cfg: dict) -> DatasetDict:
     if format_fn is None:
         raise ValueError(f"Unknown dataset format: {fmt}. Choose from {list(FORMAT_FNS.keys())}")
 
-    def apply_format(example):
+    def apply_format(example: dict[str, Any]) -> dict[str, Any]:
         example["text"] = format_fn(example)
         return example
 
@@ -157,7 +155,7 @@ def load_sft_dataset(cfg: dict) -> DatasetDict:
 
 
 # ── Model loading ────────────────────────────────────────────
-def load_model_and_tokenizer(cfg: dict):
+def load_model_and_tokenizer(cfg: dict[str, Any]) -> tuple[Any, Any]:
     """Load base model and tokenizer."""
     model_cfg = cfg["model"]
     base_model = model_cfg["base_model"]
@@ -199,7 +197,7 @@ def load_model_and_tokenizer(cfg: dict):
 
 
 # ── LoRA setup ───────────────────────────────────────────────
-def setup_lora(model, cfg: dict):
+def setup_lora(model: Any, cfg: dict[str, Any]) -> Any:
     """Apply LoRA adapters to the model."""
     lora_cfg = cfg.get("lora", {})
     if not lora_cfg.get("enabled", False):
@@ -222,7 +220,7 @@ def setup_lora(model, cfg: dict):
 
 
 # ── Merge and save ───────────────────────────────────────────
-def merge_and_save(model, tokenizer, cfg: dict):
+def merge_and_save(model: Any, tokenizer: Any, cfg: dict[str, Any]) -> None:
     """Merge LoRA adapters back into base model and save."""
     merge_cfg = cfg.get("merge", {})
     if not merge_cfg.get("merge_adapters", False):
@@ -231,10 +229,7 @@ def merge_and_save(model, tokenizer, cfg: dict):
     output_dir = merge_cfg.get("output_dir", "./models/ailin-1b-sft-merged")
     logger.info("Merging LoRA adapters and saving to %s", output_dir)
 
-    if isinstance(model, PeftModel):
-        merged_model = model.merge_and_unload()
-    else:
-        merged_model = model
+    merged_model = model.merge_and_unload() if isinstance(model, PeftModel) else model
 
     merged_model.save_pretrained(output_dir)
     tokenizer.save_pretrained(output_dir)
@@ -243,10 +238,12 @@ def merge_and_save(model, tokenizer, cfg: dict):
 
 # ── Main ─────────────────────────────────────────────────────
 @click.command()
-@click.option("--config", required=True, type=click.Path(exists=True), help="Path to SFT config YAML.")
+@click.option(
+    "--config", required=True, type=click.Path(exists=True), help="Path to SFT config YAML."
+)
 @click.option("--no-lora", is_flag=True, default=False, help="Disable LoRA (full fine-tuning).")
 @click.option("--resume-from", default=None, type=str, help="Resume from a specific checkpoint.")
-def main(config: str, no_lora: bool, resume_from: Optional[str]):
+def main(config: str, no_lora: bool, resume_from: str | None) -> None:
     """Launch SFT training."""
     with open(config) as f:
         cfg = yaml.safe_load(f)
@@ -263,7 +260,9 @@ def main(config: str, no_lora: bool, resume_from: Optional[str]):
     # Load dataset
     logger.info("Loading dataset...")
     dataset = load_sft_dataset(cfg)
-    logger.info("Train: %d examples, Eval: %d examples", len(dataset["train"]), len(dataset["test"]))
+    logger.info(
+        "Train: %d examples, Eval: %d examples", len(dataset["train"]), len(dataset["test"])
+    )
 
     # Training arguments
     train_cfg = cfg.get("training", {})

@@ -388,6 +388,17 @@ export class DeepSeekAdapter extends ProviderAdapter {
             ? choiceObj.finish_reason
             : null;
 
+        // Dedicated reasoning channel (ci#750, owner decision 2026-10-04):
+        // DeepSeek-R1-class models stream their chain of thought on
+        // `delta.reasoning_content`, distinct from `delta.content`. Forward it
+        // VERBATIM on the same field — previously it was silently dropped
+        // here, discarding the model's entire reasoning trace on every
+        // streaming call.
+        const reasoningContent =
+          typeof delta.reasoning_content === 'string' && delta.reasoning_content.length > 0
+            ? delta.reasoning_content
+            : undefined;
+
         // Type guard for delta content
         let deltaContent: string | undefined = undefined;
         if (delta.content !== undefined && delta.content !== null) {
@@ -486,6 +497,7 @@ export class DeepSeekAdapter extends ProviderAdapter {
           delta: {
             ...(role ? { role } : {}),
             ...(deltaContent !== undefined ? { content: deltaContent } : {}),
+            ...(reasoningContent ? { reasoning_content: reasoningContent } : {}),
             ...(toolCalls ? { tool_calls: toolCalls } : {}),
           },
           finish_reason: finishReason,

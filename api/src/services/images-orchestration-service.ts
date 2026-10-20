@@ -30,6 +30,8 @@ import {
   diversifyProviders,
 } from '@/services/modality/modality-execution-helpers';
 import { runModalityFallback } from '@/services/modality/modality-fallback-driver';
+import { toModalityCostFields } from '@/services/modality-cost';
+import type { CostRecord } from '@/services/cost-normalization-service';
 import { getProviderRegistry } from '@/providers/provider-registry';
 import type { ProviderRegistry } from '@/providers/provider-registry';
 import type { ProviderAdapter } from '@/providers/base/provider-adapter';
@@ -209,6 +211,23 @@ export interface ImageResult {
     rationale?: string;
     available: boolean;
   }>;
+  /**
+   * Real per-call cost, via the same `computeModalityCost`/`normalizeCost`
+   * pipeline the chat path uses — computed by `runModalityFallback` for
+   * every single-candidate call (see `modality-fallback-driver.ts`'s COST #6
+   * wiring) but previously dropped here instead of being surfaced to the
+   * caller (the mediaPlanner/mediaConsensus cost-accounting gap). Absent
+   * rather than fabricated: most image adapters' raw responses carry no
+   * cost/usage field today, so this resolves to `costSource: 'missing'` in
+   * practice until real per-unit provider pricing exists. Also absent on the
+   * best-of-N branch of `generateImages()` (`successes.length > 1`), which
+   * does not route through `runModalityFallback` per candidate — a smaller,
+   * separate residual gap, not addressed here.
+   */
+  cost?: number | null;
+  rawCost?: number | null;
+  costSource?: CostRecord['costSource'];
+  costConfidence?: CostRecord['costConfidence'];
 }
 
 // ============================================
@@ -888,6 +907,7 @@ export class ImagesOrchestrationService {
       strategyUsed: args.strategyUsed,
       fallbackUsed: result.fallbackUsed,
       attempts: result.attempts,
+      ...toModalityCostFields(result.cost),
     };
   }
 
@@ -998,9 +1018,28 @@ export class ImagesOrchestrationService {
   // Result mappers
   // ============================================
 
+  /**
+   * Production incident (2026-09-30, "farol ao pôr do sol"): these mappers
+   * used to honor `responseFormat: 'url'` by FABRICATING a
+   * `data:image/png;base64,...` data URI whenever the provider returned only
+   * bytes (gpt-image-* never returns URLs). A data URI is not a delivery URL —
+   * it is the entire payload wearing a URL costume — so downstream "url exists
+   * ⇒ lightweight reference" assumptions (mediaStageSuccess dropping the
+   * redundant b64; the SSE line guard only stripping b64_json) were all
+   * defeated, and the same ~2.2MB base64 traveled TWICE in one SSE line
+   * (artifact.url + the message.content URL suffix), degrading the whole
+   * response to the "Response too large to deliver over a streaming
+   * connection" placeholder.
+   *
+   * The honest contract: emit `url` only when the provider gave a REAL
+   * http(s) URL, and `b64_json` whenever bytes are all we have — regardless of
+   * the requested format. Turning bytes into a deliverable URL (uploading to
+   * files storage) is decided further up the pipeline, which has the org/user
+   * context to do it; lying here just moves the failure downstream.
+   */
   private mapGenerationResult(
     raw: Awaited<ReturnType<ProviderAdapter['imageGenerate']>>,
-    responseFormat: 'url' | 'b64_json'
+    _responseFormat: 'url' | 'b64_json'
   ): ImageResult['images'] {
     const images = Array.isArray(raw.image) ? raw.image : [raw.image];
     interface ImageItem {
@@ -1011,12 +1050,7 @@ export class ImagesOrchestrationService {
     return images.map((img: ImageItem | Buffer) => {
       const imageItem: ImageItem = Buffer.isBuffer(img) ? { buffer: img } : img;
       return {
-        ...(responseFormat === 'url'
-          ? { url: imageItem.url || this.bufferToDataURL(imageItem.buffer || Buffer.from('')) }
-          : {
-              b64_json:
-                imageItem.b64_json || this.bufferToBase64(imageItem.buffer || Buffer.from('')),
-            }),
+        ...this.mapImageDeliveryFields(imageItem),
         revised_prompt: (raw.raw as { revised_prompt?: string })?.revised_prompt,
       };
     });
@@ -1024,39 +1058,44 @@ export class ImagesOrchestrationService {
 
   private mapEditOrVariationResult(
     raw: Awaited<ReturnType<ProviderAdapter['imageEdit']>>,
-    responseFormat: 'url' | 'b64_json'
+    _responseFormat: 'url' | 'b64_json'
   ): ImageResult['images'] {
     const images = Array.isArray(raw.image) ? raw.image : [raw.image];
     interface ImageItem {
       url?: string;
       b64_json?: string;
+      buffer?: Buffer;
     }
     return images.map((img: Buffer | ImageItem): ImageItem => {
-      if (Buffer.isBuffer(img)) {
-        return responseFormat === 'url'
-          ? { url: this.bufferToDataURL(img) }
-          : { b64_json: this.bufferToBase64(img) };
-      }
-      return {
-        ...(responseFormat === 'url'
-          ? { url: img.url || (Buffer.isBuffer(img) ? this.bufferToDataURL(img) : undefined) }
-          : { b64_json: Buffer.isBuffer(img) ? this.bufferToBase64(img) : undefined }),
-      };
+      const imageItem: ImageItem = Buffer.isBuffer(img) ? { buffer: img } : img;
+      return this.mapImageDeliveryFields(imageItem);
     });
+  }
+
+  /** Shared per-image projection for the mappers above: real http(s) URL when
+   *  present, honest base64 whenever bytes exist, never a fabricated data URI
+   *  (see the incident note on mapGenerationResult). */
+  private mapImageDeliveryFields(imageItem: {
+    url?: string;
+    b64_json?: string;
+    buffer?: Buffer;
+  }): { url?: string; b64_json?: string } {
+    const realUrl =
+      typeof imageItem.url === 'string' && /^https?:\/\//i.test(imageItem.url)
+        ? imageItem.url
+        : undefined;
+    const b64Json =
+      imageItem.b64_json ||
+      (imageItem.buffer ? this.bufferToBase64(imageItem.buffer) : undefined);
+    return {
+      ...(realUrl ? { url: realUrl } : {}),
+      ...(b64Json ? { b64_json: b64Json } : {}),
+    };
   }
 
   // ============================================
   // Format conversion helpers
   // ============================================
-
-  private bufferToDataURL(buffer: Buffer | string): string {
-    if (typeof buffer === 'string') return buffer;
-    if (Buffer.isBuffer(buffer)) {
-      const base64 = buffer.toString('base64');
-      return `data:image/png;base64,${base64}`;
-    }
-    return '';
-  }
 
   private bufferToBase64(buffer: Buffer | string): string {
     if (typeof buffer === 'string') return buffer;

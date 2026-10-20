@@ -9679,6 +9679,7 @@ export namespace Prisma {
     tier: string | null
     status: string | null
     statusReason: string | null
+    billingTenantId: string | null
     createdAt: Date | null
     updatedAt: Date | null
   }
@@ -9690,6 +9691,7 @@ export namespace Prisma {
     tier: string | null
     status: string | null
     statusReason: string | null
+    billingTenantId: string | null
     createdAt: Date | null
     updatedAt: Date | null
   }
@@ -9702,6 +9704,7 @@ export namespace Prisma {
     status: number
     statusReason: number
     settings: number
+    billingTenantId: number
     createdAt: number
     updatedAt: number
     _all: number
@@ -9715,6 +9718,7 @@ export namespace Prisma {
     tier?: true
     status?: true
     statusReason?: true
+    billingTenantId?: true
     createdAt?: true
     updatedAt?: true
   }
@@ -9726,6 +9730,7 @@ export namespace Prisma {
     tier?: true
     status?: true
     statusReason?: true
+    billingTenantId?: true
     createdAt?: true
     updatedAt?: true
   }
@@ -9738,6 +9743,7 @@ export namespace Prisma {
     status?: true
     statusReason?: true
     settings?: true
+    billingTenantId?: true
     createdAt?: true
     updatedAt?: true
     _all?: true
@@ -9823,6 +9829,7 @@ export namespace Prisma {
     status: string
     statusReason: string | null
     settings: JsonValue
+    billingTenantId: string | null
     createdAt: Date
     updatedAt: Date
     _count: OrganizationCountAggregateOutputType | null
@@ -9852,6 +9859,7 @@ export namespace Prisma {
     status?: boolean
     statusReason?: boolean
     settings?: boolean
+    billingTenantId?: boolean
     createdAt?: boolean
     updatedAt?: boolean
     users?: boolean | Organization$usersArgs<ExtArgs>
@@ -9886,6 +9894,7 @@ export namespace Prisma {
     status?: boolean
     statusReason?: boolean
     settings?: boolean
+    billingTenantId?: boolean
     createdAt?: boolean
     updatedAt?: boolean
   }, ExtArgs["result"]["organization"]>
@@ -9898,6 +9907,7 @@ export namespace Prisma {
     status?: boolean
     statusReason?: boolean
     settings?: boolean
+    billingTenantId?: boolean
     createdAt?: boolean
     updatedAt?: boolean
   }, ExtArgs["result"]["organization"]>
@@ -9910,11 +9920,12 @@ export namespace Prisma {
     status?: boolean
     statusReason?: boolean
     settings?: boolean
+    billingTenantId?: boolean
     createdAt?: boolean
     updatedAt?: boolean
   }
 
-  export type OrganizationOmit<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetOmit<"id" | "name" | "slug" | "tier" | "status" | "statusReason" | "settings" | "createdAt" | "updatedAt", ExtArgs["result"]["organization"]>
+  export type OrganizationOmit<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetOmit<"id" | "name" | "slug" | "tier" | "status" | "statusReason" | "settings" | "billingTenantId" | "createdAt" | "updatedAt", ExtArgs["result"]["organization"]>
   export type OrganizationInclude<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
     users?: boolean | Organization$usersArgs<ExtArgs>
     invites?: boolean | Organization$invitesArgs<ExtArgs>
@@ -9975,6 +9986,7 @@ export namespace Prisma {
       status: string
       statusReason: string | null
       settings: Prisma.JsonValue
+      billingTenantId: string | null
       createdAt: Date
       updatedAt: Date
     }, ExtArgs["result"]["organization"]>
@@ -10428,6 +10440,7 @@ export namespace Prisma {
     readonly status: FieldRef<"Organization", 'String'>
     readonly statusReason: FieldRef<"Organization", 'String'>
     readonly settings: FieldRef<"Organization", 'Json'>
+    readonly billingTenantId: FieldRef<"Organization", 'String'>
     readonly createdAt: FieldRef<"Organization", 'DateTime'>
     readonly updatedAt: FieldRef<"Organization", 'DateTime'>
   }
@@ -24845,6 +24858,9 @@ export namespace Prisma {
     requestId: string | null
     endpoint: string | null
     method: string | null
+    userId: string | null
+    apiKeyId: string | null
+    ipHash: string | null
     strategyId: string | null
     strategyName: string | null
     modelCount: number | null
@@ -24869,6 +24885,9 @@ export namespace Prisma {
     requestId: string | null
     endpoint: string | null
     method: string | null
+    userId: string | null
+    apiKeyId: string | null
+    ipHash: string | null
     strategyId: string | null
     strategyName: string | null
     modelCount: number | null
@@ -24893,6 +24912,9 @@ export namespace Prisma {
     requestId: number
     endpoint: number
     method: number
+    userId: number
+    apiKeyId: number
+    ipHash: number
     strategyId: number
     strategyName: number
     modelsUsed: number
@@ -24947,6 +24969,9 @@ export namespace Prisma {
     requestId?: true
     endpoint?: true
     method?: true
+    userId?: true
+    apiKeyId?: true
+    ipHash?: true
     strategyId?: true
     strategyName?: true
     modelCount?: true
@@ -24971,6 +24996,9 @@ export namespace Prisma {
     requestId?: true
     endpoint?: true
     method?: true
+    userId?: true
+    apiKeyId?: true
+    ipHash?: true
     strategyId?: true
     strategyName?: true
     modelCount?: true
@@ -24995,6 +25023,9 @@ export namespace Prisma {
     requestId?: true
     endpoint?: true
     method?: true
+    userId?: true
+    apiKeyId?: true
+    ipHash?: true
     strategyId?: true
     strategyName?: true
     modelsUsed?: true
@@ -25110,6 +25141,9 @@ export namespace Prisma {
     requestId: string
     endpoint: string
     method: string
+    userId: string | null
+    apiKeyId: string | null
+    ipHash: string | null
     strategyId: string | null
     strategyName: string | null
     modelsUsed: JsonValue
@@ -25157,6 +25191,9 @@ export namespace Prisma {
     requestId?: boolean
     endpoint?: boolean
     method?: boolean
+    userId?: boolean
+    apiKeyId?: boolean
+    ipHash?: boolean
     strategyId?: boolean
     strategyName?: boolean
     modelsUsed?: boolean
@@ -25186,6 +25223,9 @@ export namespace Prisma {
     requestId?: boolean
     endpoint?: boolean
     method?: boolean
+    userId?: boolean
+    apiKeyId?: boolean
+    ipHash?: boolean
     strategyId?: boolean
     strategyName?: boolean
     modelsUsed?: boolean
@@ -25215,6 +25255,9 @@ export namespace Prisma {
     requestId?: boolean
     endpoint?: boolean
     method?: boolean
+    userId?: boolean
+    apiKeyId?: boolean
+    ipHash?: boolean
     strategyId?: boolean
     strategyName?: boolean
     modelsUsed?: boolean
@@ -25244,6 +25287,9 @@ export namespace Prisma {
     requestId?: boolean
     endpoint?: boolean
     method?: boolean
+    userId?: boolean
+    apiKeyId?: boolean
+    ipHash?: boolean
     strategyId?: boolean
     strategyName?: boolean
     modelsUsed?: boolean
@@ -25266,7 +25312,7 @@ export namespace Prisma {
     shardId?: boolean
   }
 
-  export type RequestLogOmit<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetOmit<"id" | "organizationId" | "requestId" | "endpoint" | "method" | "strategyId" | "strategyName" | "modelsUsed" | "modelCount" | "modelId" | "durationMs" | "queueTimeMs" | "inputTokens" | "outputTokens" | "totalTokens" | "costUsd" | "qualityScore" | "request" | "response" | "status" | "errorCode" | "errorMessage" | "metadata" | "createdAt" | "shardId", ExtArgs["result"]["requestLog"]>
+  export type RequestLogOmit<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetOmit<"id" | "organizationId" | "requestId" | "endpoint" | "method" | "userId" | "apiKeyId" | "ipHash" | "strategyId" | "strategyName" | "modelsUsed" | "modelCount" | "modelId" | "durationMs" | "queueTimeMs" | "inputTokens" | "outputTokens" | "totalTokens" | "costUsd" | "qualityScore" | "request" | "response" | "status" | "errorCode" | "errorMessage" | "metadata" | "createdAt" | "shardId", ExtArgs["result"]["requestLog"]>
   export type RequestLogInclude<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
     organization?: boolean | OrganizationDefaultArgs<ExtArgs>
   }
@@ -25288,6 +25334,9 @@ export namespace Prisma {
       requestId: string
       endpoint: string
       method: string
+      userId: string | null
+      apiKeyId: string | null
+      ipHash: string | null
       strategyId: string | null
       strategyName: string | null
       modelsUsed: Prisma.JsonValue
@@ -25737,6 +25786,9 @@ export namespace Prisma {
     readonly requestId: FieldRef<"RequestLog", 'String'>
     readonly endpoint: FieldRef<"RequestLog", 'String'>
     readonly method: FieldRef<"RequestLog", 'String'>
+    readonly userId: FieldRef<"RequestLog", 'String'>
+    readonly apiKeyId: FieldRef<"RequestLog", 'String'>
+    readonly ipHash: FieldRef<"RequestLog", 'String'>
     readonly strategyId: FieldRef<"RequestLog", 'String'>
     readonly strategyName: FieldRef<"RequestLog", 'String'>
     readonly modelsUsed: FieldRef<"RequestLog", 'Json'>
@@ -110910,6 +110962,7 @@ export namespace Prisma {
     status: 'status',
     statusReason: 'statusReason',
     settings: 'settings',
+    billingTenantId: 'billingTenantId',
     createdAt: 'createdAt',
     updatedAt: 'updatedAt'
   };
@@ -111137,6 +111190,9 @@ export namespace Prisma {
     requestId: 'requestId',
     endpoint: 'endpoint',
     method: 'method',
+    userId: 'userId',
+    apiKeyId: 'apiKeyId',
+    ipHash: 'ipHash',
     strategyId: 'strategyId',
     strategyName: 'strategyName',
     modelsUsed: 'modelsUsed',
@@ -112686,6 +112742,7 @@ export namespace Prisma {
     status?: StringFilter<"Organization"> | string
     statusReason?: StringNullableFilter<"Organization"> | string | null
     settings?: JsonFilter<"Organization">
+    billingTenantId?: StringNullableFilter<"Organization"> | string | null
     createdAt?: DateTimeFilter<"Organization"> | Date | string
     updatedAt?: DateTimeFilter<"Organization"> | Date | string
     users?: UserListRelationFilter
@@ -112719,6 +112776,7 @@ export namespace Prisma {
     status?: SortOrder
     statusReason?: SortOrderInput | SortOrder
     settings?: SortOrder
+    billingTenantId?: SortOrderInput | SortOrder
     createdAt?: SortOrder
     updatedAt?: SortOrder
     users?: UserOrderByRelationAggregateInput
@@ -112755,6 +112813,7 @@ export namespace Prisma {
     status?: StringFilter<"Organization"> | string
     statusReason?: StringNullableFilter<"Organization"> | string | null
     settings?: JsonFilter<"Organization">
+    billingTenantId?: StringNullableFilter<"Organization"> | string | null
     createdAt?: DateTimeFilter<"Organization"> | Date | string
     updatedAt?: DateTimeFilter<"Organization"> | Date | string
     users?: UserListRelationFilter
@@ -112788,6 +112847,7 @@ export namespace Prisma {
     status?: SortOrder
     statusReason?: SortOrderInput | SortOrder
     settings?: SortOrder
+    billingTenantId?: SortOrderInput | SortOrder
     createdAt?: SortOrder
     updatedAt?: SortOrder
     _count?: OrganizationCountOrderByAggregateInput
@@ -112806,6 +112866,7 @@ export namespace Prisma {
     status?: StringWithAggregatesFilter<"Organization"> | string
     statusReason?: StringNullableWithAggregatesFilter<"Organization"> | string | null
     settings?: JsonWithAggregatesFilter<"Organization">
+    billingTenantId?: StringNullableWithAggregatesFilter<"Organization"> | string | null
     createdAt?: DateTimeWithAggregatesFilter<"Organization"> | Date | string
     updatedAt?: DateTimeWithAggregatesFilter<"Organization"> | Date | string
   }
@@ -113948,6 +114009,9 @@ export namespace Prisma {
     requestId?: StringFilter<"RequestLog"> | string
     endpoint?: StringFilter<"RequestLog"> | string
     method?: StringFilter<"RequestLog"> | string
+    userId?: StringNullableFilter<"RequestLog"> | string | null
+    apiKeyId?: StringNullableFilter<"RequestLog"> | string | null
+    ipHash?: StringNullableFilter<"RequestLog"> | string | null
     strategyId?: StringNullableFilter<"RequestLog"> | string | null
     strategyName?: StringNullableFilter<"RequestLog"> | string | null
     modelsUsed?: JsonFilter<"RequestLog">
@@ -113977,6 +114041,9 @@ export namespace Prisma {
     requestId?: SortOrder
     endpoint?: SortOrder
     method?: SortOrder
+    userId?: SortOrderInput | SortOrder
+    apiKeyId?: SortOrderInput | SortOrder
+    ipHash?: SortOrderInput | SortOrder
     strategyId?: SortOrderInput | SortOrder
     strategyName?: SortOrderInput | SortOrder
     modelsUsed?: SortOrder
@@ -114009,6 +114076,9 @@ export namespace Prisma {
     organizationId?: UuidFilter<"RequestLog"> | string
     endpoint?: StringFilter<"RequestLog"> | string
     method?: StringFilter<"RequestLog"> | string
+    userId?: StringNullableFilter<"RequestLog"> | string | null
+    apiKeyId?: StringNullableFilter<"RequestLog"> | string | null
+    ipHash?: StringNullableFilter<"RequestLog"> | string | null
     strategyId?: StringNullableFilter<"RequestLog"> | string | null
     strategyName?: StringNullableFilter<"RequestLog"> | string | null
     modelsUsed?: JsonFilter<"RequestLog">
@@ -114038,6 +114108,9 @@ export namespace Prisma {
     requestId?: SortOrder
     endpoint?: SortOrder
     method?: SortOrder
+    userId?: SortOrderInput | SortOrder
+    apiKeyId?: SortOrderInput | SortOrder
+    ipHash?: SortOrderInput | SortOrder
     strategyId?: SortOrderInput | SortOrder
     strategyName?: SortOrderInput | SortOrder
     modelsUsed?: SortOrder
@@ -114074,6 +114147,9 @@ export namespace Prisma {
     requestId?: StringWithAggregatesFilter<"RequestLog"> | string
     endpoint?: StringWithAggregatesFilter<"RequestLog"> | string
     method?: StringWithAggregatesFilter<"RequestLog"> | string
+    userId?: StringNullableWithAggregatesFilter<"RequestLog"> | string | null
+    apiKeyId?: StringNullableWithAggregatesFilter<"RequestLog"> | string | null
+    ipHash?: StringNullableWithAggregatesFilter<"RequestLog"> | string | null
     strategyId?: StringNullableWithAggregatesFilter<"RequestLog"> | string | null
     strategyName?: StringNullableWithAggregatesFilter<"RequestLog"> | string | null
     modelsUsed?: JsonWithAggregatesFilter<"RequestLog">
@@ -120943,6 +121019,7 @@ export namespace Prisma {
     status?: string
     statusReason?: string | null
     settings?: JsonNullValueInput | InputJsonValue
+    billingTenantId?: string | null
     createdAt?: Date | string
     updatedAt?: Date | string
     users?: UserCreateNestedManyWithoutOrganizationInput
@@ -120976,6 +121053,7 @@ export namespace Prisma {
     status?: string
     statusReason?: string | null
     settings?: JsonNullValueInput | InputJsonValue
+    billingTenantId?: string | null
     createdAt?: Date | string
     updatedAt?: Date | string
     users?: UserUncheckedCreateNestedManyWithoutOrganizationInput
@@ -121009,6 +121087,7 @@ export namespace Prisma {
     status?: StringFieldUpdateOperationsInput | string
     statusReason?: NullableStringFieldUpdateOperationsInput | string | null
     settings?: JsonNullValueInput | InputJsonValue
+    billingTenantId?: NullableStringFieldUpdateOperationsInput | string | null
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     users?: UserUpdateManyWithoutOrganizationNestedInput
@@ -121042,6 +121121,7 @@ export namespace Prisma {
     status?: StringFieldUpdateOperationsInput | string
     statusReason?: NullableStringFieldUpdateOperationsInput | string | null
     settings?: JsonNullValueInput | InputJsonValue
+    billingTenantId?: NullableStringFieldUpdateOperationsInput | string | null
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     users?: UserUncheckedUpdateManyWithoutOrganizationNestedInput
@@ -121075,6 +121155,7 @@ export namespace Prisma {
     status?: string
     statusReason?: string | null
     settings?: JsonNullValueInput | InputJsonValue
+    billingTenantId?: string | null
     createdAt?: Date | string
     updatedAt?: Date | string
   }
@@ -121087,6 +121168,7 @@ export namespace Prisma {
     status?: StringFieldUpdateOperationsInput | string
     statusReason?: NullableStringFieldUpdateOperationsInput | string | null
     settings?: JsonNullValueInput | InputJsonValue
+    billingTenantId?: NullableStringFieldUpdateOperationsInput | string | null
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
   }
@@ -121099,6 +121181,7 @@ export namespace Prisma {
     status?: StringFieldUpdateOperationsInput | string
     statusReason?: NullableStringFieldUpdateOperationsInput | string | null
     settings?: JsonNullValueInput | InputJsonValue
+    billingTenantId?: NullableStringFieldUpdateOperationsInput | string | null
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
   }
@@ -122400,6 +122483,9 @@ export namespace Prisma {
     requestId: string
     endpoint: string
     method: string
+    userId?: string | null
+    apiKeyId?: string | null
+    ipHash?: string | null
     strategyId?: string | null
     strategyName?: string | null
     modelsUsed?: JsonNullValueInput | InputJsonValue
@@ -122429,6 +122515,9 @@ export namespace Prisma {
     requestId: string
     endpoint: string
     method: string
+    userId?: string | null
+    apiKeyId?: string | null
+    ipHash?: string | null
     strategyId?: string | null
     strategyName?: string | null
     modelsUsed?: JsonNullValueInput | InputJsonValue
@@ -122456,6 +122545,9 @@ export namespace Prisma {
     requestId?: StringFieldUpdateOperationsInput | string
     endpoint?: StringFieldUpdateOperationsInput | string
     method?: StringFieldUpdateOperationsInput | string
+    userId?: NullableStringFieldUpdateOperationsInput | string | null
+    apiKeyId?: NullableStringFieldUpdateOperationsInput | string | null
+    ipHash?: NullableStringFieldUpdateOperationsInput | string | null
     strategyId?: NullableStringFieldUpdateOperationsInput | string | null
     strategyName?: NullableStringFieldUpdateOperationsInput | string | null
     modelsUsed?: JsonNullValueInput | InputJsonValue
@@ -122485,6 +122577,9 @@ export namespace Prisma {
     requestId?: StringFieldUpdateOperationsInput | string
     endpoint?: StringFieldUpdateOperationsInput | string
     method?: StringFieldUpdateOperationsInput | string
+    userId?: NullableStringFieldUpdateOperationsInput | string | null
+    apiKeyId?: NullableStringFieldUpdateOperationsInput | string | null
+    ipHash?: NullableStringFieldUpdateOperationsInput | string | null
     strategyId?: NullableStringFieldUpdateOperationsInput | string | null
     strategyName?: NullableStringFieldUpdateOperationsInput | string | null
     modelsUsed?: JsonNullValueInput | InputJsonValue
@@ -122513,6 +122608,9 @@ export namespace Prisma {
     requestId: string
     endpoint: string
     method: string
+    userId?: string | null
+    apiKeyId?: string | null
+    ipHash?: string | null
     strategyId?: string | null
     strategyName?: string | null
     modelsUsed?: JsonNullValueInput | InputJsonValue
@@ -122540,6 +122638,9 @@ export namespace Prisma {
     requestId?: StringFieldUpdateOperationsInput | string
     endpoint?: StringFieldUpdateOperationsInput | string
     method?: StringFieldUpdateOperationsInput | string
+    userId?: NullableStringFieldUpdateOperationsInput | string | null
+    apiKeyId?: NullableStringFieldUpdateOperationsInput | string | null
+    ipHash?: NullableStringFieldUpdateOperationsInput | string | null
     strategyId?: NullableStringFieldUpdateOperationsInput | string | null
     strategyName?: NullableStringFieldUpdateOperationsInput | string | null
     modelsUsed?: JsonNullValueInput | InputJsonValue
@@ -122568,6 +122669,9 @@ export namespace Prisma {
     requestId?: StringFieldUpdateOperationsInput | string
     endpoint?: StringFieldUpdateOperationsInput | string
     method?: StringFieldUpdateOperationsInput | string
+    userId?: NullableStringFieldUpdateOperationsInput | string | null
+    apiKeyId?: NullableStringFieldUpdateOperationsInput | string | null
+    ipHash?: NullableStringFieldUpdateOperationsInput | string | null
     strategyId?: NullableStringFieldUpdateOperationsInput | string | null
     strategyName?: NullableStringFieldUpdateOperationsInput | string | null
     modelsUsed?: JsonNullValueInput | InputJsonValue
@@ -130822,6 +130926,7 @@ export namespace Prisma {
     status?: SortOrder
     statusReason?: SortOrder
     settings?: SortOrder
+    billingTenantId?: SortOrder
     createdAt?: SortOrder
     updatedAt?: SortOrder
   }
@@ -130833,6 +130938,7 @@ export namespace Prisma {
     tier?: SortOrder
     status?: SortOrder
     statusReason?: SortOrder
+    billingTenantId?: SortOrder
     createdAt?: SortOrder
     updatedAt?: SortOrder
   }
@@ -130844,6 +130950,7 @@ export namespace Prisma {
     tier?: SortOrder
     status?: SortOrder
     statusReason?: SortOrder
+    billingTenantId?: SortOrder
     createdAt?: SortOrder
     updatedAt?: SortOrder
   }
@@ -131845,6 +131952,9 @@ export namespace Prisma {
     requestId?: SortOrder
     endpoint?: SortOrder
     method?: SortOrder
+    userId?: SortOrder
+    apiKeyId?: SortOrder
+    ipHash?: SortOrder
     strategyId?: SortOrder
     strategyName?: SortOrder
     modelsUsed?: SortOrder
@@ -131885,6 +131995,9 @@ export namespace Prisma {
     requestId?: SortOrder
     endpoint?: SortOrder
     method?: SortOrder
+    userId?: SortOrder
+    apiKeyId?: SortOrder
+    ipHash?: SortOrder
     strategyId?: SortOrder
     strategyName?: SortOrder
     modelCount?: SortOrder
@@ -131909,6 +132022,9 @@ export namespace Prisma {
     requestId?: SortOrder
     endpoint?: SortOrder
     method?: SortOrder
+    userId?: SortOrder
+    apiKeyId?: SortOrder
+    ipHash?: SortOrder
     strategyId?: SortOrder
     strategyName?: SortOrder
     modelCount?: SortOrder
@@ -140775,6 +140891,9 @@ export namespace Prisma {
     requestId: string
     endpoint: string
     method: string
+    userId?: string | null
+    apiKeyId?: string | null
+    ipHash?: string | null
     strategyId?: string | null
     strategyName?: string | null
     modelsUsed?: JsonNullValueInput | InputJsonValue
@@ -140802,6 +140921,9 @@ export namespace Prisma {
     requestId: string
     endpoint: string
     method: string
+    userId?: string | null
+    apiKeyId?: string | null
+    ipHash?: string | null
     strategyId?: string | null
     strategyName?: string | null
     modelsUsed?: JsonNullValueInput | InputJsonValue
@@ -141654,6 +141776,9 @@ export namespace Prisma {
     requestId?: StringFilter<"RequestLog"> | string
     endpoint?: StringFilter<"RequestLog"> | string
     method?: StringFilter<"RequestLog"> | string
+    userId?: StringNullableFilter<"RequestLog"> | string | null
+    apiKeyId?: StringNullableFilter<"RequestLog"> | string | null
+    ipHash?: StringNullableFilter<"RequestLog"> | string | null
     strategyId?: StringNullableFilter<"RequestLog"> | string | null
     strategyName?: StringNullableFilter<"RequestLog"> | string | null
     modelsUsed?: JsonFilter<"RequestLog">
@@ -142218,6 +142343,7 @@ export namespace Prisma {
     status?: string
     statusReason?: string | null
     settings?: JsonNullValueInput | InputJsonValue
+    billingTenantId?: string | null
     createdAt?: Date | string
     updatedAt?: Date | string
     users?: UserCreateNestedManyWithoutOrganizationInput
@@ -142250,6 +142376,7 @@ export namespace Prisma {
     status?: string
     statusReason?: string | null
     settings?: JsonNullValueInput | InputJsonValue
+    billingTenantId?: string | null
     createdAt?: Date | string
     updatedAt?: Date | string
     users?: UserUncheckedCreateNestedManyWithoutOrganizationInput
@@ -142298,6 +142425,7 @@ export namespace Prisma {
     status?: StringFieldUpdateOperationsInput | string
     statusReason?: NullableStringFieldUpdateOperationsInput | string | null
     settings?: JsonNullValueInput | InputJsonValue
+    billingTenantId?: NullableStringFieldUpdateOperationsInput | string | null
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     users?: UserUpdateManyWithoutOrganizationNestedInput
@@ -142330,6 +142458,7 @@ export namespace Prisma {
     status?: StringFieldUpdateOperationsInput | string
     statusReason?: NullableStringFieldUpdateOperationsInput | string | null
     settings?: JsonNullValueInput | InputJsonValue
+    billingTenantId?: NullableStringFieldUpdateOperationsInput | string | null
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     users?: UserUncheckedUpdateManyWithoutOrganizationNestedInput
@@ -142362,6 +142491,7 @@ export namespace Prisma {
     status?: string
     statusReason?: string | null
     settings?: JsonNullValueInput | InputJsonValue
+    billingTenantId?: string | null
     createdAt?: Date | string
     updatedAt?: Date | string
     users?: UserCreateNestedManyWithoutOrganizationInput
@@ -142394,6 +142524,7 @@ export namespace Prisma {
     status?: string
     statusReason?: string | null
     settings?: JsonNullValueInput | InputJsonValue
+    billingTenantId?: string | null
     createdAt?: Date | string
     updatedAt?: Date | string
     users?: UserUncheckedCreateNestedManyWithoutOrganizationInput
@@ -142442,6 +142573,7 @@ export namespace Prisma {
     status?: StringFieldUpdateOperationsInput | string
     statusReason?: NullableStringFieldUpdateOperationsInput | string | null
     settings?: JsonNullValueInput | InputJsonValue
+    billingTenantId?: NullableStringFieldUpdateOperationsInput | string | null
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     users?: UserUpdateManyWithoutOrganizationNestedInput
@@ -142474,6 +142606,7 @@ export namespace Prisma {
     status?: StringFieldUpdateOperationsInput | string
     statusReason?: NullableStringFieldUpdateOperationsInput | string | null
     settings?: JsonNullValueInput | InputJsonValue
+    billingTenantId?: NullableStringFieldUpdateOperationsInput | string | null
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     users?: UserUncheckedUpdateManyWithoutOrganizationNestedInput
@@ -142506,6 +142639,7 @@ export namespace Prisma {
     status?: string
     statusReason?: string | null
     settings?: JsonNullValueInput | InputJsonValue
+    billingTenantId?: string | null
     createdAt?: Date | string
     updatedAt?: Date | string
     invites?: OrganizationInviteCreateNestedManyWithoutOrganizationInput
@@ -142538,6 +142672,7 @@ export namespace Prisma {
     status?: string
     statusReason?: string | null
     settings?: JsonNullValueInput | InputJsonValue
+    billingTenantId?: string | null
     createdAt?: Date | string
     updatedAt?: Date | string
     invites?: OrganizationInviteUncheckedCreateNestedManyWithoutOrganizationInput
@@ -142822,6 +142957,7 @@ export namespace Prisma {
     status?: StringFieldUpdateOperationsInput | string
     statusReason?: NullableStringFieldUpdateOperationsInput | string | null
     settings?: JsonNullValueInput | InputJsonValue
+    billingTenantId?: NullableStringFieldUpdateOperationsInput | string | null
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     invites?: OrganizationInviteUpdateManyWithoutOrganizationNestedInput
@@ -142854,6 +142990,7 @@ export namespace Prisma {
     status?: StringFieldUpdateOperationsInput | string
     statusReason?: NullableStringFieldUpdateOperationsInput | string | null
     settings?: JsonNullValueInput | InputJsonValue
+    billingTenantId?: NullableStringFieldUpdateOperationsInput | string | null
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     invites?: OrganizationInviteUncheckedUpdateManyWithoutOrganizationNestedInput
@@ -142982,6 +143119,7 @@ export namespace Prisma {
     status?: string
     statusReason?: string | null
     settings?: JsonNullValueInput | InputJsonValue
+    billingTenantId?: string | null
     createdAt?: Date | string
     updatedAt?: Date | string
     users?: UserCreateNestedManyWithoutOrganizationInput
@@ -143014,6 +143152,7 @@ export namespace Prisma {
     status?: string
     statusReason?: string | null
     settings?: JsonNullValueInput | InputJsonValue
+    billingTenantId?: string | null
     createdAt?: Date | string
     updatedAt?: Date | string
     users?: UserUncheckedCreateNestedManyWithoutOrganizationInput
@@ -143148,6 +143287,7 @@ export namespace Prisma {
     status?: StringFieldUpdateOperationsInput | string
     statusReason?: NullableStringFieldUpdateOperationsInput | string | null
     settings?: JsonNullValueInput | InputJsonValue
+    billingTenantId?: NullableStringFieldUpdateOperationsInput | string | null
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     users?: UserUpdateManyWithoutOrganizationNestedInput
@@ -143180,6 +143320,7 @@ export namespace Prisma {
     status?: StringFieldUpdateOperationsInput | string
     statusReason?: NullableStringFieldUpdateOperationsInput | string | null
     settings?: JsonNullValueInput | InputJsonValue
+    billingTenantId?: NullableStringFieldUpdateOperationsInput | string | null
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     users?: UserUncheckedUpdateManyWithoutOrganizationNestedInput
@@ -143310,6 +143451,7 @@ export namespace Prisma {
     status?: string
     statusReason?: string | null
     settings?: JsonNullValueInput | InputJsonValue
+    billingTenantId?: string | null
     createdAt?: Date | string
     updatedAt?: Date | string
     users?: UserCreateNestedManyWithoutOrganizationInput
@@ -143342,6 +143484,7 @@ export namespace Prisma {
     status?: string
     statusReason?: string | null
     settings?: JsonNullValueInput | InputJsonValue
+    billingTenantId?: string | null
     createdAt?: Date | string
     updatedAt?: Date | string
     users?: UserUncheckedCreateNestedManyWithoutOrganizationInput
@@ -143433,6 +143576,7 @@ export namespace Prisma {
     status?: StringFieldUpdateOperationsInput | string
     statusReason?: NullableStringFieldUpdateOperationsInput | string | null
     settings?: JsonNullValueInput | InputJsonValue
+    billingTenantId?: NullableStringFieldUpdateOperationsInput | string | null
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     users?: UserUpdateManyWithoutOrganizationNestedInput
@@ -143465,6 +143609,7 @@ export namespace Prisma {
     status?: StringFieldUpdateOperationsInput | string
     statusReason?: NullableStringFieldUpdateOperationsInput | string | null
     settings?: JsonNullValueInput | InputJsonValue
+    billingTenantId?: NullableStringFieldUpdateOperationsInput | string | null
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     users?: UserUncheckedUpdateManyWithoutOrganizationNestedInput
@@ -143589,6 +143734,7 @@ export namespace Prisma {
     status?: string
     statusReason?: string | null
     settings?: JsonNullValueInput | InputJsonValue
+    billingTenantId?: string | null
     createdAt?: Date | string
     updatedAt?: Date | string
     users?: UserCreateNestedManyWithoutOrganizationInput
@@ -143621,6 +143767,7 @@ export namespace Prisma {
     status?: string
     statusReason?: string | null
     settings?: JsonNullValueInput | InputJsonValue
+    billingTenantId?: string | null
     createdAt?: Date | string
     updatedAt?: Date | string
     users?: UserUncheckedCreateNestedManyWithoutOrganizationInput
@@ -143750,6 +143897,7 @@ export namespace Prisma {
     status?: StringFieldUpdateOperationsInput | string
     statusReason?: NullableStringFieldUpdateOperationsInput | string | null
     settings?: JsonNullValueInput | InputJsonValue
+    billingTenantId?: NullableStringFieldUpdateOperationsInput | string | null
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     users?: UserUpdateManyWithoutOrganizationNestedInput
@@ -143782,6 +143930,7 @@ export namespace Prisma {
     status?: StringFieldUpdateOperationsInput | string
     statusReason?: NullableStringFieldUpdateOperationsInput | string | null
     settings?: JsonNullValueInput | InputJsonValue
+    billingTenantId?: NullableStringFieldUpdateOperationsInput | string | null
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     users?: UserUncheckedUpdateManyWithoutOrganizationNestedInput
@@ -144285,6 +144434,7 @@ export namespace Prisma {
     status?: string
     statusReason?: string | null
     settings?: JsonNullValueInput | InputJsonValue
+    billingTenantId?: string | null
     createdAt?: Date | string
     updatedAt?: Date | string
     users?: UserCreateNestedManyWithoutOrganizationInput
@@ -144317,6 +144467,7 @@ export namespace Prisma {
     status?: string
     statusReason?: string | null
     settings?: JsonNullValueInput | InputJsonValue
+    billingTenantId?: string | null
     createdAt?: Date | string
     updatedAt?: Date | string
     users?: UserUncheckedCreateNestedManyWithoutOrganizationInput
@@ -144430,6 +144581,7 @@ export namespace Prisma {
     status?: StringFieldUpdateOperationsInput | string
     statusReason?: NullableStringFieldUpdateOperationsInput | string | null
     settings?: JsonNullValueInput | InputJsonValue
+    billingTenantId?: NullableStringFieldUpdateOperationsInput | string | null
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     users?: UserUpdateManyWithoutOrganizationNestedInput
@@ -144462,6 +144614,7 @@ export namespace Prisma {
     status?: StringFieldUpdateOperationsInput | string
     statusReason?: NullableStringFieldUpdateOperationsInput | string | null
     settings?: JsonNullValueInput | InputJsonValue
+    billingTenantId?: NullableStringFieldUpdateOperationsInput | string | null
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     users?: UserUncheckedUpdateManyWithoutOrganizationNestedInput
@@ -144701,6 +144854,7 @@ export namespace Prisma {
     status?: string
     statusReason?: string | null
     settings?: JsonNullValueInput | InputJsonValue
+    billingTenantId?: string | null
     createdAt?: Date | string
     updatedAt?: Date | string
     users?: UserCreateNestedManyWithoutOrganizationInput
@@ -144733,6 +144887,7 @@ export namespace Prisma {
     status?: string
     statusReason?: string | null
     settings?: JsonNullValueInput | InputJsonValue
+    billingTenantId?: string | null
     createdAt?: Date | string
     updatedAt?: Date | string
     users?: UserUncheckedCreateNestedManyWithoutOrganizationInput
@@ -144781,6 +144936,7 @@ export namespace Prisma {
     status?: StringFieldUpdateOperationsInput | string
     statusReason?: NullableStringFieldUpdateOperationsInput | string | null
     settings?: JsonNullValueInput | InputJsonValue
+    billingTenantId?: NullableStringFieldUpdateOperationsInput | string | null
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     users?: UserUpdateManyWithoutOrganizationNestedInput
@@ -144813,6 +144969,7 @@ export namespace Prisma {
     status?: StringFieldUpdateOperationsInput | string
     statusReason?: NullableStringFieldUpdateOperationsInput | string | null
     settings?: JsonNullValueInput | InputJsonValue
+    billingTenantId?: NullableStringFieldUpdateOperationsInput | string | null
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     users?: UserUncheckedUpdateManyWithoutOrganizationNestedInput
@@ -144845,6 +145002,7 @@ export namespace Prisma {
     status?: string
     statusReason?: string | null
     settings?: JsonNullValueInput | InputJsonValue
+    billingTenantId?: string | null
     createdAt?: Date | string
     updatedAt?: Date | string
     users?: UserCreateNestedManyWithoutOrganizationInput
@@ -144877,6 +145035,7 @@ export namespace Prisma {
     status?: string
     statusReason?: string | null
     settings?: JsonNullValueInput | InputJsonValue
+    billingTenantId?: string | null
     createdAt?: Date | string
     updatedAt?: Date | string
     users?: UserUncheckedCreateNestedManyWithoutOrganizationInput
@@ -144973,6 +145132,7 @@ export namespace Prisma {
     status?: StringFieldUpdateOperationsInput | string
     statusReason?: NullableStringFieldUpdateOperationsInput | string | null
     settings?: JsonNullValueInput | InputJsonValue
+    billingTenantId?: NullableStringFieldUpdateOperationsInput | string | null
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     users?: UserUpdateManyWithoutOrganizationNestedInput
@@ -145005,6 +145165,7 @@ export namespace Prisma {
     status?: StringFieldUpdateOperationsInput | string
     statusReason?: NullableStringFieldUpdateOperationsInput | string | null
     settings?: JsonNullValueInput | InputJsonValue
+    billingTenantId?: NullableStringFieldUpdateOperationsInput | string | null
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     users?: UserUncheckedUpdateManyWithoutOrganizationNestedInput
@@ -145172,6 +145333,7 @@ export namespace Prisma {
     status?: string
     statusReason?: string | null
     settings?: JsonNullValueInput | InputJsonValue
+    billingTenantId?: string | null
     createdAt?: Date | string
     updatedAt?: Date | string
     users?: UserCreateNestedManyWithoutOrganizationInput
@@ -145204,6 +145366,7 @@ export namespace Prisma {
     status?: string
     statusReason?: string | null
     settings?: JsonNullValueInput | InputJsonValue
+    billingTenantId?: string | null
     createdAt?: Date | string
     updatedAt?: Date | string
     users?: UserUncheckedCreateNestedManyWithoutOrganizationInput
@@ -145252,6 +145415,7 @@ export namespace Prisma {
     status?: StringFieldUpdateOperationsInput | string
     statusReason?: NullableStringFieldUpdateOperationsInput | string | null
     settings?: JsonNullValueInput | InputJsonValue
+    billingTenantId?: NullableStringFieldUpdateOperationsInput | string | null
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     users?: UserUpdateManyWithoutOrganizationNestedInput
@@ -145284,6 +145448,7 @@ export namespace Prisma {
     status?: StringFieldUpdateOperationsInput | string
     statusReason?: NullableStringFieldUpdateOperationsInput | string | null
     settings?: JsonNullValueInput | InputJsonValue
+    billingTenantId?: NullableStringFieldUpdateOperationsInput | string | null
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     users?: UserUncheckedUpdateManyWithoutOrganizationNestedInput
@@ -145316,6 +145481,7 @@ export namespace Prisma {
     status?: string
     statusReason?: string | null
     settings?: JsonNullValueInput | InputJsonValue
+    billingTenantId?: string | null
     createdAt?: Date | string
     updatedAt?: Date | string
     users?: UserCreateNestedManyWithoutOrganizationInput
@@ -145348,6 +145514,7 @@ export namespace Prisma {
     status?: string
     statusReason?: string | null
     settings?: JsonNullValueInput | InputJsonValue
+    billingTenantId?: string | null
     createdAt?: Date | string
     updatedAt?: Date | string
     users?: UserUncheckedCreateNestedManyWithoutOrganizationInput
@@ -145524,6 +145691,7 @@ export namespace Prisma {
     status?: StringFieldUpdateOperationsInput | string
     statusReason?: NullableStringFieldUpdateOperationsInput | string | null
     settings?: JsonNullValueInput | InputJsonValue
+    billingTenantId?: NullableStringFieldUpdateOperationsInput | string | null
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     users?: UserUpdateManyWithoutOrganizationNestedInput
@@ -145556,6 +145724,7 @@ export namespace Prisma {
     status?: StringFieldUpdateOperationsInput | string
     statusReason?: NullableStringFieldUpdateOperationsInput | string | null
     settings?: JsonNullValueInput | InputJsonValue
+    billingTenantId?: NullableStringFieldUpdateOperationsInput | string | null
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     users?: UserUncheckedUpdateManyWithoutOrganizationNestedInput
@@ -146691,6 +146860,7 @@ export namespace Prisma {
     status?: string
     statusReason?: string | null
     settings?: JsonNullValueInput | InputJsonValue
+    billingTenantId?: string | null
     createdAt?: Date | string
     updatedAt?: Date | string
     users?: UserCreateNestedManyWithoutOrganizationInput
@@ -146723,6 +146893,7 @@ export namespace Prisma {
     status?: string
     statusReason?: string | null
     settings?: JsonNullValueInput | InputJsonValue
+    billingTenantId?: string | null
     createdAt?: Date | string
     updatedAt?: Date | string
     users?: UserUncheckedCreateNestedManyWithoutOrganizationInput
@@ -146811,6 +146982,7 @@ export namespace Prisma {
     status?: StringFieldUpdateOperationsInput | string
     statusReason?: NullableStringFieldUpdateOperationsInput | string | null
     settings?: JsonNullValueInput | InputJsonValue
+    billingTenantId?: NullableStringFieldUpdateOperationsInput | string | null
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     users?: UserUpdateManyWithoutOrganizationNestedInput
@@ -146843,6 +147015,7 @@ export namespace Prisma {
     status?: StringFieldUpdateOperationsInput | string
     statusReason?: NullableStringFieldUpdateOperationsInput | string | null
     settings?: JsonNullValueInput | InputJsonValue
+    billingTenantId?: NullableStringFieldUpdateOperationsInput | string | null
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     users?: UserUncheckedUpdateManyWithoutOrganizationNestedInput
@@ -146909,6 +147082,7 @@ export namespace Prisma {
     status?: string
     statusReason?: string | null
     settings?: JsonNullValueInput | InputJsonValue
+    billingTenantId?: string | null
     createdAt?: Date | string
     updatedAt?: Date | string
     users?: UserCreateNestedManyWithoutOrganizationInput
@@ -146941,6 +147115,7 @@ export namespace Prisma {
     status?: string
     statusReason?: string | null
     settings?: JsonNullValueInput | InputJsonValue
+    billingTenantId?: string | null
     createdAt?: Date | string
     updatedAt?: Date | string
     users?: UserUncheckedCreateNestedManyWithoutOrganizationInput
@@ -147021,6 +147196,7 @@ export namespace Prisma {
     status?: StringFieldUpdateOperationsInput | string
     statusReason?: NullableStringFieldUpdateOperationsInput | string | null
     settings?: JsonNullValueInput | InputJsonValue
+    billingTenantId?: NullableStringFieldUpdateOperationsInput | string | null
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     users?: UserUpdateManyWithoutOrganizationNestedInput
@@ -147053,6 +147229,7 @@ export namespace Prisma {
     status?: StringFieldUpdateOperationsInput | string
     statusReason?: NullableStringFieldUpdateOperationsInput | string | null
     settings?: JsonNullValueInput | InputJsonValue
+    billingTenantId?: NullableStringFieldUpdateOperationsInput | string | null
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     users?: UserUncheckedUpdateManyWithoutOrganizationNestedInput
@@ -147308,6 +147485,7 @@ export namespace Prisma {
     status?: string
     statusReason?: string | null
     settings?: JsonNullValueInput | InputJsonValue
+    billingTenantId?: string | null
     createdAt?: Date | string
     updatedAt?: Date | string
     users?: UserCreateNestedManyWithoutOrganizationInput
@@ -147340,6 +147518,7 @@ export namespace Prisma {
     status?: string
     statusReason?: string | null
     settings?: JsonNullValueInput | InputJsonValue
+    billingTenantId?: string | null
     createdAt?: Date | string
     updatedAt?: Date | string
     users?: UserUncheckedCreateNestedManyWithoutOrganizationInput
@@ -147427,6 +147606,7 @@ export namespace Prisma {
     status?: StringFieldUpdateOperationsInput | string
     statusReason?: NullableStringFieldUpdateOperationsInput | string | null
     settings?: JsonNullValueInput | InputJsonValue
+    billingTenantId?: NullableStringFieldUpdateOperationsInput | string | null
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     users?: UserUpdateManyWithoutOrganizationNestedInput
@@ -147459,6 +147639,7 @@ export namespace Prisma {
     status?: StringFieldUpdateOperationsInput | string
     statusReason?: NullableStringFieldUpdateOperationsInput | string | null
     settings?: JsonNullValueInput | InputJsonValue
+    billingTenantId?: NullableStringFieldUpdateOperationsInput | string | null
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     users?: UserUncheckedUpdateManyWithoutOrganizationNestedInput
@@ -147891,6 +148072,7 @@ export namespace Prisma {
     status?: string
     statusReason?: string | null
     settings?: JsonNullValueInput | InputJsonValue
+    billingTenantId?: string | null
     createdAt?: Date | string
     updatedAt?: Date | string
     users?: UserCreateNestedManyWithoutOrganizationInput
@@ -147923,6 +148105,7 @@ export namespace Prisma {
     status?: string
     statusReason?: string | null
     settings?: JsonNullValueInput | InputJsonValue
+    billingTenantId?: string | null
     createdAt?: Date | string
     updatedAt?: Date | string
     users?: UserUncheckedCreateNestedManyWithoutOrganizationInput
@@ -147971,6 +148154,7 @@ export namespace Prisma {
     status?: StringFieldUpdateOperationsInput | string
     statusReason?: NullableStringFieldUpdateOperationsInput | string | null
     settings?: JsonNullValueInput | InputJsonValue
+    billingTenantId?: NullableStringFieldUpdateOperationsInput | string | null
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     users?: UserUpdateManyWithoutOrganizationNestedInput
@@ -148003,6 +148187,7 @@ export namespace Prisma {
     status?: StringFieldUpdateOperationsInput | string
     statusReason?: NullableStringFieldUpdateOperationsInput | string | null
     settings?: JsonNullValueInput | InputJsonValue
+    billingTenantId?: NullableStringFieldUpdateOperationsInput | string | null
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     users?: UserUncheckedUpdateManyWithoutOrganizationNestedInput
@@ -148310,6 +148495,7 @@ export namespace Prisma {
     status?: string
     statusReason?: string | null
     settings?: JsonNullValueInput | InputJsonValue
+    billingTenantId?: string | null
     createdAt?: Date | string
     updatedAt?: Date | string
     users?: UserCreateNestedManyWithoutOrganizationInput
@@ -148342,6 +148528,7 @@ export namespace Prisma {
     status?: string
     statusReason?: string | null
     settings?: JsonNullValueInput | InputJsonValue
+    billingTenantId?: string | null
     createdAt?: Date | string
     updatedAt?: Date | string
     users?: UserUncheckedCreateNestedManyWithoutOrganizationInput
@@ -148462,6 +148649,7 @@ export namespace Prisma {
     status?: StringFieldUpdateOperationsInput | string
     statusReason?: NullableStringFieldUpdateOperationsInput | string | null
     settings?: JsonNullValueInput | InputJsonValue
+    billingTenantId?: NullableStringFieldUpdateOperationsInput | string | null
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     users?: UserUpdateManyWithoutOrganizationNestedInput
@@ -148494,6 +148682,7 @@ export namespace Prisma {
     status?: StringFieldUpdateOperationsInput | string
     statusReason?: NullableStringFieldUpdateOperationsInput | string | null
     settings?: JsonNullValueInput | InputJsonValue
+    billingTenantId?: NullableStringFieldUpdateOperationsInput | string | null
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     users?: UserUncheckedUpdateManyWithoutOrganizationNestedInput
@@ -148598,6 +148787,7 @@ export namespace Prisma {
     status?: string
     statusReason?: string | null
     settings?: JsonNullValueInput | InputJsonValue
+    billingTenantId?: string | null
     createdAt?: Date | string
     updatedAt?: Date | string
     users?: UserCreateNestedManyWithoutOrganizationInput
@@ -148630,6 +148820,7 @@ export namespace Prisma {
     status?: string
     statusReason?: string | null
     settings?: JsonNullValueInput | InputJsonValue
+    billingTenantId?: string | null
     createdAt?: Date | string
     updatedAt?: Date | string
     users?: UserUncheckedCreateNestedManyWithoutOrganizationInput
@@ -148727,6 +148918,7 @@ export namespace Prisma {
     status?: StringFieldUpdateOperationsInput | string
     statusReason?: NullableStringFieldUpdateOperationsInput | string | null
     settings?: JsonNullValueInput | InputJsonValue
+    billingTenantId?: NullableStringFieldUpdateOperationsInput | string | null
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     users?: UserUpdateManyWithoutOrganizationNestedInput
@@ -148759,6 +148951,7 @@ export namespace Prisma {
     status?: StringFieldUpdateOperationsInput | string
     statusReason?: NullableStringFieldUpdateOperationsInput | string | null
     settings?: JsonNullValueInput | InputJsonValue
+    billingTenantId?: NullableStringFieldUpdateOperationsInput | string | null
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     users?: UserUncheckedUpdateManyWithoutOrganizationNestedInput
@@ -148791,6 +148984,7 @@ export namespace Prisma {
     status?: string
     statusReason?: string | null
     settings?: JsonNullValueInput | InputJsonValue
+    billingTenantId?: string | null
     createdAt?: Date | string
     updatedAt?: Date | string
     users?: UserCreateNestedManyWithoutOrganizationInput
@@ -148823,6 +149017,7 @@ export namespace Prisma {
     status?: string
     statusReason?: string | null
     settings?: JsonNullValueInput | InputJsonValue
+    billingTenantId?: string | null
     createdAt?: Date | string
     updatedAt?: Date | string
     users?: UserUncheckedCreateNestedManyWithoutOrganizationInput
@@ -148871,6 +149066,7 @@ export namespace Prisma {
     status?: StringFieldUpdateOperationsInput | string
     statusReason?: NullableStringFieldUpdateOperationsInput | string | null
     settings?: JsonNullValueInput | InputJsonValue
+    billingTenantId?: NullableStringFieldUpdateOperationsInput | string | null
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     users?: UserUpdateManyWithoutOrganizationNestedInput
@@ -148903,6 +149099,7 @@ export namespace Prisma {
     status?: StringFieldUpdateOperationsInput | string
     statusReason?: NullableStringFieldUpdateOperationsInput | string | null
     settings?: JsonNullValueInput | InputJsonValue
+    billingTenantId?: NullableStringFieldUpdateOperationsInput | string | null
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     users?: UserUncheckedUpdateManyWithoutOrganizationNestedInput
@@ -148935,6 +149132,7 @@ export namespace Prisma {
     status?: string
     statusReason?: string | null
     settings?: JsonNullValueInput | InputJsonValue
+    billingTenantId?: string | null
     createdAt?: Date | string
     updatedAt?: Date | string
     users?: UserCreateNestedManyWithoutOrganizationInput
@@ -148967,6 +149165,7 @@ export namespace Prisma {
     status?: string
     statusReason?: string | null
     settings?: JsonNullValueInput | InputJsonValue
+    billingTenantId?: string | null
     createdAt?: Date | string
     updatedAt?: Date | string
     users?: UserUncheckedCreateNestedManyWithoutOrganizationInput
@@ -149015,6 +149214,7 @@ export namespace Prisma {
     status?: StringFieldUpdateOperationsInput | string
     statusReason?: NullableStringFieldUpdateOperationsInput | string | null
     settings?: JsonNullValueInput | InputJsonValue
+    billingTenantId?: NullableStringFieldUpdateOperationsInput | string | null
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     users?: UserUpdateManyWithoutOrganizationNestedInput
@@ -149047,6 +149247,7 @@ export namespace Prisma {
     status?: StringFieldUpdateOperationsInput | string
     statusReason?: NullableStringFieldUpdateOperationsInput | string | null
     settings?: JsonNullValueInput | InputJsonValue
+    billingTenantId?: NullableStringFieldUpdateOperationsInput | string | null
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     users?: UserUncheckedUpdateManyWithoutOrganizationNestedInput
@@ -149079,6 +149280,7 @@ export namespace Prisma {
     status?: string
     statusReason?: string | null
     settings?: JsonNullValueInput | InputJsonValue
+    billingTenantId?: string | null
     createdAt?: Date | string
     updatedAt?: Date | string
     users?: UserCreateNestedManyWithoutOrganizationInput
@@ -149111,6 +149313,7 @@ export namespace Prisma {
     status?: string
     statusReason?: string | null
     settings?: JsonNullValueInput | InputJsonValue
+    billingTenantId?: string | null
     createdAt?: Date | string
     updatedAt?: Date | string
     users?: UserUncheckedCreateNestedManyWithoutOrganizationInput
@@ -149159,6 +149362,7 @@ export namespace Prisma {
     status?: StringFieldUpdateOperationsInput | string
     statusReason?: NullableStringFieldUpdateOperationsInput | string | null
     settings?: JsonNullValueInput | InputJsonValue
+    billingTenantId?: NullableStringFieldUpdateOperationsInput | string | null
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     users?: UserUpdateManyWithoutOrganizationNestedInput
@@ -149191,6 +149395,7 @@ export namespace Prisma {
     status?: StringFieldUpdateOperationsInput | string
     statusReason?: NullableStringFieldUpdateOperationsInput | string | null
     settings?: JsonNullValueInput | InputJsonValue
+    billingTenantId?: NullableStringFieldUpdateOperationsInput | string | null
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     users?: UserUncheckedUpdateManyWithoutOrganizationNestedInput
@@ -149333,6 +149538,7 @@ export namespace Prisma {
     status?: string
     statusReason?: string | null
     settings?: JsonNullValueInput | InputJsonValue
+    billingTenantId?: string | null
     createdAt?: Date | string
     updatedAt?: Date | string
     users?: UserCreateNestedManyWithoutOrganizationInput
@@ -149365,6 +149571,7 @@ export namespace Prisma {
     status?: string
     statusReason?: string | null
     settings?: JsonNullValueInput | InputJsonValue
+    billingTenantId?: string | null
     createdAt?: Date | string
     updatedAt?: Date | string
     users?: UserUncheckedCreateNestedManyWithoutOrganizationInput
@@ -149413,6 +149620,7 @@ export namespace Prisma {
     status?: StringFieldUpdateOperationsInput | string
     statusReason?: NullableStringFieldUpdateOperationsInput | string | null
     settings?: JsonNullValueInput | InputJsonValue
+    billingTenantId?: NullableStringFieldUpdateOperationsInput | string | null
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     users?: UserUpdateManyWithoutOrganizationNestedInput
@@ -149445,6 +149653,7 @@ export namespace Prisma {
     status?: StringFieldUpdateOperationsInput | string
     statusReason?: NullableStringFieldUpdateOperationsInput | string | null
     settings?: JsonNullValueInput | InputJsonValue
+    billingTenantId?: NullableStringFieldUpdateOperationsInput | string | null
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     users?: UserUncheckedUpdateManyWithoutOrganizationNestedInput
@@ -152094,6 +152303,9 @@ export namespace Prisma {
     requestId: string
     endpoint: string
     method: string
+    userId?: string | null
+    apiKeyId?: string | null
+    ipHash?: string | null
     strategyId?: string | null
     strategyName?: string | null
     modelsUsed?: JsonNullValueInput | InputJsonValue
@@ -152604,6 +152816,9 @@ export namespace Prisma {
     requestId?: StringFieldUpdateOperationsInput | string
     endpoint?: StringFieldUpdateOperationsInput | string
     method?: StringFieldUpdateOperationsInput | string
+    userId?: NullableStringFieldUpdateOperationsInput | string | null
+    apiKeyId?: NullableStringFieldUpdateOperationsInput | string | null
+    ipHash?: NullableStringFieldUpdateOperationsInput | string | null
     strategyId?: NullableStringFieldUpdateOperationsInput | string | null
     strategyName?: NullableStringFieldUpdateOperationsInput | string | null
     modelsUsed?: JsonNullValueInput | InputJsonValue
@@ -152631,6 +152846,9 @@ export namespace Prisma {
     requestId?: StringFieldUpdateOperationsInput | string
     endpoint?: StringFieldUpdateOperationsInput | string
     method?: StringFieldUpdateOperationsInput | string
+    userId?: NullableStringFieldUpdateOperationsInput | string | null
+    apiKeyId?: NullableStringFieldUpdateOperationsInput | string | null
+    ipHash?: NullableStringFieldUpdateOperationsInput | string | null
     strategyId?: NullableStringFieldUpdateOperationsInput | string | null
     strategyName?: NullableStringFieldUpdateOperationsInput | string | null
     modelsUsed?: JsonNullValueInput | InputJsonValue
@@ -152658,6 +152876,9 @@ export namespace Prisma {
     requestId?: StringFieldUpdateOperationsInput | string
     endpoint?: StringFieldUpdateOperationsInput | string
     method?: StringFieldUpdateOperationsInput | string
+    userId?: NullableStringFieldUpdateOperationsInput | string | null
+    apiKeyId?: NullableStringFieldUpdateOperationsInput | string | null
+    ipHash?: NullableStringFieldUpdateOperationsInput | string | null
     strategyId?: NullableStringFieldUpdateOperationsInput | string | null
     strategyName?: NullableStringFieldUpdateOperationsInput | string | null
     modelsUsed?: JsonNullValueInput | InputJsonValue

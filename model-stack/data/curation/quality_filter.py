@@ -84,6 +84,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
 # Filter implementations
 # ---------------------------------------------------------------------------
 
+
 def _count_tokens_approx(text: str) -> int:
     """Approximate token count using whitespace splitting (fast heuristic)."""
     return len(text.split())
@@ -159,7 +160,7 @@ def filter_repetition(text: str, cfg: dict[str, Any]) -> tuple[bool, str]:
         return False, f"word_ngram_rep({word_rep:.3f}>{cfg['max_word_ngram_rep_ratio']})"
 
     # Line duplication ratio
-    lines = [l.strip() for l in text.split("\n") if l.strip()]
+    lines = [line.strip() for line in text.split("\n") if line.strip()]
     if lines:
         line_counts = Counter(lines)
         dup_lines = sum(c - 1 for c in line_counts.values() if c > 1)
@@ -197,18 +198,116 @@ def filter_special_chars(text: str, cfg: dict[str, Any]) -> tuple[bool, str]:
 
 # Simple word frequency rank table for perplexity estimation (top English words)
 _COMMON_WORDS: set[str] = {
-    "the", "be", "to", "of", "and", "a", "in", "that", "have", "i",
-    "it", "for", "not", "on", "with", "he", "as", "you", "do", "at",
-    "this", "but", "his", "by", "from", "they", "we", "say", "her", "she",
-    "or", "an", "will", "my", "one", "all", "would", "there", "their", "what",
-    "so", "up", "out", "if", "about", "who", "get", "which", "go", "me",
-    "when", "make", "can", "like", "time", "no", "just", "him", "know", "take",
-    "people", "into", "year", "your", "good", "some", "could", "them", "see",
-    "other", "than", "then", "now", "look", "only", "come", "its", "over",
-    "think", "also", "back", "after", "use", "two", "how", "our", "work",
-    "first", "well", "way", "even", "new", "want", "because", "any", "these",
-    "give", "day", "most", "us", "is", "was", "are", "were", "been", "has",
-    "had", "did", "does", "am",
+    "the",
+    "be",
+    "to",
+    "of",
+    "and",
+    "a",
+    "in",
+    "that",
+    "have",
+    "i",
+    "it",
+    "for",
+    "not",
+    "on",
+    "with",
+    "he",
+    "as",
+    "you",
+    "do",
+    "at",
+    "this",
+    "but",
+    "his",
+    "by",
+    "from",
+    "they",
+    "we",
+    "say",
+    "her",
+    "she",
+    "or",
+    "an",
+    "will",
+    "my",
+    "one",
+    "all",
+    "would",
+    "there",
+    "their",
+    "what",
+    "so",
+    "up",
+    "out",
+    "if",
+    "about",
+    "who",
+    "get",
+    "which",
+    "go",
+    "me",
+    "when",
+    "make",
+    "can",
+    "like",
+    "time",
+    "no",
+    "just",
+    "him",
+    "know",
+    "take",
+    "people",
+    "into",
+    "year",
+    "your",
+    "good",
+    "some",
+    "could",
+    "them",
+    "see",
+    "other",
+    "than",
+    "then",
+    "now",
+    "look",
+    "only",
+    "come",
+    "its",
+    "over",
+    "think",
+    "also",
+    "back",
+    "after",
+    "use",
+    "two",
+    "how",
+    "our",
+    "work",
+    "first",
+    "well",
+    "way",
+    "even",
+    "new",
+    "want",
+    "because",
+    "any",
+    "these",
+    "give",
+    "day",
+    "most",
+    "us",
+    "is",
+    "was",
+    "are",
+    "were",
+    "been",
+    "has",
+    "had",
+    "did",
+    "does",
+    "am",
 }
 
 
@@ -269,6 +368,7 @@ FILTERS = {
 # Pipeline
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class FilterStats:
     total: int = 0
@@ -291,9 +391,10 @@ def run_quality_filter(
     for name in FILTERS:
         stats.per_filter_rejected[name] = 0
 
-    with jsonlines.open(input_path, mode="r") as reader, \
-         jsonlines.open(output_path, mode="w") as writer:
-
+    with (
+        jsonlines.open(input_path, mode="r") as reader,
+        jsonlines.open(output_path, mode="w") as writer,
+    ):
         for record in tqdm(reader, desc="Quality filtering", unit=" docs"):
             stats.total += 1
             text = record.get(text_field, "")
@@ -348,13 +449,30 @@ def run_quality_filter(
 # CLI
 # ---------------------------------------------------------------------------
 
+
 @click.command("quality-filter")
-@click.option("--input", "input_path", required=True, type=click.Path(exists=True), help="Input JSONL file")
-@click.option("--output", "output_path", required=True, type=click.Path(), help="Output filtered JSONL file")
-@click.option("--report", "report_path", default=None, type=click.Path(), help="Output report JSON path")
-@click.option("--config", "config_path", default=None, type=click.Path(exists=True), help="Quality filter config YAML")
+@click.option(
+    "--input", "input_path", required=True, type=click.Path(exists=True), help="Input JSONL file"
+)
+@click.option(
+    "--output", "output_path", required=True, type=click.Path(), help="Output filtered JSONL file"
+)
+@click.option(
+    "--report", "report_path", default=None, type=click.Path(), help="Output report JSON path"
+)
+@click.option(
+    "--config",
+    "config_path",
+    default=None,
+    type=click.Path(exists=True),
+    help="Quality filter config YAML",
+)
 @click.option("--text-field", default="text", help="Field name containing document text")
-@click.option("--log-level", default="INFO", type=click.Choice(["DEBUG", "INFO", "WARNING", "ERROR"]))
+@click.option(
+    "--log-level",
+    default="INFO",
+    type=click.Choice(["DEBUG", "INFO", "WARNING", "ERROR"]),
+)
 def cli(
     input_path: str,
     output_path: str,
@@ -371,7 +489,7 @@ def cli(
 
     # Load config
     if config_path is not None:
-        with open(config_path, "r", encoding="utf-8") as f:
+        with open(config_path, encoding="utf-8") as f:
             config = yaml.safe_load(f)
         logger.info("Loaded config from %s", config_path)
     else:
@@ -394,12 +512,12 @@ def cli(
         text_field=text_field,
     )
 
-    click.echo(f"\n--- Quality Filter Report ---")
+    click.echo("\n--- Quality Filter Report ---")
     click.echo(f"Total documents:    {report['total_documents']:>10,}")
     click.echo(f"Documents passed:   {report['documents_passed']:>10,}")
     click.echo(f"Documents rejected: {report['documents_rejected']:>10,}")
     click.echo(f"Pass rate:          {report['pass_rate_percent']:>9.1f}%")
-    click.echo(f"\nPer-filter rejections:")
+    click.echo("\nPer-filter rejections:")
     for name, count in report["per_filter_rejected"].items():
         if count > 0:
             click.echo(f"  {name:30s} {count:>8,}")

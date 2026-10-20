@@ -16,7 +16,7 @@ import type { FastifyReply } from 'fastify';
 import type { OutgoingHttpHeaders } from 'node:http';
 import type { ChatResponse, AilinMetadata, AilinErrorMetadata } from '@/types';
 import { logger } from './logger';
-import { applyBranding } from './branding';
+import { applyBranding, type BrandingOptions } from './branding';
 
 /**
  * Maximum safe size (bytes) for a single SSE `data: ...\n\n` line.
@@ -75,6 +75,15 @@ function hasInlineArtifacts(
  * `url` (the established pattern elsewhere in this codebase — see
  * `ArtifactRef`, which has no b64 field at all), the inline copy is pure
  * redundant weight and is always dropped, not just when oversized.
+ *
+ * ALSO strips data-URI values from `artifact.url` itself (defense in depth,
+ * 2026-09-30 incident follow-up): images-orchestration used to fabricate
+ * `data:image/png;base64,...` "urls" when a url-format request was served
+ * from bytes, and that multi-MB pseudo-URL sailed through this stripper
+ * untouched — only b64_json was ever considered inline weight — leaving the
+ * line oversized and triggering the whole-chunk degraded placeholder below.
+ * The fabrication is gone at the source (mapImageDeliveryFields), but any
+ * future producer of data-URI urls must still be caught here.
  */
 function stripUnsafeInlineArtifacts(chunk: ChatResponse): ChatResponse {
   const metadata = chunk.ailin_metadata;
@@ -82,14 +91,17 @@ function stripUnsafeInlineArtifacts(chunk: ChatResponse): ChatResponse {
 
   let mutated = false;
   const safeArtifacts = metadata.artifacts.map((artifact) => {
-    if (!artifact.b64_json) return artifact;
-    const oversized = artifact.b64_json.length > SSE_LINE_SAFE_MAX_BYTES;
+    const dataUriUrl = artifact.url && !/^https?:\/\//i.test(artifact.url);
+    if (!artifact.b64_json && !dataUriUrl) return artifact;
+    const oversized = (artifact.b64_json?.length ?? 0) > SSE_LINE_SAFE_MAX_BYTES;
     if (!artifact.url && !oversized) return artifact;
     mutated = true;
+    const safeUrl = dataUriUrl ? undefined : artifact.url;
     return {
       ...artifact,
       b64_json: undefined,
-      ...(artifact.url
+      ...(safeUrl ? {} : { url: undefined }),
+      ...(safeUrl
         ? {}
         : {
             error:
@@ -175,9 +187,18 @@ interface ErrorWithCode extends Error {
  * `applyBranding()` before responding, but nothing on the streaming path
  * did. A per-call-site fix would need to be re-applied at every future SSE
  * emitter; this one covers all of them, including ones not yet written.
+ *
+ * `options` forwards BrandingOptions to applyBranding — streaming callers
+ * that hold the client's request pass `{ explicitModel: getPinnedModelId(...)
+ * }` so a user-pinned model keeps its real name (matching is per chunk, so a
+ * mid-stream failover chunk still gets branded).
  */
-export function sendSSEChunk(reply: FastifyReply, chunk: ChatResponse): void {
-  reply.raw.write(formatSSE(applyBranding(chunk)));
+export function sendSSEChunk(
+  reply: FastifyReply,
+  chunk: ChatResponse,
+  options?: BrandingOptions
+): void {
+  reply.raw.write(formatSSE(applyBranding(chunk, options)));
 }
 
 /**
@@ -247,6 +268,12 @@ export function sendSSEError(reply: FastifyReply, error: Error): void {
  * `withIdempotency` ever called `reply.header(...)`.
  */
 export function setupSSEHeaders(reply: FastifyReply): void {
+  // Idempotent guard: a caller that already committed headers (e.g. the
+  // streaming media-generation gate starting its keepalive heartbeat before
+  // the generation runs) must not reach writeHead again — Node throws
+  // ERR_HTTP_HEADERS_SENT, which would turn into an uncaught rejection that
+  // hangs the client instead of delivering a clean SSE error.
+  if (reply.raw.headersSent) return;
   const headers: OutgoingHttpHeaders = {
     ...(reply.getHeaders() as OutgoingHttpHeaders),
     'Content-Type': 'text/event-stream',
@@ -255,6 +282,81 @@ export function setupSSEHeaders(reply: FastifyReply): void {
     'X-Accel-Buffering': 'no', // Disable nginx buffering
   };
   reply.raw.writeHead(200, headers);
+}
+
+/**
+ * SSE comment keepalive for long-silent generation phases.
+ *
+ * The streaming media-generation redirect (chat-routes.ts) runs the WHOLE
+ * non-streaming pipeline — image/video/audio/file generation with provider
+ * fallback chains — before its single response chunk exists: tens of seconds
+ * (observed 49.6s in production, 2026-09-30), potentially minutes for video,
+ * with ZERO bytes on the wire. Line-oriented intermediaries treat that as a
+ * dead connection (Cloudflare gives ~100s before a 524; chat's own aiohttp
+ * idle timeout and the browser fetch both benefit from traffic too).
+ *
+ * An SSE COMMENT line (`: keepalive\n\n`) is the protocol-blessed heartbeat:
+ * consumers ignore lines that don't start with `data:` (verified against
+ * ailin-chat's stream_chunks_handler and the browser parser — both skip
+ * comment lines), so it keeps every hop warm without leaking a frame.
+ *
+ * `onTick` (optional) runs on every interval alongside the comment — the
+ * media gate uses it to emit a semantic `ailin_metadata.type='progress'`
+ * frame per tick (see buildMediaProgressChunk) so downstream clients can
+ * show a live "generating…" indicator instead of a silent spinner.
+ *
+ * Returns a stop() function; callers MUST invoke it once real data flows
+ * (typically in a finally) or the interval would outlive the request.
+ */
+export function startSSEKeepalive(
+  raw: { write: (chunk: string) => boolean },
+  intervalMs = 15_000,
+  onTick?: () => void
+): () => void {
+  const timer = setInterval(() => {
+    raw.write(': keepalive\n\n');
+    onTick?.();
+  }, intervalMs);
+  return () => clearInterval(timer);
+}
+
+/**
+ * Semantic progress frame for long media-generation phases — the SAME shape
+ * strategies already emit via BaseStrategy.progressChunk
+ * (`AilinProgressMetadata`: type/message/step/total), so existing consumers
+ * need no new parsing. `step` carries elapsed SECONDS (total=0 → open-ended:
+ * generation duration is unknowable upfront); `message` is
+ * "Generating ${modality}" — human-readable as-is and prefix-matchable by
+ * clients that prefer localized strings ("Gerando imagem…").
+ *
+ * Consumers that don't know the type (older chat relays) drop these frames
+ * harmlessly: `choices[0].delta.content` is empty, so nothing renders.
+ */
+export function buildMediaProgressChunk(
+  modality: 'image' | 'video' | 'audio' | 'file',
+  elapsedSeconds: number,
+  model: string
+): ChatResponse {
+  return {
+    id: `prog-media-${elapsedSeconds}-${Date.now()}`,
+    object: 'chat.completion.chunk',
+    created: Math.floor(Date.now() / 1000),
+    model,
+    choices: [
+      {
+        index: 0,
+        delta: { role: 'assistant', content: '' },
+        finish_reason: null,
+        logprobs: null,
+      },
+    ],
+    ailin_metadata: {
+      type: 'progress',
+      message: `Generating ${modality}`,
+      step: elapsedSeconds,
+      total: 0,
+    },
+  };
 }
 
 /**

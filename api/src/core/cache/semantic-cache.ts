@@ -53,6 +53,7 @@ import type { ChatRequest, ChatResponse } from '@/types';
 import { logger } from '@/utils/logger';
 import { getErrorMessage } from '@/utils/type-guards';
 import { canonicalizeStrategyInput } from '@/core/orchestration/strategy-contract';
+import { AILIN_EXECUTION_POLICY_VERSION } from '@/core/orchestration/prompts/identity-policy';
 import { createHash } from 'node:crypto';
 import { getCapabilityPool } from '@/capability/db/capability-pool';
 import { getCapabilityEmbedder } from '@/capability/embedder/embedder-factory';
@@ -194,7 +195,7 @@ export class SemanticCache {
     const startTime = Date.now();
 
     try {
-      const strategyKey = this.getStrategyKey(request);
+      const strategyKey = this.getCachePartitionKey(request);
       const requestHash = this.generateRequestHash(request);
 
       // Try exact match first (fastest) — plain indexed equality lookup.
@@ -267,7 +268,7 @@ export class SemanticCache {
 
     try {
       const requestHash = this.generateRequestHash(request);
-      const strategyKey = this.getStrategyKey(request);
+      const strategyKey = this.getCachePartitionKey(request);
       const requestText = this.extractRequestText(request);
       const embeddingResult = await this.generateEmbedding(requestText);
 
@@ -491,7 +492,7 @@ export class SemanticCache {
   private generateRequestHash(request: ChatRequest): string {
     const hashInput = JSON.stringify({
       model: request.model,
-      strategy: this.getStrategyKey(request),
+      strategy: this.getCachePartitionKey(request),
       messages: request.messages,
       temperature: request.temperature,
       top_p: request.top_p,
@@ -521,7 +522,7 @@ export class SemanticCache {
    * Extract text from request for embedding
    */
   private extractRequestText(request: ChatRequest): string {
-    const parts: string[] = [`strategy:${this.getStrategyKey(request)}`];
+    const parts: string[] = [`strategy:${this.getCachePartitionKey(request)}`];
 
     for (const message of request.messages || []) {
       if (message.role === 'user' || message.role === 'system') {
@@ -539,6 +540,15 @@ export class SemanticCache {
       return 'dynamic';
     }
     return canonicalizeStrategyInput(request.strategy) || request.strategy;
+  }
+
+  /**
+   * Cache entries are policy artifacts as well as request artifacts. Partition
+   * them by the execution-policy version so a prompt/identity update becomes a
+   * safe logical invalidation without a schema migration or cache sweep.
+   */
+  private getCachePartitionKey(request: ChatRequest): string {
+    return `${this.getStrategyKey(request)}|policy:${AILIN_EXECUTION_POLICY_VERSION}`;
   }
 
   /**

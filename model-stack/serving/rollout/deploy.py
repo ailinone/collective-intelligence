@@ -22,19 +22,17 @@ Workflow:
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import json
 import logging
-import os
-import shutil
-import signal
 import subprocess
 import sys
 import time
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional
+from typing import Any
 
 import click
 import httpx
@@ -42,13 +40,16 @@ import yaml
 
 logger = logging.getLogger("deploy")
 
-DEFAULT_REGISTRY_PATH = Path(__file__).resolve().parents[2] / "registry" / "models" / "registry.yaml"
+DEFAULT_REGISTRY_PATH = (
+    Path(__file__).resolve().parents[2] / "registry" / "models" / "registry.yaml"
+)
 ROLLOUT_LOG_PATH = Path(__file__).resolve().parent / "rollout_log.json"
 
 
 # ---------------------------------------------------------------------------
 # Data classes
 # ---------------------------------------------------------------------------
+
 
 @dataclass
 class DeploymentStatus:
@@ -69,6 +70,7 @@ class DeploymentStatus:
 # Checkpoint integrity
 # ---------------------------------------------------------------------------
 
+
 def sha256_file(path: Path) -> str:
     h = hashlib.sha256()
     with open(path, "rb") as f:
@@ -87,7 +89,6 @@ def validate_checkpoint(checkpoint_dir: str) -> bool:
     manifest = cp / "checksums.sha256"
     if not manifest.exists():
         # If no manifest, just check that essential files are present.
-        required = {"config.json", "tokenizer.json"}
         present = {p.name for p in cp.iterdir()}
         # Need config.json at minimum, weight files may vary.
         if "config.json" not in present:
@@ -120,22 +121,27 @@ def validate_checkpoint(checkpoint_dir: str) -> bool:
 # Instance management
 # ---------------------------------------------------------------------------
 
+
 def start_serving_instance(
     model_path: str,
     port: int,
     tensor_parallel: int = 1,
     gpu_memory_utilization: float = 0.90,
     extra_args: list[str] | None = None,
-) -> subprocess.Popen:
+) -> subprocess.Popen[bytes]:
     """Launch a serving process in the background."""
     serve_script = Path(__file__).resolve().parents[1] / "runtime" / "serve.py"
     cmd = [
         sys.executable,
         str(serve_script),
-        "--model-path", model_path,
-        "--port", str(port),
-        "--tensor-parallel", str(tensor_parallel),
-        "--gpu-memory-utilization", str(gpu_memory_utilization),
+        "--model-path",
+        model_path,
+        "--port",
+        str(port),
+        "--tensor-parallel",
+        str(tensor_parallel),
+        "--gpu-memory-utilization",
+        str(gpu_memory_utilization),
     ]
     if extra_args:
         cmd.extend(extra_args)
@@ -192,7 +198,7 @@ def smoke_test(base_url: str) -> bool:
         return False
 
 
-def stop_process(proc: subprocess.Popen, timeout: int = 30) -> None:
+def stop_process(proc: subprocess.Popen[bytes], timeout: int = 30) -> None:
     """Gracefully stop a subprocess."""
     if proc.poll() is not None:
         return
@@ -209,14 +215,16 @@ def stop_process(proc: subprocess.Popen, timeout: int = 30) -> None:
 # Registry helpers
 # ---------------------------------------------------------------------------
 
-def load_registry(registry_path: Path) -> dict:
+
+def load_registry(registry_path: Path) -> dict[str, Any]:
     if not registry_path.exists():
         return {"models": []}
-    return yaml.safe_load(registry_path.read_text()) or {"models": []}
+    return dict(yaml.safe_load(registry_path.read_text()) or {"models": []})
 
 
-def find_model_version(registry: dict, name: str, version: str) -> dict | None:
-    for entry in registry.get("models", []):
+def find_model_version(registry: dict[str, Any], name: str, version: str) -> dict[str, Any] | None:
+    models: list[dict[str, Any]] = registry.get("models", [])
+    for entry in models:
         if entry.get("name") == name and entry.get("version") == version:
             return entry
     return None
@@ -226,8 +234,9 @@ def find_model_version(registry: dict, name: str, version: str) -> dict | None:
 # Rollout log persistence
 # ---------------------------------------------------------------------------
 
+
 def append_rollout_log(status: DeploymentStatus) -> None:
-    log: list[dict] = []
+    log: list[dict[str, Any]] = []
     if ROLLOUT_LOG_PATH.exists():
         log = json.loads(ROLLOUT_LOG_PATH.read_text())
     log.append(asdict(status))
@@ -238,8 +247,9 @@ def append_rollout_log(status: DeploymentStatus) -> None:
 # CLI
 # ---------------------------------------------------------------------------
 
+
 @click.group()
-def cli():
+def cli() -> None:
     """Model deployment toolkit (blue-green)."""
     logging.basicConfig(
         level=logging.INFO,
@@ -265,7 +275,7 @@ def deploy(
     tensor_parallel: int,
     health_timeout: int,
     gpu_memory_utilization: float,
-):
+) -> None:
     """Deploy a model version using blue-green strategy."""
     reg = load_registry(Path(registry_path))
     entry = find_model_version(reg, model_name, model_version)
@@ -340,10 +350,8 @@ def deploy(
     if blue_healthy:
         click.echo(f"Stopping blue instance on port {blue_port} ...")
         # In a real setup we'd look up the PID; here we try a graceful HTTP shutdown
-        try:
+        with contextlib.suppress(httpx.RequestError):
             httpx.post(f"http://localhost:{blue_port}/shutdown", timeout=5)
-        except httpx.RequestError:
-            pass
 
     status.status = "healthy"
     status.finished_at = datetime.now(timezone.utc).isoformat()
@@ -356,7 +364,7 @@ def deploy(
 
 
 @cli.command()
-def status():
+def status() -> None:
     """Show rollout log."""
     if not ROLLOUT_LOG_PATH.exists():
         click.echo("No rollout log found.")

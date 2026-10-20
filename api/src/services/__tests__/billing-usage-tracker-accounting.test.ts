@@ -64,6 +64,30 @@ function options(overrides: Record<string, unknown> = {}) {
   } as Parameters<typeof trackChatUsage>[0];
 }
 
+describe('trackChatUsage wallet hold threading', () => {
+  beforeEach(() => {
+    debitChatRequestMock.mockReset().mockResolvedValue(undefined);
+    recordUsageEventsMock.mockReset().mockResolvedValue(undefined);
+    recordQuotaUsageMock.mockReset().mockResolvedValue(undefined);
+  });
+
+  it('forwards holdId to debitChatRequest so the debit settles the reservation', async () => {
+    await trackChatUsage(options({ holdId: 'hold_123' }));
+    expect(debitChatRequestMock).toHaveBeenCalledWith(
+      expect.objectContaining({ holdId: 'hold_123' })
+    );
+  });
+
+  it('omits holdId when the caller has no wallet gate reservation', async () => {
+    await trackChatUsage(options());
+    expect(debitChatRequestMock).toHaveBeenCalledWith(
+      expect.objectContaining({ requestId: 'req-1' })
+    );
+    const call = debitChatRequestMock.mock.calls[0][0] as Record<string, unknown>;
+    expect(call.holdId).toBeUndefined();
+  });
+});
+
 describe('trackChatUsage accounting modes', () => {
   beforeEach(() => {
     debitChatRequestMock.mockReset().mockResolvedValue(undefined);
@@ -128,5 +152,51 @@ describe('trackChatUsage accounting modes', () => {
 
     await expect(trackChatUsage(options({ accounting: 'analytics-only' }))).resolves.toBeUndefined();
     await expect(trackChatUsage(options())).resolves.toBeUndefined();
+  });
+});
+
+describe('tokenUsageOverride (non-chat routes wallet coverage)', () => {
+  beforeEach(() => {
+    debitChatRequestMock.mockReset().mockResolvedValue(undefined);
+    recordUsageEventsMock.mockReset().mockResolvedValue(undefined);
+    recordQuotaUsageMock.mockReset().mockResolvedValue(undefined);
+  });
+
+  it('feeds the debit with the overridden per-direction tokens (was 0/0 for /v1-responses-style call sites)', async () => {
+    await trackChatUsage(
+      options({
+        request: {
+          model: 'consensus:medium',
+          messages: [],
+          ailin_tier: 'medium',
+          ailin_tier_rate: { inputPer1MUsd: 2, outputPer1MUsd: 8 },
+        },
+        tokenUsageOverride: { promptTokens: 1500, completionTokens: 2500 },
+      })
+    );
+
+    expect(debitChatRequestMock).toHaveBeenCalledTimes(1);
+    const args = debitChatRequestMock.mock.calls[0][0];
+    expect(args.promptTokens).toBe(1500);
+    expect(args.completionTokens).toBe(2500);
+  });
+
+  it('falls back to the aggregated model usage when no override is given', async () => {
+    await trackChatUsage(options());
+
+    const args = debitChatRequestMock.mock.calls[0][0];
+    expect(args.promptTokens).toBe(0);
+    expect(args.completionTokens).toBe(0);
+  });
+
+  it('override also feeds the analytics event totals', async () => {
+    await trackChatUsage(
+      options({ tokenUsageOverride: { promptTokens: 100, completionTokens: 200 } })
+    );
+
+    const event = recordUsageEventsMock.mock.calls[0][0].events[0];
+    expect(event.metadata.total_tokens).toBe(300);
+    expect(event.metadata.prompt_tokens).toBe(100);
+    expect(event.metadata.completion_tokens).toBe(200);
   });
 });

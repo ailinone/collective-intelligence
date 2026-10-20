@@ -23,7 +23,7 @@ import logging
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 import click
 import yaml
@@ -35,28 +35,33 @@ logger = logging.getLogger("champion_challenger")
 # Configuration
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class PromotionPolicy:
     """Thresholds governing whether a challenger is promoted."""
 
     # Key metrics: challenger must beat champion by >= margin on every one.
-    key_metrics: dict[str, float] = field(default_factory=lambda: {
-        "gsm8k_accuracy": 0.01,      # 1 pp improvement required
-        "humaneval_pass1": 0.01,
-        "safety_refusal_rate": 0.0,   # must not decrease
-    })
+    key_metrics: dict[str, float] = field(
+        default_factory=lambda: {
+            "gsm8k_accuracy": 0.01,  # 1 pp improvement required
+            "humaneval_pass1": 0.01,
+            "safety_refusal_rate": 0.0,  # must not decrease
+        }
+    )
 
     # Secondary metrics: no single metric may degrade more than this limit.
-    degradation_limit: float = 0.02   # 2 pp max regression on any metric
+    degradation_limit: float = 0.02  # 2 pp max regression on any metric
 
     # If True, higher is better for all metrics.  Override per-metric below.
     higher_is_better_defaults: bool = True
 
     # Override: set to False for metrics where lower is better (e.g. latency).
-    lower_is_better: set[str] = field(default_factory=lambda: {
-        "latency_p99_ms",
-        "cost_per_1k_tokens",
-    })
+    lower_is_better: set[str] = field(
+        default_factory=lambda: {
+            "latency_p99_ms",
+            "cost_per_1k_tokens",
+        }
+    )
 
     def is_higher_better(self, metric: str) -> bool:
         return metric not in self.lower_is_better
@@ -65,6 +70,7 @@ class PromotionPolicy:
 # ---------------------------------------------------------------------------
 # Benchmark results
 # ---------------------------------------------------------------------------
+
 
 @dataclass
 class BenchmarkResults:
@@ -77,9 +83,9 @@ class BenchmarkResults:
     source_file: str = ""
 
     @classmethod
-    def from_file(cls, path: str | Path) -> "BenchmarkResults":
+    def from_file(cls, path: str | Path) -> BenchmarkResults:
         p = Path(path)
-        data: dict
+        data: dict[str, Any]
         if p.suffix in (".yaml", ".yml"):
             data = yaml.safe_load(p.read_text()) or {}
         else:
@@ -96,6 +102,7 @@ class BenchmarkResults:
 # ---------------------------------------------------------------------------
 # Comparison engine
 # ---------------------------------------------------------------------------
+
 
 @dataclass
 class MetricComparison:
@@ -119,7 +126,7 @@ class PromotionDecision:
     reasons: list[str] = field(default_factory=list)
     decided_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "promoted": self.promoted,
             "champion": self.champion,
@@ -168,10 +175,8 @@ def compare_models(
         higher_better = policy.is_higher_better(metric)
 
         # Compute raw delta (positive = challenger is better)
-        if higher_better:
-            delta = chall_val - champ_val
-        else:
-            delta = champ_val - chall_val  # lower is better -> invert
+        # lower-is-better metrics are inverted so positive always means better
+        delta = chall_val - champ_val if higher_better else champ_val - chall_val
 
         required_margin = policy.key_metrics.get(metric, 0.0)
         is_key = metric in policy.key_metrics
@@ -225,27 +230,51 @@ def compare_models(
 # CLI
 # ---------------------------------------------------------------------------
 
+
 @click.group()
-def cli():
+def cli() -> None:
     """Champion / Challenger model comparison."""
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
 
 
 @cli.command()
-@click.option("--champion-results", required=True, type=click.Path(exists=True), help="Champion benchmark results (JSON/YAML)")
-@click.option("--challenger-results", required=True, type=click.Path(exists=True), help="Challenger benchmark results (JSON/YAML)")
-@click.option("--policy-file", default=None, type=click.Path(exists=True), help="Promotion policy YAML (optional)")
+@click.option(
+    "--champion-results",
+    required=True,
+    type=click.Path(exists=True),
+    help="Champion benchmark results (JSON/YAML)",
+)
+@click.option(
+    "--challenger-results",
+    required=True,
+    type=click.Path(exists=True),
+    help="Challenger benchmark results (JSON/YAML)",
+)
+@click.option(
+    "--policy-file",
+    default=None,
+    type=click.Path(exists=True),
+    help="Promotion policy YAML (optional)",
+)
 @click.option("--output", default=None, type=click.Path(), help="Write decision JSON to file")
-def compare(champion_results, challenger_results, policy_file, output):
+def compare(
+    champion_results: str,
+    challenger_results: str,
+    policy_file: str | None,
+    output: str | None,
+) -> None:
     """Compare champion vs. challenger and output promotion decision."""
     champ = BenchmarkResults.from_file(champion_results)
     chall = BenchmarkResults.from_file(challenger_results)
 
     if policy_file:
         raw = yaml.safe_load(Path(policy_file).read_text()) or {}
+        # 2026-10-18 instantiate to read defaults: default_factory fields have no
+        # class-level attribute, so PromotionPolicy.<field> raised AttributeError
+        defaults = PromotionPolicy()
         policy = PromotionPolicy(
-            key_metrics=raw.get("key_metrics", PromotionPolicy.key_metrics),
-            degradation_limit=raw.get("degradation_limit", PromotionPolicy.degradation_limit),
+            key_metrics=raw.get("key_metrics", defaults.key_metrics),
+            degradation_limit=raw.get("degradation_limit", defaults.degradation_limit),
             lower_is_better=set(raw.get("lower_is_better", [])),
         )
     else:
@@ -253,16 +282,19 @@ def compare(champion_results, challenger_results, policy_file, output):
 
     decision = compare_models(champ, chall, policy)
 
-    click.echo(f"\n{'='*60}")
+    click.echo(f"\n{'=' * 60}")
     click.echo(f"Champion:   {decision.champion}")
     click.echo(f"Challenger: {decision.challenger}")
-    click.echo(f"{'='*60}")
+    click.echo(f"{'=' * 60}")
 
     for c in decision.comparisons:
         status = "PASS" if c.passed else "FAIL"
-        click.echo(f"  [{status}] {c.metric:30s} champ={c.champion_value:.4f}  chall={c.challenger_value:.4f}  delta={c.delta:+.4f}  | {c.note}")
+        click.echo(
+            f"  [{status}] {c.metric:30s} champ={c.champion_value:.4f}  "
+            f"chall={c.challenger_value:.4f}  delta={c.delta:+.4f}  | {c.note}"
+        )
 
-    click.echo(f"{'='*60}")
+    click.echo(f"{'=' * 60}")
     verdict = "PROMOTE" if decision.promoted else "REJECT"
     click.echo(f"Decision: {verdict}")
     for r in decision.reasons:
@@ -278,12 +310,15 @@ def compare(champion_results, challenger_results, policy_file, output):
 
 @cli.command()
 @click.option("--output", required=True, type=click.Path(), help="Write default policy to YAML")
-def init_policy(output):
+def init_policy(output: str) -> None:
     """Generate a default promotion policy file."""
+    # 2026-10-18 instantiate to read defaults: default_factory fields have no
+    # class-level attribute, so PromotionPolicy.<field> raised AttributeError
+    default_policy = PromotionPolicy()
     default = {
-        "key_metrics": dict(PromotionPolicy.key_metrics),
-        "degradation_limit": PromotionPolicy.degradation_limit,
-        "lower_is_better": list(PromotionPolicy.lower_is_better),
+        "key_metrics": dict(default_policy.key_metrics),
+        "degradation_limit": default_policy.degradation_limit,
+        "lower_is_better": list(default_policy.lower_is_better),
     }
     Path(output).write_text(yaml.dump(default, default_flow_style=False))
     click.echo(f"Default policy written to {output}")

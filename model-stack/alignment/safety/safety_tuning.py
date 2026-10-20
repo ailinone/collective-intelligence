@@ -22,20 +22,19 @@ Usage
     python safety_tuning.py --config safety_config.yaml
     accelerate launch safety_tuning.py --config safety_config.yaml
 """
+
 from __future__ import annotations
 
 import json
 import logging
 import os
 import re
-import sys
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Any
 
 import click
 import torch
 import yaml
-from datasets import Dataset, DatasetDict, concatenate_datasets, load_dataset, load_from_disk
 from peft import LoraConfig, PeftModel, TaskType, get_peft_model
 from transformers import (
     AutoModelForCausalLM,
@@ -43,6 +42,16 @@ from transformers import (
     GenerationConfig,
 )
 from trl import SFTConfig, SFTTrainer
+
+# 2026-10-18 datasets ships no py.typed and the repo's datasets/ data directory
+# shadows the installed package for mypy, so the imports below resolve to Any.
+from datasets import (  # type: ignore[attr-defined]
+    Dataset,
+    DatasetDict,
+    concatenate_datasets,
+    load_dataset,
+    load_from_disk,
+)
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
@@ -61,21 +70,17 @@ REFUSAL_PATTERNS = [
 
 def is_refusal(text: str) -> bool:
     """Detect whether a response is a refusal."""
-    for pattern in REFUSAL_PATTERNS:
-        if re.search(pattern, text, re.IGNORECASE):
-            return True
-    return False
+    return any(re.search(pattern, text, re.IGNORECASE) for pattern in REFUSAL_PATTERNS)
 
 
 # ── Dataset construction ─────────────────────────────────────
-def load_and_mix_datasets(cfg: dict) -> DatasetDict:
+def load_and_mix_datasets(cfg: dict[str, Any]) -> DatasetDict:
     """
     Load safety and helpfulness datasets, mix them according to ratio,
     and split into train/eval.
     """
     data_cfg = cfg["data"]
     safety_ratio = data_cfg.get("safety_ratio", 0.6)
-    max_length = data_cfg.get("max_length", 4096)
 
     datasets_to_mix = []
 
@@ -133,7 +138,7 @@ def load_and_mix_datasets(cfg: dict) -> DatasetDict:
     return split
 
 
-def _load_single_dataset(path: str) -> Optional[Dataset]:
+def _load_single_dataset(path: str) -> Dataset | None:
     """Load a single dataset from various formats."""
     p = Path(path)
     if not p.exists():
@@ -152,9 +157,12 @@ def _load_single_dataset(path: str) -> Optional[Dataset]:
     except Exception as e:
         logger.error("Failed to load %s: %s", path, e)
         return None
+    # 2026-10-18 explicit fall-through: unknown file type (not .json/.jsonl, not a
+    # dir) previously relied on the implicit None return; made explicit for mypy.
+    return None
 
 
-def _format_safety_example(example: Dict) -> str:
+def _format_safety_example(example: dict[str, Any]) -> str:
     """Format a safety/helpfulness example into training text."""
     # Support multiple formats
     if "messages" in example:
@@ -165,7 +173,6 @@ def _format_safety_example(example: Dict) -> str:
 
     prompt = example.get("prompt", example.get("instruction", ""))
     response = example.get("response", example.get("output", example.get("chosen", "")))
-    category = example.get("category", "")
 
     text = f"<|user|>\n{prompt}\n<|assistant|>\n{response}\n"
     return text
@@ -181,7 +188,7 @@ def evaluate_safety(
     max_examples: int = 200,
     max_new_tokens: int = 256,
     device: str = "cuda",
-) -> Dict[str, float]:
+) -> dict[str, Any]:
     """
     Evaluate refusal rate on a set of prompts.
     Returns refusal rate and sample responses.
@@ -195,7 +202,7 @@ def evaluate_safety(
 
     refusals = 0
     total = 0
-    sample_responses = []
+    sample_responses: list[dict[str, Any]] = []
 
     gen_config = GenerationConfig(
         max_new_tokens=max_new_tokens,
@@ -210,10 +217,14 @@ def evaluate_safety(
             continue
 
         formatted = f"<|user|>\n{prompt}\n<|assistant|>\n"
-        inputs = tokenizer(formatted, return_tensors="pt", truncation=True, max_length=3840).to(device)
+        inputs = tokenizer(formatted, return_tensors="pt", truncation=True, max_length=3840).to(
+            device
+        )
 
         output = model.generate(**inputs, generation_config=gen_config)
-        response = tokenizer.decode(output[0][inputs["input_ids"].shape[1]:], skip_special_tokens=True)
+        response = tokenizer.decode(
+            output[0][inputs["input_ids"].shape[1] :], skip_special_tokens=True
+        )
 
         refused = is_refusal(response)
         if refused:
@@ -221,11 +232,13 @@ def evaluate_safety(
         total += 1
 
         if len(sample_responses) < 5:
-            sample_responses.append({
-                "prompt": prompt[:200],
-                "response": response[:300],
-                "refused": refused,
-            })
+            sample_responses.append(
+                {
+                    "prompt": prompt[:200],
+                    "response": response[:300],
+                    "refused": refused,
+                }
+            )
 
     refusal_rate = refusals / max(total, 1)
     return {
@@ -239,10 +252,12 @@ def evaluate_safety(
 
 # ── Main ─────────────────────────────────────────────────────
 @click.command()
-@click.option("--config", required=True, type=click.Path(exists=True), help="Path to safety config YAML.")
+@click.option(
+    "--config", required=True, type=click.Path(exists=True), help="Path to safety config YAML."
+)
 @click.option("--eval-only", is_flag=True, help="Only run evaluation, skip training.")
 @click.option("--resume-from", default=None, type=str, help="Resume from checkpoint.")
-def main(config: str, eval_only: bool, resume_from: Optional[str]):
+def main(config: str, eval_only: bool, resume_from: str | None) -> None:
     """Run safety/refusal tuning."""
     with open(config) as f:
         cfg = yaml.safe_load(f)
@@ -274,7 +289,9 @@ def main(config: str, eval_only: bool, resume_from: Optional[str]):
     )
 
     tokenizer = AutoTokenizer.from_pretrained(
-        tokenizer_path, trust_remote_code=True, padding_side="right",
+        tokenizer_path,
+        trust_remote_code=True,
+        padding_side="right",
     )
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
@@ -376,7 +393,9 @@ def main(config: str, eval_only: bool, resume_from: Optional[str]):
         status = "PASS" if result["refusal_rate"] >= target else "FAIL"
         logger.info(
             "Harmful refusal rate: %.1f%% (target: %.1f%%) [%s]",
-            result["refusal_rate"] * 100, target * 100, status,
+            result["refusal_rate"] * 100,
+            target * 100,
+            status,
         )
 
     # Evaluate on benign prompts (should NOT refuse)
@@ -388,7 +407,9 @@ def main(config: str, eval_only: bool, resume_from: Optional[str]):
         status = "PASS" if result["refusal_rate"] <= target else "FAIL"
         logger.info(
             "Benign refusal rate: %.1f%% (target: <=%.1f%%) [%s]",
-            result["refusal_rate"] * 100, target * 100, status,
+            result["refusal_rate"] * 100,
+            target * 100,
+            status,
         )
 
     # Evaluate on borderline prompts
@@ -400,7 +421,9 @@ def main(config: str, eval_only: bool, resume_from: Optional[str]):
         status = "PASS" if result["refusal_rate"] <= target else "FAIL"
         logger.info(
             "Borderline refusal rate: %.1f%% (target: <=%.1f%%) [%s]",
-            result["refusal_rate"] * 100, target * 100, status,
+            result["refusal_rate"] * 100,
+            target * 100,
+            status,
         )
 
     # Save eval results

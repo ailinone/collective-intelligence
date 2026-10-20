@@ -563,7 +563,7 @@ async function runToolBenchmark() {
       const icon = selectionCorrect && argsValid ? '✓' : '✗';
       console.log(`${icon} tool=${toolSelected ?? 'NONE'} correct=${selectionCorrect} args=${argsValid} | ${latencyMs}ms`);
     } catch (e) {
-      console.log(`EXCEPTION: ${e.message}`);
+      console.log(`EXCEPTION: ${e.message}${e.cause ? ` [${e.cause.code || e.cause.message}]` : ''}`);
       results.push({ category: 'single_selection', caseId: tc.id, status: 0, selectionCorrect: false, argsValid: false });
     }
     await sleep(DELAY_MS);
@@ -604,7 +604,7 @@ async function runToolBenchmark() {
       const failedChecks = schemaChecks.filter(c => !c.valid);
       console.log(`${icon} schema=${allSchemaValid} checks=${schemaChecks.length - failedChecks.length}/${schemaChecks.length} | ${latencyMs}ms${failedChecks.length ? ' FAIL: ' + failedChecks.map(c => c.field).join(', ') : ''}`);
     } catch (e) {
-      console.log(`EXCEPTION: ${e.message}`);
+      console.log(`EXCEPTION: ${e.message}${e.cause ? ` [${e.cause.code || e.cause.message}]` : ''}`);
       results.push({ category: 'schema_adherence', caseId: tc.id, status: 0, allSchemaValid: false, selectionCorrect: false });
     }
     await sleep(DELAY_MS);
@@ -639,7 +639,7 @@ async function runToolBenchmark() {
       const icon = sequenceValid && allArgsParseable ? '✓' : '✗';
       console.log(`${icon} calls=${toolCalls.length} expected=${tc.expectedTools.length} seq=${sequenceValid} tools=[${callNames.join(',')}] | ${latencyMs}ms`);
     } catch (e) {
-      console.log(`EXCEPTION: ${e.message}`);
+      console.log(`EXCEPTION: ${e.message}${e.cause ? ` [${e.cause.code || e.cause.message}]` : ''}`);
       results.push({ category: 'multi_step', caseId: tc.id, status: 0, sequenceValid: false, allArgsParseable: false, callCount: 0 });
     }
     await sleep(DELAY_MS);

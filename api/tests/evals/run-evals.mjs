@@ -389,7 +389,7 @@ async function runSuite(suiteName, cases, strategies) {
         if (json.error) console.log(`    ERROR: ${json.error.message ?? JSON.stringify(json.error)}`);
         if (!assertion.pass && assertion.reasoning) console.log(`    JUDGE: ${assertion.reasoning}`);
       } catch (e) {
-        console.log(`EXCEPTION: ${e.message}`);
+        console.log(`EXCEPTION: ${e.message}${e.cause ? ` [${e.cause.code || e.cause.message}]` : ''}`);
         results.push({ suite: suiteName, case_id: id, strategy: label, exception: e.message });
       }
       await sleep(DELAY_MS);

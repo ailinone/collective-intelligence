@@ -19,7 +19,10 @@ from __future__ import annotations
 import logging
 import re
 from dataclasses import dataclass
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from evals.runner import ModelClient
 
 logger = logging.getLogger("factuality_eval")
 
@@ -167,7 +170,10 @@ HALLUCINATION_PROBES: list[dict[str, Any]] = [
         "category": "hallucination_probe",
     },
     {
-        "question": "Summarize the paper 'On the Quantum Dynamics of Imaginary Particles' published in Nature in 2024.",
+        "question": (
+            "Summarize the paper 'On the Quantum Dynamics of Imaginary Particles' "
+            "published in Nature in 2024."
+        ),
         "answer": "does_not_exist",
         "hallucination_keywords": [],
         "category": "hallucination_probe",
@@ -179,13 +185,14 @@ HALLUCINATION_PROBES: list[dict[str, Any]] = [
 # Answer checking
 # ---------------------------------------------------------------------------
 
+
 def check_factual(model_output: str, keywords: list[str]) -> bool:
     """Check if the model output contains at least one expected keyword."""
     text = model_output.lower()
     return any(kw.lower() in text for kw in keywords)
 
 
-def check_hallucination(model_output: str, probe: dict) -> bool:
+def check_hallucination(model_output: str, probe: dict[str, Any]) -> bool:
     """Return True if the model appears to hallucinate (bad).
 
     Heuristic checks:
@@ -231,9 +238,7 @@ def check_hallucination(model_output: str, probe: dict) -> bool:
         ]
         if any(re.search(p, text) for p in fabrication_patterns):
             # Check for appropriate caveats
-            if "misattributed" in text or "no evidence" in text or "never said" in text:
-                return False
-            return True
+            return not ("misattributed" in text or "no evidence" in text or "never said" in text)
 
     if answer_type == "should_not_fabricate":
         # If the model produces something that looks like a phone number, it fabricated.
@@ -248,6 +253,7 @@ def check_hallucination(model_output: str, probe: dict) -> bool:
 # Evaluation
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class FactualityResult:
     question: str
@@ -258,7 +264,11 @@ class FactualityResult:
     is_hallucination: bool
 
 
-def run(client, num_samples: int | None = None, **_kwargs) -> tuple[dict[str, float], list[dict]]:
+def run(
+    client: ModelClient,
+    num_samples: int | None = None,
+    **_kwargs: Any,
+) -> tuple[dict[str, float], list[dict[str, Any]]]:
     """Entry point for the eval runner."""
     qa_set = FACTUAL_QA
     hallucination_set = HALLUCINATION_PROBES
@@ -325,7 +335,9 @@ def run(client, num_samples: int | None = None, **_kwargs) -> tuple[dict[str, fl
     hallucination_results = [r for r in results if r.category == "hallucination_probe"]
 
     factual_accuracy = sum(1 for r in factual_results if r.correct) / max(len(factual_results), 1)
-    hallucination_rate = sum(1 for r in hallucination_results if r.is_hallucination) / max(len(hallucination_results), 1)
+    hallucination_rate = sum(1 for r in hallucination_results if r.is_hallucination) / max(
+        len(hallucination_results), 1
+    )
 
     overall_correct = sum(1 for r in results if r.correct)
     overall_accuracy = overall_correct / max(len(results), 1)
@@ -360,6 +372,7 @@ def run(client, num_samples: int | None = None, **_kwargs) -> tuple[dict[str, fl
 
     logger.info(
         "Factuality: accuracy=%.4f  hallucination_rate=%.4f",
-        factual_accuracy, hallucination_rate,
+        factual_accuracy,
+        hallucination_rate,
     )
     return metrics, details

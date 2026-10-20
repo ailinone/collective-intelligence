@@ -24,6 +24,26 @@ const DEFAULT_PERIOD: QuotaLimit['period'] = 'month';
 const INT_MAX = 2_147_483_647;
 
 /**
+ * Request limit synthesised for an org with NO configured usage_quotas row.
+ *
+ * Audit 2026-09-29 item 12: that org used to be silently UNLIMITED — a quota
+ * exists only for orgs an admin explicitly configured via
+ * PUT /v1/enterprise/quotas, so every other org could spend without bound
+ * with nothing to alert on. Operators can now set a finite platform default
+ * via DEFAULT_ORG_REQUEST_QUOTA; UNSET or invalid keeps the historic
+ * unlimited behaviour (this change is behavior-preserving until the env is
+ * deliberately set — the same dark-wire rollout shape the gates use).
+ */
+function defaultRequestLimit(): number {
+  const raw = process.env.DEFAULT_ORG_REQUEST_QUOTA;
+  if (!raw) {
+    return INT_MAX;
+  }
+  const parsed = parseInt(raw, 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : INT_MAX;
+}
+
+/**
  * `null` is the org-wide aggregate row's scope; `undefined`/absent on the
  * public API means "org-wide" too. Normalising to `null` here (never
  * `undefined`) matters because it is passed straight into a Prisma `where`
@@ -414,7 +434,7 @@ async function getOrCreateCurrentQuota(
       period,
       periodStart: window.start,
       periodEnd: window.end,
-      requestLimit: INT_MAX,
+      requestLimit: defaultRequestLimit(),
       tokenLimit: null,
       costLimitUsd: null,
       fileLimit: null,
@@ -425,7 +445,7 @@ async function getOrCreateCurrentQuota(
 /**
  * Read-only counterpart of `getOrCreateCurrentQuota`. When no row exists for the
  * current window it synthesises the SAME shape the auto-created row would have
- * had (`requestLimit: INT_MAX`, no token/cost/file cap, zero counters) without
+ * had (`requestLimit: defaultRequestLimit()`, no token/cost/file cap, zero counters) without
  * writing anything, so the resulting `QuotaCheckResult` is identical to what the
  * creating path would have produced — minus the INSERT. `userId` selects the
  * scope exactly as in `findCurrentQuota`/`getOrCreateCurrentQuota`.
@@ -444,7 +464,7 @@ async function getCurrentQuotaOrUnlimited(
 
   return {
     periodEnd: window.end,
-    requestLimit: INT_MAX,
+    requestLimit: defaultRequestLimit(),
     tokenLimit: null as bigint | null,
     costLimitUsd: null as Prisma.Decimal | null,
     fileLimit: null as number | null,

@@ -19,10 +19,13 @@ import { logger } from '@/utils/logger';
 import {
   resolveStrategyTier,
   STATIC_RATE_CARD,
+  TIER_ORDER,
   type TierId,
   type TierRate,
   type TierRateCard,
 } from '@/services/pricing-tiers';
+
+const TIER_SET: ReadonlySet<TierId> = new Set(TIER_ORDER);
 
 export interface AilinVirtualModelProfile {
   id: string;
@@ -34,6 +37,18 @@ export interface AilinVirtualModelProfile {
   taskType?: TaskType;
   constraints?: AilinRuntimeConstraints;
   billing?: AilinBillingProfile;
+  /**
+   * When set, the profile RESOLVES with the tier billing carrier
+   * (tier + tierRate from the rate card): the request carries a SERVER-SET
+   * ailin_tier/ailin_tier_rate and therefore IS billed/gated by the prepaid
+   * wallet (prepaid-wallet-gate.ts keys on exactly that carrier). Absent =
+   * the historical behaviour: presets are free-form orchestration targets,
+   * never wallet-billed. This is the "pricing control" for heavy presets:
+   * the two heaviest fan-out mechanisms (ailin-consensus, ailin-best) ran
+   * unbilled while their byte-identical composite cells charged — see the
+   * OPEN PRODUCT DECISION in prepaid-wallet-gate.ts's header.
+   */
+  tier?: TierId;
   endpoints: string[];
 }
 
@@ -69,6 +84,12 @@ const DEFAULT_PROFILES: AilinVirtualModelProfile[] = [
     description: 'Prioritizes quality-oriented orchestration for difficult tasks.',
     strategy: 'quality-multipass',
     qualityTarget: 0.95,
+    // Billed preset (fanoutFactor 6): same rate as the byte-identical
+    // best:medium composite cell -- closes the OPEN PRODUCT DECISION gap in
+    // prepaid-wallet-gate.ts's header (heavy presets ran free while their
+    // composite cells charged). Billing only takes effect when the wallet
+    // gate is enabled; with the gate off this changes nothing.
+    tier: 'medium',
     endpoints: ['chat_completions', 'responses'],
   },
   {
@@ -100,6 +121,8 @@ const DEFAULT_PROFILES: AilinVirtualModelProfile[] = [
     description: 'Runs consensus strategy for stronger agreement across candidate models.',
     strategy: 'consensus',
     qualityTarget: 0.9,
+    // Billed preset (fanoutFactor 5): same rate as consensus:medium.
+    tier: 'medium',
     endpoints: ['chat_completions', 'responses'],
   },
   {
@@ -288,6 +311,10 @@ function parseVirtualProfilesFromEnv(): AilinVirtualModelProfile[] {
         taskType: parseTaskType(obj.taskType),
         constraints: parseRuntimeConstraints(obj.constraints),
         billing: parseBillingProfile(obj.billing),
+        tier:
+          typeof obj.tier === 'string' && TIER_SET.has(obj.tier as TierId)
+            ? (obj.tier as TierId)
+            : undefined,
         endpoints:
           toStringArray(obj.endpoints).length > 0
             ? toStringArray(obj.endpoints)
@@ -346,7 +373,35 @@ const PRESET_STRATEGY_TO_EXECUTION: Record<string, ExecutionStrategyName> = {
 };
 
 function strategyTierToExecution(strategy: string): ExecutionStrategyName {
+  // media-planner (2026-10-02): deliberate special case. 'media-planner' is
+  // NOT in STRATEGY_INPUT_VALUES / aliasToCanonical — a caller-specified
+  // `strategy` field still cannot select it — but a SOLD `media-planner:<tier>`
+  // composite must resolve to its own execution instead of silently falling
+  // back to 'auto'. The orchestration engine branches on it before strategy
+  // selection (executeSoldMediaPlannerTarget), where the same
+  // resolveMediaPlanRouting choke point keeps execution flag-gated.
+  if (strategy === 'media-planner') return 'media-planner';
   return PRESET_STRATEGY_TO_EXECUTION[strategy] ?? resolveExecutionStrategy(strategy) ?? 'auto';
+}
+
+/**
+ * The SERVER-SET billing carrier (`ailin_tier` + `ailin_tier_rate`) for a model
+ * string, as a plain object ready to spread into a ChatRequest — what
+ * normalizeChatRequest does on the chat path for every request, and what the
+ * non-chat execution routes (/v1/responses, /extended-thinking, /ultra-thinking)
+ * need to attach at their gate/tracker call sites now that the prepaid wallet
+ * bills anything carrying it. Empty object when the model is a plain profile
+ * (ailin-auto), 'auto', or a raw provider id: those are never wallet-billed.
+ */
+export function resolveTierCarrier(
+  modelInput?: string,
+  rates: TierRateCard = STATIC_RATE_CARD
+): { ailin_tier: TierId; ailin_tier_rate: TierRate } | Record<string, never> {
+  const resolved = resolveAilinVirtualModelAlias(modelInput, rates);
+  if (resolved?.tier && resolved.tierRate) {
+    return { ailin_tier: resolved.tier, ailin_tier_rate: resolved.tierRate };
+  }
+  return {};
 }
 
 export function resolveAilinVirtualModelAlias(
@@ -371,6 +426,13 @@ export function resolveAilinVirtualModelAlias(
       taskType: match.taskType,
       constraints: match.constraints,
       billing: match.billing,
+      // Billed-preset carrier: only when the profile declares a tier (see
+      // AilinVirtualModelProfile.tier). Everything else about the profile
+      // (strategy, qualityTarget, catalog entry) is unchanged -- this ONLY
+      // adds the wallet-billing carrier the gate keys on.
+      ...(match.tier
+        ? { tier: match.tier, tierRate: rates[match.tier] }
+        : {}),
     };
   }
 

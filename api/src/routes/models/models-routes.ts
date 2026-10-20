@@ -50,6 +50,12 @@ import {
   type ModelsListFilters,
   type RankedEntry,
 } from './models-list-serialization';
+// CAT-001/A4: additive versioned-descriptor fields for composite
+// `<family>:<tier>` targets on GET /v1/models/:id.
+import { buildStrategyDescriptorById } from './strategy-descriptors';
+// CAT-001/A2: the dedicated chat service identity may not bulk-export the
+// catalog (?all=true / ?scope=all) on these list routes.
+import { rejectCatalogBulkForChatServicePreHandler } from '@/services/chat-service-identity';
 
 const CHAT_CAPABILITIES = new Set(['chat', 'text_generation', 'streaming']);
 const OPENAI_CHAT_ENDPOINTS = new Set([
@@ -541,10 +547,13 @@ export async function registerModelRoutes(
    * GET /v1/models/list
    * List all available models from all providers
    */
-  const listModelsHandler = async (
-    request: FastifyRequest<{ Querystring: ModelsListQuery }>,
-    reply: FastifyReply
-  ) => {
+  const listModelsHandler = async (request: FastifyRequest, reply: FastifyReply) => {
+    // The querystring is validated by the route schema; the explicit type
+    // lives here as a cast instead of on the handler signature on purpose:
+    // a strictly-typed handler parameter derails fastify's RouteGeneric
+    // inference the moment a preHandler joins the registration (TS2769 on
+    // the server.get calls below).
+    const query = request.query as ModelsListQuery;
     const requestLog = logger.child({
       endpoint: '/v1/models/list',
     });
@@ -585,10 +594,10 @@ export async function registerModelRoutes(
       }
 
       const runtimeSignals = await getRuntimeSignals();
-      const requestedScope = request.query.scope ?? 'runnable';
+      const requestedScope = query.scope ?? 'runnable';
       const scope: ModelsScope =
         requestedScope === 'all' || requestedScope === 'discovered' ? requestedScope : 'runnable';
-      const endpointFilterRaw = request.query.endpoint;
+      const endpointFilterRaw = query.endpoint;
       const endpointFilter =
         typeof endpointFilterRaw === 'string' && endpointFilterRaw.trim().length > 0
           ? normalizeOperationEndpoint(endpointFilterRaw)
@@ -711,10 +720,10 @@ export async function registerModelRoutes(
       // post-filter set. When no filter param is present the ORIGINAL array
       // reference flows through untouched — byte-identical legacy behavior.
       const modelsListFilters: ModelsListFilters = {
-        search: request.query.search,
-        provider: request.query.provider,
-        capability: request.query.capability,
-        modality: request.query.modality,
+        search: query.search,
+        provider: query.provider,
+        capability: query.capability,
+        modality: query.modality,
       };
       const searchActive = hasModelsListFilters(modelsListFilters);
       const filteredEntries = searchActive
@@ -731,7 +740,7 @@ export async function registerModelRoutes(
         );
       }
       const facets =
-        typeof request.query.search === 'string' && request.query.search.trim().length > 0
+        typeof query.search === 'string' && query.search.trim().length > 0
           ? buildModelsFacets(filteredEntries)
           : undefined;
 
@@ -822,7 +831,7 @@ export async function registerModelRoutes(
       // buffered all ~64k rows into a single ~53MB string and crash-looped the
       // container (2026-06-10 OOM / exit 139). Stream sends bypass Fastify's
       // response-schema serializer, so the shape here is authoritative.
-      if (request.query.all === true) {
+      if (query.all === true) {
         const counts = {
           catalog: catalogTotal,
           runnable: runnableCount,
@@ -860,8 +869,8 @@ export async function registerModelRoutes(
       // then slices the matched set. Only THIS page's rows are turned into DTOs
       // and serialized, so peak memory is O(page) not O(catalog).
       const page = resolveModelsPage(filteredEntries, {
-        limit: request.query.limit,
-        offset: request.query.offset,
+        limit: query.limit,
+        offset: query.offset,
       });
       const data = [
         ...ailinAliasEntries.map((entry) => buildModelDto(entry)),
@@ -929,6 +938,10 @@ export async function registerModelRoutes(
           200: MODELS_LIST_RESPONSE_200_SCHEMA,
         },
       },
+      // CAT-001/A2: 403 (catalog_bulk_forbidden) when the dedicated chat
+      // service identity asks for ?all=true / ?scope=all. Every other
+      // identity — including anonymous — passes through untouched.
+      preHandler: rejectCatalogBulkForChatServicePreHandler,
       // Authentication handled by global middleware
     },
     listModelsHandler
@@ -952,6 +965,8 @@ export async function registerModelRoutes(
           200: MODELS_LIST_RESPONSE_200_SCHEMA,
         },
       },
+      // Same A2 guard as /v1/models above (both share listModelsHandler).
+      preHandler: rejectCatalogBulkForChatServicePreHandler,
       // Authentication handled by global middleware
     },
     listModelsHandler
@@ -1035,7 +1050,19 @@ export async function registerModelRoutes(
         );
         if (strategyTierEntry) {
           requestLog.info({ compositeId: lookupId }, 'Strategy:tier composite model fetched');
-          return reply.send(buildModelDto(strategyTierEntry));
+          const dto = buildModelDto(strategyTierEntry);
+          // CAT-001/A4 (ADDITIVE — backward compat is pinned by test): the
+          // resolve endpoint is the versioned target descriptor for composite
+          // ids. Existing fields are untouched; the descriptor contract rides
+          // ALONGSIDE them (catalogVersion + the same fields the strategy
+          // catalog emits), so pre-contract clients keep reading the row they
+          // always read and contract-aware clients (chat) get the versioned
+          // fields. A1's contract tests consume THIS shape.
+          const descriptor = buildStrategyDescriptorById(lookupId);
+          return reply.send({
+            ...dto,
+            ...(descriptor ?? {}),
+          });
         }
 
         let result = await getModelById(normalizedId);

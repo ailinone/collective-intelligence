@@ -18,13 +18,11 @@ from __future__ import annotations
 
 import json
 import logging
-import os
-import shutil
 import time
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 import click
 
@@ -36,6 +34,7 @@ LOCAL_STORE_DIR = Path(__file__).resolve().parent / "runs"
 # ---------------------------------------------------------------------------
 # Data model
 # ---------------------------------------------------------------------------
+
 
 @dataclass
 class MetricPoint:
@@ -74,7 +73,7 @@ class Experiment:
                 result[name] = points[-1].value
         return result
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, Any]:
         d = asdict(self)
         # Convert MetricPoint lists to plain dicts for JSON serialization
         for name in d["metrics"]:
@@ -82,7 +81,7 @@ class Experiment:
         return d
 
     @classmethod
-    def from_dict(cls, d: dict) -> "Experiment":
+    def from_dict(cls, d: dict[str, Any]) -> Experiment:
         metrics_raw = d.pop("metrics", {})
         exp = cls(**d)
         for name, points in metrics_raw.items():
@@ -93,6 +92,7 @@ class Experiment:
 # ---------------------------------------------------------------------------
 # Local JSON backend
 # ---------------------------------------------------------------------------
+
 
 class LocalStore:
     """Stores experiments as individual JSON files on disk."""
@@ -136,6 +136,7 @@ class LocalStore:
 # Tracker (unified interface)
 # ---------------------------------------------------------------------------
 
+
 class ExperimentTracker:
     """High-level experiment tracker.
 
@@ -156,7 +157,7 @@ class ExperimentTracker:
 
     def _init_wandb(self, project: str) -> bool:
         try:
-            import wandb  # type: ignore
+            import wandb
 
             if wandb.api.api_key is None:
                 logger.info("W&B API key not set; using local-only tracking")
@@ -223,8 +224,6 @@ class ExperimentTracker:
         self.local.save(exp)
 
         if self._use_wandb and self._wandb_run is not None:
-            import wandb
-
             self._wandb_run.finish()
             self._wandb_run = None
 
@@ -250,8 +249,9 @@ class ExperimentTracker:
 # CLI
 # ---------------------------------------------------------------------------
 
+
 @click.group()
-def cli():
+def cli() -> None:
     """Experiment tracking CLI."""
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
 
@@ -259,7 +259,7 @@ def cli():
 @cli.command("list")
 @click.option("--project", default="ci-model-stack")
 @click.option("--tag", default=None)
-def list_runs(project, tag):
+def list_runs(project: str, tag: str | None) -> None:
     """List tracked experiments."""
     tracker = ExperimentTracker(project=project, use_wandb=False)
     runs = tracker.list_runs(tag=tag)
@@ -276,7 +276,7 @@ def list_runs(project, tag):
 @cli.command()
 @click.argument("run_ids", nargs=-1)
 @click.option("--project", default="ci-model-stack")
-def compare(run_ids, project):
+def compare(run_ids: tuple[str, ...], project: str) -> None:
     """Compare experiments by run ID."""
     if not run_ids:
         raise click.UsageError("Provide at least one run ID")
@@ -309,7 +309,7 @@ def compare(run_ids, project):
 @cli.command()
 @click.argument("run_id")
 @click.option("--project", default="ci-model-stack")
-def show(run_id, project):
+def show(run_id: str, project: str) -> None:
     """Show details for a single experiment."""
     tracker = ExperimentTracker(project=project, use_wandb=False)
     exp = tracker.load(run_id)

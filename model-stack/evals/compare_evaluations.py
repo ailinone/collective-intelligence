@@ -171,7 +171,7 @@ class ComparisonReport:
 
 def load_report(path: Path) -> dict[str, Any]:
     """Load and minimally validate an eval report."""
-    raw = json.loads(path.read_text(encoding="utf-8"))
+    raw: dict[str, Any] = json.loads(path.read_text(encoding="utf-8"))
     required = ("role_accuracy", "brier_score", "total_records", "per_strategy")
     missing = [k for k in required if k not in raw]
     if missing:

@@ -36,12 +36,13 @@ import {
   MockStrategyOutputEvaluator,
   type MockEvaluatorOptions,
 } from '../evaluation/mock-evaluator';
-import { defaultAggOverride } from './consensus-module-mocks';
+import { defaultAggOverride, type MockToolCall } from './consensus-module-mocks';
 
 export function setAggregatorOverride(opts: {
   content?: string;
   confidence?: number;
   threwError?: boolean;
+  toolCalls?: MockToolCall[];
 }): void {
   if (!globalThis.__consensusAggOverride) {
     globalThis.__consensusAggOverride = defaultAggOverride();
@@ -49,6 +50,7 @@ export function setAggregatorOverride(opts: {
   if (opts.content !== undefined) globalThis.__consensusAggOverride.content = opts.content;
   if (opts.confidence !== undefined) globalThis.__consensusAggOverride.confidence = opts.confidence;
   if (opts.threwError !== undefined) globalThis.__consensusAggOverride.threwError = opts.threwError;
+  if (opts.toolCalls !== undefined) globalThis.__consensusAggOverride.toolCalls = opts.toolCalls;
 }
 
 export function resetAggregatorOverride(): void {

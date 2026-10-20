@@ -8,7 +8,7 @@
 // Source: https://github.com/ailinone/collective-intelligence
 
 import { describe, it, expect, vi } from 'vitest';
-import { resolveMediaJudgeModelId } from '../media-judge-model-resolution';
+import { resolveMediaJudgeModelId, resolveDocumentJudgeModelId } from '../media-judge-model-resolution';
 import type { Model } from '@/types';
 
 function makeModel(overrides: Partial<Model> & { id: string }): Model {
@@ -61,6 +61,38 @@ describe('resolveMediaJudgeModelId', () => {
   it('returns undefined when the catalog is empty', async () => {
     const listCatalogModels = vi.fn().mockResolvedValue([]);
     const modelId = await resolveMediaJudgeModelId({ listCatalogModels });
+    expect(modelId).toBeUndefined();
+  });
+});
+
+// Section C (wired 2026-09-27): document critics judge text only, so this
+// must accept a model resolveMediaJudgeModelId itself would reject for
+// lacking vision — see media-judge-model-resolution.ts's module doc.
+describe('resolveDocumentJudgeModelId', () => {
+  it('returns a text-only chat model id — the exact case resolveMediaJudgeModelId rejects', async () => {
+    const listCatalogModels = vi.fn().mockResolvedValue([
+      makeModel({ id: 'text-only-judge', capabilities: ['chat', 'text_generation'] }),
+    ]);
+
+    const viaMedia = await resolveMediaJudgeModelId({ listCatalogModels });
+    expect(viaMedia).toBeUndefined();
+
+    const viaDocument = await resolveDocumentJudgeModelId({ listCatalogModels });
+    expect(viaDocument).toBe('text-only-judge');
+  });
+
+  it('still resolves when the only candidate happens to also be vision-capable', async () => {
+    const listCatalogModels = vi.fn().mockResolvedValue([
+      makeModel({ id: 'vision-judge', capabilities: ['chat', 'text_generation', 'vision'] }),
+    ]);
+
+    const modelId = await resolveDocumentJudgeModelId({ listCatalogModels });
+    expect(modelId).toBe('vision-judge');
+  });
+
+  it('returns undefined when the catalog is empty', async () => {
+    const listCatalogModels = vi.fn().mockResolvedValue([]);
+    const modelId = await resolveDocumentJudgeModelId({ listCatalogModels });
     expect(modelId).toBeUndefined();
   });
 });

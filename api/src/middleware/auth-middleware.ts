@@ -29,6 +29,9 @@ const log = logger.child({ component: 'auth-middleware' });
 // X-Ailin-Actor-Token wiring in the chat repo.
 const CHAT_FORWARD_IDENTITY_SCOPE = 'chat:forward-identity';
 const ACTOR_UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+// Parity with internal-service-auth-middleware's hint validation — keep in
+// sync so both on-behalf surfaces accept the exact same shapes.
+const ACTING_HINT_EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
 
 /**
  * Attaches a forwarded end-user identity for USAGE/QUOTA ATTRIBUTION ONLY --
@@ -45,7 +48,7 @@ const ACTOR_UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]
  * This is an attribution *enhancement*, never a reason to fail a chat
  * completion the caller's real API key already authenticated correctly.
  */
-async function attachForwardedActorIdentity(
+export async function attachForwardedActorIdentity(
   request: FastifyRequest,
   extendedRequest: ExtendedFastifyRequest
 ): Promise<void> {
@@ -79,6 +82,23 @@ async function attachForwardedActorIdentity(
   extendedRequest.userId = actingUserId;
   if (extendedRequest.user && typeof extendedRequest.user === 'object') {
     (extendedRequest.user as { userId?: string }).userId = actingUserId;
+  }
+
+  // Optional JIT-provisioning hints (see internal-acting-user.ts): same
+  // trust model as the internal on-behalf surface — the actor token already
+  // proved this is our own chat backend, so the email/tenant it asserts for
+  // the acting user may drive just-in-time provisioning downstream. They are
+  // read ONLY here, inside the verified branch: an outside client that cannot
+  // mint chat's M2M client_credentials token can never land values here.
+  const hintEmail = (getHeaderString(request.headers, 'x-acting-user-email') ?? '')
+    .trim()
+    .toLowerCase();
+  const hintTenant = (getHeaderString(request.headers, 'x-acting-user-tenant') ?? '').trim();
+  if (hintEmail && ACTING_HINT_EMAIL_RE.test(hintEmail)) {
+    extendedRequest.actingUserEmail = hintEmail;
+  }
+  if (hintTenant && ACTOR_UUID_RE.test(hintTenant)) {
+    extendedRequest.actingUserTenant = hintTenant;
   }
 }
 
@@ -128,6 +148,13 @@ export async function authenticate(request: FastifyRequest, reply: FastifyReply)
       // Ensure IDs are present on the request object (some middleware only populates `user` / `tenantContext`).
       extendedRequest.userId = existing.userId;
       extendedRequest.organizationId = existing.organizationId;
+      // The global apiKeyAuthMiddleware (index.ts) already resolved ids for
+      // every API-key request, so this short-circuit used to return BEFORE
+      // the forwarded-actor swap below ever ran — silently disabling
+      // X-Ailin-Actor-Token attribution for ALL key-authed traffic (chat's
+      // per-user free tier and credits-continue billing included). Best-effort;
+      // a missing/invalid token here keeps the primary identity.
+      await attachForwardedActorIdentity(request, extendedRequest);
       return;
     }
 

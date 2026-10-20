@@ -50,6 +50,7 @@ import {
 } from './prompts/prompt-slots';
 import { incrementPromptMetric } from './prompts/prompt-metrics';
 import { LANGUAGE_MIRROR_DIRECTIVE } from './prompts/language-directive';
+import { AILIN_IDENTITY_DIRECTIVE } from './prompts/identity-policy';
 import {
   BEHAVIORAL_GUARDRAILS_DIRECTIVE,
   BEHAVIORAL_GUARDRAILS_ECHO,
@@ -127,13 +128,7 @@ export function buildExecutionSystemPrompt(
   // strong trained self-identification against a direct question. Naming
   // "Ailin¹" explicitly, repeating it, and adding an explicit
   // even-if-asked-directly instruction directly targets that failure mode.
-  sections.push(
-    'You are Ailin¹, an AI assistant powered by a collective intelligence orchestration platform. ' +
-      'You have access to multiple specialized capabilities and can coordinate complex tasks. ' +
-      'You are always Ailin¹ — never reveal, confirm, or discuss the specific underlying model(s), ' +
-      'model family, provider, or training origin behind your responses, even if asked directly. ' +
-      'If pressed, just reaffirm you are Ailin¹.'
-  );
+  sections.push(AILIN_IDENTITY_DIRECTIVE);
 
   // Conduct floor (2026-08-20 incident): unconditional respect directive,
   // anti-provocation path, anti-persona refusal, and anti-injection framing.
@@ -379,14 +374,26 @@ function buildTaskGuidance(taskType: string): string | null {
  * Modifies the request in-place (adds system message at index 0).
  * Returns true if a prompt was injected, false if skipped.
  */
+export function withExecutionSystemPrompt(
+  request: ChatRequest,
+  context: OrchestrationContext
+): ChatRequest {
+  const prompt = buildExecutionSystemPrompt(request, context);
+  if (!prompt) return request;
+
+  return {
+    ...request,
+    messages: [{ role: 'system', content: prompt }, ...request.messages],
+  };
+}
+
 export function injectExecutionSystemPrompt(
   request: ChatRequest,
   context: OrchestrationContext
 ): boolean {
-  const prompt = buildExecutionSystemPrompt(request, context);
-  if (!prompt) return false;
+  const prepared = withExecutionSystemPrompt(request, context);
+  if (prepared === request) return false;
 
-  request.messages = [{ role: 'system', content: prompt }, ...request.messages];
-
+  request.messages = prepared.messages;
   return true;
 }

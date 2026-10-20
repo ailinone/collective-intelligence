@@ -18,7 +18,9 @@ import type {
   AilinMetadata,
   ArtifactRef,
   CanonicalStrategyName,
+  ModelCapability,
   OrchestrationContext,
+  TextContent,
   RagConfig,
   RetrievalMetadata,
 } from '@/types';
@@ -33,11 +35,11 @@ import { isChatRequestWithMetadata, getTaskType } from '@/types/chat-request-ext
 import { narrowAs } from '@/utils/type-guards';
 import { CHAT_AUTO_EXECUTE_BLOCKED_TOOLS } from '@/core/tools/tool-registry';
 import { getToolsBaseDir, clampWorkingDirectory } from '@/utils/tools-workspace-guard';
-import { getRequestLogger } from '@/services/request-logger';
+import { getRequestLogger, type RequestIdentity } from '@/services/request-logger';
 import { sanitizeForPromptContext } from '@/core/coordination/collective-prompt-safety';
 import { getCacheService } from '@/cache/cache-service';
 import { trackChatUsage } from '@/services/billing-usage-tracker';
-import { applyBranding } from '@/utils/branding';
+import { applyBranding, type BrandingOptions } from '@/utils/branding';
 import { config } from '@/config';
 import { VideoOrchestrationService } from '@/services/video-orchestration-service';
 import { extractVideoGenerationSpec } from '@/core/orchestration/media-generation-spec';
@@ -119,6 +121,28 @@ export interface ProcessChatRequestParams {
   userId?: string;
   requestId: string;
   log: Logger;
+  /**
+   * The organization the BILLING side (prepaid-wallet debit inside
+   * trackChatUsage, and the plan-usage report to billing) charges when the
+   * per-user ailin-auto path resolved the ACTING user's own organization.
+   * Optional: absent on every other path — analytics, quota counters and
+   * per-org feature flags stay keyed on `organizationId` (the API-key
+   * principal) exactly as before.
+   */
+  billingOrganizationId?: string;
+  /**
+   * The wallet gate's reservation for this request (gateChatRequest's
+   * holdId). Threaded into trackChatUsage so the post-execution debit
+   * SETTLES the hold instead of leaving it to eat available balance until
+   * the TTL. Optional: absent on every path without a wallet gate.
+   */
+  walletHoldId?: string;
+  /**
+   * Authenticated request identity (API key + client IP) for attribution in
+   * request_logs and the systems operational push. Optional: callers without
+   * an auth context (internal jobs) leave it undefined.
+   */
+  identity?: RequestIdentity;
   /**
    * Set when the caller forced `chatRequest.stream = false` on a request the
    * CLIENT actually sent with `stream: true` (the streaming media-generation
@@ -1968,7 +1992,10 @@ async function processChatRequestImpl({
   userId,
   requestId,
   log,
+  billingOrganizationId,
+  walletHoldId,
   disableVideoEarlyPath,
+  identity,
 }: ProcessChatRequestParams): Promise<ProcessChatResult> {
   const requestLogger = getRequestLogger();
   const cacheService = getCacheService();
@@ -2000,6 +2027,14 @@ async function processChatRequestImpl({
     log,
   });
   enhancedRequest = ragRequest;
+
+  // Captured BEFORE orchestration runs: the engine deletes request.model from
+  // the request it executes, and branding decisions below need the pin after
+  // the fact (explicit user selection keeps its real model name — see
+  // applyBranding's BrandingOptions).
+  const brandingOptions: BrandingOptions = {
+    explicitModel: getPinnedModelId(enhancedRequest) ?? undefined,
+  };
 
   // Route direct video generation intents through the video capability path.
   const videoIntent = disableVideoEarlyPath ? null : detectVideoGenerationIntent(enhancedRequest);
@@ -2092,7 +2127,7 @@ async function processChatRequestImpl({
       },
     };
 
-    response = applyBranding(response);
+    response = applyBranding(response, brandingOptions);
     response = ensureResponseUsage(response);
 
     // Fire-and-forget: telemetry, not billing — nothing reads the result.
@@ -2101,6 +2136,11 @@ async function processChatRequestImpl({
       userId,
       requestId,
       request: enhancedRequest,
+      billingOrganizationId,
+      // Zero-cost path: threading the hold makes debitChatRequest RELEASE the
+      // gate's reservation immediately (charge 0) instead of leaving it eating
+      // available balance until the family TTL.
+      holdId: walletHoldId,
       cacheHit: false,
       totalCostOverride: 0,
       totalTokensOverride: 0,
@@ -2214,7 +2254,7 @@ async function processChatRequestImpl({
     };
 
     // Apply branding (if configured)
-    cachedResponse = applyBranding(cachedResponse);
+    cachedResponse = applyBranding(cachedResponse, brandingOptions);
     cachedResponse = ensureResponseUsage(cachedResponse);
 
     // Fire-and-forget: telemetry, not billing — nothing reads the result.
@@ -2223,6 +2263,10 @@ async function processChatRequestImpl({
       userId,
       requestId,
       request: enhancedRequest,
+      billingOrganizationId,
+      // Zero-cost path (served from cache): release the gate's reservation now
+      // rather than at the TTL — see the video branch above for the rationale.
+      holdId: walletHoldId,
       cacheHit: true,
       totalCostOverride: 0,
       totalTokensOverride: 0,
@@ -2515,7 +2559,7 @@ async function processChatRequestImpl({
   }
 
   // Apply branding (if configured)
-  response = applyBranding(response);
+  response = applyBranding(response, brandingOptions);
   response = ensureResponseUsage(response);
 
   // 🚨 NEW: Execute tool calls automatically if present
@@ -2623,7 +2667,7 @@ async function processChatRequestImpl({
 
   // Log to database asynchronously (non-blocking)
   requestLogger
-    .logOrchestration(result, organizationId, userId, '/v1/chat/completions', 'POST', chatRequest)
+    .logOrchestration(result, organizationId, userId, '/v1/chat/completions', 'POST', chatRequest, identity)
     .catch((error: unknown) => {
       log.error({ error }, 'Failed to log request to database');
     });
@@ -2637,6 +2681,8 @@ async function processChatRequestImpl({
     userId,
     requestId,
     request: enhancedRequest,
+    billingOrganizationId,
+    holdId: walletHoldId,
     result,
     cacheHit: false,
   }).catch((error: unknown) => {
@@ -2654,6 +2700,52 @@ async function processChatRequestImpl({
  * Call this once at startup AFTER the module is loaded.
  * This enables strategies to access the same tools as the chat processor.
  */
+/**
+ * Maps the `media_plan` tool call's explicit arguments onto
+ * `OrchestrationContext.requiredCapabilities` BEFORE the planner gate runs —
+ * so an invocation that declares its modalities (`args.modalities:
+ * ['video','image']`) routes through `evaluateMediaPlannerGate` even when the
+ * free-text prompt alone wouldn't trip the capability keyword scan (the gate
+ * unions these with its own text detection; see media-planner-gate.ts).
+ *
+ * Args understood (all optional):
+ *   modalities: Array<'image'|'video'|'audio'|'music'|'document'|'web'>
+ *       — declared capabilities involved in the composition.
+ *   aspectRatio: string (e.g. '16:9') — image/video attribute constraint.
+ *   durationSeconds: number — video/audio attribute constraint.
+ *   resolution: string (e.g. '1920x1080') — image/video attribute constraint.
+ *
+ * NOTE: this only declares capabilities for ROUTING; the planner's own model
+ * turns still refine the actual plan. Numeric constraints are best embedded
+ * in the prompt text so `detectConstraintsFromText` can pick them up too.
+ */
+function deriveMediaPlanCapabilities(args: Record<string, unknown>): ModelCapability[] {
+  if (!Array.isArray(args.modalities)) return [];
+  // Policy (approved 2026-10-02): map EVERY known modality. Non-media
+  // capabilities (web/pdf) matter because the gate unions these with its own
+  // text detection and routes on `detectedCapabilities.size > 1` — dropping
+  // them would make exactly the multi-capability compositions this tool
+  // exists for (e.g. modalities:['video','web']) fail routing. Unknown
+  // strings are skipped: the gate fails closed without a media capability
+  // anyway, so a typo can never route anything on its own.
+  const MODALITY_TO_CAPABILITY: Record<string, ModelCapability> = {
+    image: 'image_generation',
+    'image-edit': 'image_editing',
+    video: 'video_generation',
+    audio: 'audio_generation',
+    music: 'music_generation',
+    web: 'web_search',
+    document: 'pdf_understanding',
+    pdf: 'pdf_understanding',
+  };
+  const capabilities = new Set<ModelCapability>();
+  for (const raw of args.modalities) {
+    const capability = typeof raw === 'string' ? MODALITY_TO_CAPABILITY[raw] : undefined;
+    if (capability) capabilities.add(capability);
+  }
+  return [...capabilities];
+}
+
 export function registerToolsInRegistry(): void {
   // Dynamic import to avoid circular dependency at module load time
   import('@/core/tools/tool-registry')
@@ -2943,6 +3035,11 @@ export function registerToolsInRegistry(): void {
                 candidateCount: result.candidates.length,
                 degraded: result.degraded,
               }),
+              // Sum of ALL N candidates' generation cost (every candidate is
+              // a real, paid provider call, not just the winner) plus judge
+              // cost — see MediaConsensusResult.totalGenerationCostUsd's doc
+              // comment for why this typically undercounts real spend today.
+              cost: (result.totalGenerationCostUsd ?? 0) + (result.totalJudgeCostUsd ?? 0),
               artifact: {
                 type: mediaType,
                 url,
@@ -2959,6 +3056,117 @@ export function registerToolsInRegistry(): void {
               tool_call_id: toolCallId,
               success: false,
               error: `generate_media failed: ${err instanceof Error ? err.message : String(err)}`,
+            };
+          }
+        },
+        undefined,
+        undefined,
+        'quorumOnly'
+      );
+
+      // media_plan (2026-10-02): explicit tool access to the FULL
+      // MediaPlannerStrategy — the bounded agentic planner behind
+      // /v1/capabilities/media-plan/execute and the Section E safety net.
+      // Where generate_media answers "best single image/video for this
+      // prompt", media_plan answers "compose this multi-capability,
+      // constraint-bearing media request": plan → generate → judge →
+      // iterate, with unmetConstraints surfaced instead of silently
+      // dropping requirements.
+      // safeForStrategies=false + strategyExecutionMode:'quorumOnly':
+      // same quorum-gated auto-execution policy as generate_media — the
+      // planner fans out into MULTIPLE billable generations per invocation,
+      // so one hallucinating voter must never fire it. Execution reuses the
+      // orchestration engine's memoized strategy (runMediaPlannerRequest),
+      // which goes through the same resolveMediaPlanRouting choke point as
+      // every other entry point — the MEDIA_PLANNER_ENABLED flag / per-org
+      // canary is structurally unbypassable from here.
+      reg(
+        'media_plan',
+        'Plan and execute a media composition that spans multiple capabilities (e.g. video + soundtrack, image + web research) or carries explicit constraints (duration, resolution, aspect ratio, required audio track). Runs a bounded agentic planner; prefer generate_media for a single unconstrained image/video.',
+        'video',
+        false,
+        async (
+          args: Record<string, unknown>,
+          toolCallId: string,
+          ctx: ToolExecutionContext
+        ): Promise<ToolResult> => {
+          const prompt = typeof args.prompt === 'string' ? args.prompt : '';
+          if (!prompt) {
+            return {
+              tool_call_id: toolCallId,
+              success: false,
+              error: 'media_plan requires a non-empty "prompt"',
+            };
+          }
+
+          try {
+            const { getOrchestrationEngine } = await import(
+              '@/core/orchestration/orchestration-engine'
+            );
+
+            const requestId = `media_plan-${toolCallId}`;
+            const chatRequest: ChatRequest = { model: 'auto', messages: [{ role: 'user', content: prompt }] };
+            const userContext: OrchestrationContext = {
+              organizationId: ctx.organizationId ?? '',
+              userId: ctx.userId,
+              requestId,
+              models: await getAllCatalogModels(),
+              taskType: 'creative',
+              contextSize: 0,
+              requiredCapabilities: deriveMediaPlanCapabilities(args),
+            };
+
+            const outcome = await getOrchestrationEngine().runMediaPlannerRequest(
+              chatRequest,
+              userContext
+            );
+            if (!outcome.routed || !outcome.result) {
+              return {
+                tool_call_id: toolCallId,
+                success: false,
+                error: `media_planner_not_applicable: ${outcome.reason}`,
+              };
+            }
+
+            const result = outcome.result;
+            const degraded = result.metadata?.degraded === true;
+            const rawContent = result.finalResponse?.choices?.[0]?.message?.content;
+            const content =
+              typeof rawContent === 'string'
+                ? rawContent
+                : Array.isArray(rawContent)
+                  ? rawContent
+                      .filter((part): part is TextContent => part.type === 'text')
+                      .map((part) => part.text)
+                      .join('\n')
+                  : '';
+            const firstArtifact = (result.artifacts ?? []).find((a) => typeof a.url === 'string');
+
+            return {
+              tool_call_id: toolCallId,
+              success: !degraded,
+              error: degraded ? `media_plan degraded: ${content}` : undefined,
+              output: JSON.stringify({
+                routedReason: outcome.reason,
+                detectedCapabilities: outcome.detectedCapabilities,
+                content,
+                artifacts: result.artifacts ?? [],
+                unmetConstraints: result.metadata?.['unmetConstraints'] ?? [],
+              }),
+              cost: result.totalCost,
+              artifact: firstArtifact?.url
+                ? {
+                    type: firstArtifact.modality,
+                    url: firstArtifact.url,
+                    meta: { provider: firstArtifact.provider, model: firstArtifact.model },
+                  }
+                : undefined,
+            };
+          } catch (err) {
+            return {
+              tool_call_id: toolCallId,
+              success: false,
+              error: `media_plan failed: ${err instanceof Error ? err.message : String(err)}`,
             };
           }
         },

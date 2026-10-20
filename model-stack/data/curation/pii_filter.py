@@ -37,6 +37,7 @@ logger = logging.getLogger(__name__)
 # PII pattern definitions
 # ---------------------------------------------------------------------------
 
+
 class PIIType(str, Enum):
     EMAIL = "EMAIL"
     PHONE_US = "PHONE_US"
@@ -61,9 +62,7 @@ class PIIMatch:
 
 # Compiled regex patterns for each PII type
 PII_PATTERNS: dict[PIIType, re.Pattern[str]] = {
-    PIIType.EMAIL: re.compile(
-        r"\b[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}\b"
-    ),
+    PIIType.EMAIL: re.compile(r"\b[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}\b"),
     PIIType.PHONE_US: re.compile(
         r"(?<!\d)"
         r"(?:\+?1[\s\-.]?)?"
@@ -74,9 +73,7 @@ PII_PATTERNS: dict[PIIType, re.Pattern[str]] = {
     PIIType.PHONE_INTL: re.compile(
         r"\+\d{1,3}[\s\-.]?\(?\d{1,4}\)?[\s\-.]?\d{2,4}[\s\-.]?\d{2,4}(?:[\s\-.]?\d{2,4})?"
     ),
-    PIIType.SSN: re.compile(
-        r"\b\d{3}[\-\s]?\d{2}[\-\s]?\d{4}\b"
-    ),
+    PIIType.SSN: re.compile(r"\b\d{3}[\-\s]?\d{2}[\-\s]?\d{4}\b"),
     PIIType.CREDIT_CARD: re.compile(
         r"\b(?:"
         r"4\d{3}[\s\-]?\d{4}[\s\-]?\d{4}[\s\-]?\d{4}"  # Visa
@@ -91,15 +88,11 @@ PII_PATTERNS: dict[PIIType, re.Pattern[str]] = {
     PIIType.DATE_OF_BIRTH: re.compile(
         r"\b(?:0[1-9]|1[0-2])[/\-](?:0[1-9]|[12]\d|3[01])[/\-](?:19|20)\d{2}\b"
     ),
-    PIIType.US_PASSPORT: re.compile(
-        r"\b[A-Z]\d{8}\b"
-    ),
+    PIIType.US_PASSPORT: re.compile(r"\b[A-Z]\d{8}\b"),
     PIIType.IBAN: re.compile(
         r"\b[A-Z]{2}\d{2}[\s]?[\dA-Z]{4}[\s]?(?:[\dA-Z]{4}[\s]?){1,7}[\dA-Z]{1,4}\b"
     ),
-    PIIType.URL_WITH_AUTH: re.compile(
-        r"https?://[^\s:]+:[^\s@]+@[^\s]+"
-    ),
+    PIIType.URL_WITH_AUTH: re.compile(r"https?://[^\s:]+:[^\s@]+@[^\s]+"),
 }
 
 # Replacement tokens per PII type
@@ -121,6 +114,7 @@ REDACTION_TOKENS: dict[PIIType, str] = {
 # ---------------------------------------------------------------------------
 # PII detection
 # ---------------------------------------------------------------------------
+
 
 def _luhn_check(number: str) -> bool:
     """Validate a credit card number with the Luhn algorithm."""
@@ -159,25 +153,33 @@ def detect_pii(text: str, enabled_types: set[PIIType] | None = None) -> list[PII
             if pii_type == PIIType.SSN:
                 clean_ssn = re.sub(r"[\s\-]", "", matched_text)
                 # SSN cannot start with 000, 666, or 9xx; middle cannot be 00; last cannot be 0000
-                if (clean_ssn[:3] in ("000", "666") or clean_ssn[0] == "9"
-                        or clean_ssn[3:5] == "00" or clean_ssn[5:] == "0000"):
+                if (
+                    clean_ssn[:3] in ("000", "666")
+                    or clean_ssn[0] == "9"
+                    or clean_ssn[3:5] == "00"
+                    or clean_ssn[5:] == "0000"
+                ):
                     continue
 
-            matches.append(PIIMatch(
-                pii_type=pii_type,
-                start=m.start(),
-                end=m.end(),
-                text=matched_text,
-            ))
+            matches.append(
+                PIIMatch(
+                    pii_type=pii_type,
+                    start=m.start(),
+                    end=m.end(),
+                    text=matched_text,
+                )
+            )
 
     # Sort by position and remove overlaps (keep longer match)
     matches.sort(key=lambda m: (m.start, -(m.end - m.start)))
     deduped: list[PIIMatch] = []
     last_end = -1
-    for m in matches:
-        if m.start >= last_end:
-            deduped.append(m)
-            last_end = m.end
+    # 2026-10-18 renamed loop var: `m` was already bound to re.Match[str] in
+    # the finditer loop above, confusing mypy's join of the two types.
+    for match in matches:
+        if match.start >= last_end:
+            deduped.append(match)
+            last_end = match.end
 
     return deduped
 
@@ -199,6 +201,7 @@ def redact_text(text: str, matches: list[PIIMatch]) -> str:
 # ---------------------------------------------------------------------------
 # Pipeline
 # ---------------------------------------------------------------------------
+
 
 class PIIAction(str, Enum):
     REDACT = "redact"
@@ -230,9 +233,10 @@ def run_pii_filter(
     start_time = time.time()
     stats = PIIStats()
 
-    with jsonlines.open(input_path, mode="r") as reader, \
-         jsonlines.open(output_path, mode="w") as writer:
-
+    with (
+        jsonlines.open(input_path, mode="r") as reader,
+        jsonlines.open(output_path, mode="w") as writer,
+    ):
         for record in tqdm(reader, desc="PII filtering", unit=" docs"):
             stats.total_records += 1
             text = record.get(text_field, "")
@@ -283,9 +287,7 @@ def run_pii_filter(
         "records_flagged": stats.records_flagged,
         "total_pii_matches": stats.total_pii_matches,
         "pii_type_counts": dict(stats.pii_type_counts),
-        "pii_rate_percent": round(
-            100.0 * stats.records_with_pii / max(stats.total_records, 1), 2
-        ),
+        "pii_rate_percent": round(100.0 * stats.records_with_pii / max(stats.total_records, 1), 2),
         "elapsed_seconds": round(elapsed, 2),
     }
 
@@ -306,10 +308,15 @@ def run_pii_filter(
 # CLI
 # ---------------------------------------------------------------------------
 
+
 @click.command("pii-filter")
-@click.option("--input", "input_path", required=True, type=click.Path(exists=True), help="Input JSONL file")
+@click.option(
+    "--input", "input_path", required=True, type=click.Path(exists=True), help="Input JSONL file"
+)
 @click.option("--output", "output_path", required=True, type=click.Path(), help="Output JSONL file")
-@click.option("--report", "report_path", default=None, type=click.Path(), help="Output report JSON path")
+@click.option(
+    "--report", "report_path", default=None, type=click.Path(), help="Output report JSON path"
+)
 @click.option(
     "--action",
     type=click.Choice(["redact", "remove", "flag"]),
@@ -321,10 +328,14 @@ def run_pii_filter(
     "--pii-types",
     default=None,
     help="Comma-separated PII types to detect (default: all). "
-         "Options: EMAIL, PHONE_US, PHONE_INTL, SSN, CREDIT_CARD, IP_ADDRESS, "
-         "DATE_OF_BIRTH, US_PASSPORT, IBAN, URL_WITH_AUTH",
+    "Options: EMAIL, PHONE_US, PHONE_INTL, SSN, CREDIT_CARD, IP_ADDRESS, "
+    "DATE_OF_BIRTH, US_PASSPORT, IBAN, URL_WITH_AUTH",
 )
-@click.option("--log-level", default="INFO", type=click.Choice(["DEBUG", "INFO", "WARNING", "ERROR"]))
+@click.option(
+    "--log-level",
+    default="INFO",
+    type=click.Choice(["DEBUG", "INFO", "WARNING", "ERROR"]),
+)
 def cli(
     input_path: str,
     output_path: str,
@@ -369,14 +380,14 @@ def cli(
         enabled_types=enabled_types,
     )
 
-    click.echo(f"\n--- PII Filter Report ---")
+    click.echo("\n--- PII Filter Report ---")
     click.echo(f"Total records:      {report['total_records']:>10,}")
     click.echo(f"Records clean:      {report['records_clean']:>10,}")
     click.echo(f"Records with PII:   {report['records_with_pii']:>10,}")
     click.echo(f"PII rate:           {report['pii_rate_percent']:>9.1f}%")
     click.echo(f"Action taken:       {report['action']}")
     if report["pii_type_counts"]:
-        click.echo(f"\nPII types found:")
+        click.echo("\nPII types found:")
         for pii_type, count in sorted(report["pii_type_counts"].items(), key=lambda x: -x[1]):
             click.echo(f"  {pii_type:25s} {count:>8,}")
     click.echo(f"\nElapsed time: {report['elapsed_seconds']:.1f}s")

@@ -19,13 +19,21 @@ from __future__ import annotations
 import json
 import logging
 import time
+from collections.abc import Iterator
 from pathlib import Path
-from typing import Any, Iterator
+from typing import Any
 
 import click
 import yaml
-from tokenizers import Tokenizer, decoders, models, normalizers, pre_tokenizers, processors, trainers
-from tokenizers.implementations import BaseTokenizer
+from tokenizers import (
+    Tokenizer,
+    decoders,
+    models,
+    normalizers,
+    pre_tokenizers,
+    processors,
+    trainers,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -33,6 +41,7 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # Corpus iterator
 # ---------------------------------------------------------------------------
+
 
 def corpus_iterator(
     paths: list[Path],
@@ -67,7 +76,7 @@ def corpus_iterator(
                         if max_lines is not None and total_yielded >= max_lines:
                             return
         else:
-            with open(path, "r", encoding="utf-8", errors="replace") as f:
+            with open(path, encoding="utf-8", errors="replace") as f:
                 for line in f:
                     line = line.strip()
                     if line:
@@ -82,6 +91,7 @@ def corpus_iterator(
 # ---------------------------------------------------------------------------
 # Tokenizer builder
 # ---------------------------------------------------------------------------
+
 
 def build_tokenizer(config: dict[str, Any]) -> tuple[Tokenizer, trainers.BpeTrainer]:
     """
@@ -110,10 +120,9 @@ def build_tokenizer(config: dict[str, Any]) -> tuple[Tokenizer, trainers.BpeTrai
             norm_list.append(normalizers.NFC())
         elif step_type == "nfkc":
             norm_list.append(normalizers.NFKC())
-        elif step_type == "lowercase_accent_strip":
-            if step.get("enabled", True):
-                norm_list.append(normalizers.Lowercase())
-                norm_list.append(normalizers.StripAccents())
+        elif step_type == "lowercase_accent_strip" and step.get("enabled", True):
+            norm_list.append(normalizers.Lowercase())
+            norm_list.append(normalizers.StripAccents())
 
     if norm_list:
         tokenizer.normalizer = normalizers.Sequence(norm_list)
@@ -206,6 +215,7 @@ def add_post_processor(
 # Training pipeline
 # ---------------------------------------------------------------------------
 
+
 def train_tokenizer(
     config: dict[str, Any],
     corpus_paths: list[Path],
@@ -286,13 +296,32 @@ def train_tokenizer(
 # CLI
 # ---------------------------------------------------------------------------
 
+
 @click.command("train-tokenizer")
-@click.option("--config", "config_path", required=True, type=click.Path(exists=True), help="Tokenizer config YAML")
-@click.option("--corpus", required=True, multiple=True, type=click.Path(exists=True), help="Corpus file(s) for training")
-@click.option("--output-dir", required=True, type=click.Path(), help="Output directory for tokenizer files")
+@click.option(
+    "--config",
+    "config_path",
+    required=True,
+    type=click.Path(exists=True),
+    help="Tokenizer config YAML",
+)
+@click.option(
+    "--corpus",
+    required=True,
+    multiple=True,
+    type=click.Path(exists=True),
+    help="Corpus file(s) for training",
+)
+@click.option(
+    "--output-dir", required=True, type=click.Path(), help="Output directory for tokenizer files"
+)
 @click.option("--text-field", default="text", help="Text field name in JSONL corpus files")
 @click.option("--max-lines", default=None, type=int, help="Max lines to read from corpus")
-@click.option("--log-level", default="INFO", type=click.Choice(["DEBUG", "INFO", "WARNING", "ERROR"]))
+@click.option(
+    "--log-level",
+    default="INFO",
+    type=click.Choice(["DEBUG", "INFO", "WARNING", "ERROR"]),
+)
 def cli(
     config_path: str,
     corpus: tuple[str, ...],
@@ -307,7 +336,7 @@ def cli(
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
     )
 
-    with open(config_path, "r", encoding="utf-8") as f:
+    with open(config_path, encoding="utf-8") as f:
         config = yaml.safe_load(f)
 
     corpus_paths = [Path(p) for p in corpus]
@@ -321,7 +350,7 @@ def cli(
         max_lines=max_lines,
     )
 
-    click.echo(f"\n--- Tokenizer Training Report ---")
+    click.echo("\n--- Tokenizer Training Report ---")
     click.echo(f"Vocab size:      {report['vocab_size']:>10,}")
     click.echo(f"Training time:   {report['training_time_seconds']:>10.1f}s")
     click.echo(f"Round-trip OK:   {report['sanity_check']['round_trip_match']}")

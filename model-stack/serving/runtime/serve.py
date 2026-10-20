@@ -20,23 +20,25 @@ import signal
 import sys
 import time
 import uuid
+from collections.abc import AsyncGenerator, AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
-from dataclasses import dataclass, field
-from typing import AsyncGenerator, Optional
+from dataclasses import dataclass
+from types import FrameType
+from typing import Any
 
 import uvicorn
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.responses import StreamingResponse
 from prometheus_client import (
+    CONTENT_TYPE_LATEST,
     CollectorRegistry,
     Counter,
-    Histogram,
     Gauge,
+    Histogram,
     generate_latest,
-    CONTENT_TYPE_LATEST,
 )
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 from starlette.responses import Response
 
 logger = logging.getLogger("serve")
@@ -79,10 +81,11 @@ MODEL_LOADED = Gauge(
 # Request / response schemas (OpenAI-compatible)
 # ---------------------------------------------------------------------------
 
+
 class ChatMessage(BaseModel):
     role: str
     content: str
-    name: Optional[str] = None
+    name: str | None = None
 
 
 class ChatCompletionRequest(BaseModel):
@@ -90,9 +93,9 @@ class ChatCompletionRequest(BaseModel):
     messages: list[ChatMessage]
     temperature: float = 0.7
     top_p: float = 1.0
-    max_tokens: Optional[int] = None
+    max_tokens: int | None = None
     stream: bool = False
-    stop: Optional[list[str]] = None
+    stop: list[str] | None = None
     frequency_penalty: float = 0.0
     presence_penalty: float = 0.0
     n: int = 1
@@ -103,9 +106,9 @@ class CompletionRequest(BaseModel):
     prompt: str | list[str]
     temperature: float = 0.7
     top_p: float = 1.0
-    max_tokens: Optional[int] = 256
+    max_tokens: int | None = 256
     stream: bool = False
-    stop: Optional[list[str]] = None
+    stop: list[str] | None = None
     n: int = 1
 
 
@@ -118,7 +121,7 @@ class UsageInfo(BaseModel):
 class ChatChoice(BaseModel):
     index: int = 0
     message: ChatMessage
-    finish_reason: Optional[str] = "stop"
+    finish_reason: str | None = "stop"
 
 
 class ChatCompletionResponse(BaseModel):
@@ -133,7 +136,7 @@ class ChatCompletionResponse(BaseModel):
 class CompletionChoice(BaseModel):
     index: int = 0
     text: str
-    finish_reason: Optional[str] = "stop"
+    finish_reason: str | None = "stop"
 
 
 class CompletionResponse(BaseModel):
@@ -149,6 +152,7 @@ class CompletionResponse(BaseModel):
 # Engine wrapper
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class EngineConfig:
     model_path: str = ""
@@ -157,27 +161,50 @@ class EngineConfig:
     gpu_memory_utilization: float = 0.90
     dtype: str = "auto"
     trust_remote_code: bool = False
-    quantization: Optional[str] = None
+    quantization: str | None = None
     enforce_eager: bool = False
-    swap_space: int = 4
+    # 2026-10-20 — swap_space removed: vLLM V1 dropped the V0 CPU-swap
+    # preemption knob (validated against EngineArgs v0.32.0 — no field).
+    # V1 preempts by recomputation; offload needs are expressed via
+    # cpu_offload_gb / kv_offloading_* when required.
     max_num_seqs: int = 256
     seed: int = 0
+    # 2026-10-19 — V1-era options. FP8 KV cache halves KV memory on
+    # capable GPUs (Ada/Hopper+); "auto" keeps the checkpoint default.
+    kv_cache_dtype: str = "auto"
+    # Prefix caching is on by default in vLLM V1; explicit so the config
+    # is self-documenting for the orchestration gateway's system prompts
+    # (large shared prefixes → big hit-rate wins).
+    enable_prefix_caching: bool = True
 
 
 class VLLMEngine:
-    """Wraps vLLM's AsyncLLMEngine for serving."""
+    """Wraps vLLM's AsyncLLM (V1 engine) for serving.
+
+    2026-10-19 — migrated off the removed V0 API
+    (``vllm.engine.async_llm_engine.AsyncLLMEngine`` + ``AsyncEngineArgs``,
+    dead since vLLM ~0.9) to the V1 engine ``AsyncLLM``. Import paths are
+    the canonical submodules: vLLM 0.32 does NOT export ``AsyncLLM`` from
+    the package top level (validated against vllm/__init__.py v0.32.0 —
+    ``MODULE_ATTRS`` has ``AsyncLLMEngine`` as a V1 alias, but no
+    ``AsyncLLM``), so the direct import raises ImportError.
+    ``generate()`` semantics are unchanged: async iterator of RequestOutput.
+    """
 
     def __init__(self, config: EngineConfig) -> None:
         self.config = config
-        self.engine = None
+        # vllm is imported lazily in start() (heavy import, not installed in
+        # the lint env), so the engine handle can only be Any.
+        self.engine: Any = None
         self.model_name: str = config.model_path.rstrip("/").split("/")[-1]
         self._ready = False
 
     async def start(self) -> None:
-        from vllm.engine.arg_utils import AsyncEngineArgs
-        from vllm.engine.async_llm_engine import AsyncLLMEngine
+        # Canonical V1 imports — see class docstring (no top-level AsyncLLM).
+        from vllm.engine.arg_utils import EngineArgs
+        from vllm.v1.engine.async_llm import AsyncLLM
 
-        engine_args = AsyncEngineArgs(
+        engine_args = EngineArgs(
             model=self.config.model_path,
             tensor_parallel_size=self.config.tensor_parallel_size,
             max_model_len=self.config.max_model_len,
@@ -186,11 +213,12 @@ class VLLMEngine:
             trust_remote_code=self.config.trust_remote_code,
             quantization=self.config.quantization,
             enforce_eager=self.config.enforce_eager,
-            swap_space=self.config.swap_space,
             max_num_seqs=self.config.max_num_seqs,
             seed=self.config.seed,
+            kv_cache_dtype=self.config.kv_cache_dtype,
+            enable_prefix_caching=self.config.enable_prefix_caching,
         )
-        self.engine = AsyncLLMEngine.from_engine_args(engine_args)
+        self.engine = AsyncLLM.from_engine_args(engine_args)
         self._ready = True
         MODEL_LOADED.set(1)
         logger.info("Engine loaded model %s", self.config.model_path)
@@ -210,7 +238,7 @@ class VLLMEngine:
         stream: bool = False,
         frequency_penalty: float = 0.0,
         presence_penalty: float = 0.0,
-    ) -> AsyncGenerator[dict, None]:
+    ) -> AsyncGenerator[dict[str, Any], None]:
         from vllm import SamplingParams
 
         sampling_params = SamplingParams(
@@ -222,12 +250,16 @@ class VLLMEngine:
             presence_penalty=presence_penalty,
         )
 
+        if self.engine is None:
+            # 2026-10-18 — real bug fix: calling generate() before start()
+            # used to crash with AttributeError on None; fail loudly instead.
+            raise RuntimeError("engine not started — call start() first")
         results_generator = self.engine.generate(prompt, sampling_params, request_id)
 
         previous_text = ""
         async for request_output in results_generator:
             output = request_output.outputs[0]
-            delta = output.text[len(previous_text):]
+            delta = output.text[len(previous_text) :]
             previous_text = output.text
             finished = output.finish_reason is not None
 
@@ -244,7 +276,13 @@ class VLLMEngine:
         self._ready = False
         MODEL_LOADED.set(0)
         if self.engine is not None:
-            # vLLM engines do not always expose an explicit shutdown
+            # V1 AsyncLLM exposes an async shutdown() (stops the background
+            # engine core process); guard for builds where it is absent.
+            shutdown = getattr(self.engine, "shutdown", None)
+            if shutdown is not None:
+                result = shutdown()
+                if asyncio.iscoroutine(result):
+                    await result
             del self.engine
             self.engine = None
         logger.info("Engine shut down")
@@ -274,11 +312,13 @@ def _build_chat_prompt(messages: list[ChatMessage]) -> str:
 
 def create_app(config: EngineConfig) -> FastAPI:
     @asynccontextmanager
-    async def lifespan(app: FastAPI):
+    async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         global _engine
         _engine = VLLMEngine(config)
         await _engine.start()
-        logger.info("Serving %s on tensor_parallel=%d", config.model_path, config.tensor_parallel_size)
+        logger.info(
+            "Serving %s on tensor_parallel=%d", config.model_path, config.tensor_parallel_size
+        )
         yield
         logger.info("Shutting down engine ...")
         await _engine.shutdown()
@@ -294,7 +334,9 @@ def create_app(config: EngineConfig) -> FastAPI:
 
     # --- request logging middleware ---
     @app.middleware("http")
-    async def log_requests(request: Request, call_next):
+    async def log_requests(
+        request: Request, call_next: Callable[[Request], Awaitable[Response]]
+    ) -> Response:
         start = time.perf_counter()
         response = await call_next(request)
         elapsed = time.perf_counter() - start
@@ -309,18 +351,18 @@ def create_app(config: EngineConfig) -> FastAPI:
 
     # --- health / readiness ---
     @app.get("/health")
-    async def health():
+    async def health() -> dict[str, str]:
         return {"status": "ok"}
 
     @app.get("/ready")
-    async def ready():
+    async def ready() -> dict[str, str]:
         if _engine is None or not _engine.ready:
             raise HTTPException(503, detail="Model not ready")
         return {"status": "ready"}
 
     # --- graceful shutdown via HTTP ---
     @app.post("/shutdown")
-    async def shutdown():
+    async def shutdown() -> dict[str, str]:
         """Graceful shutdown endpoint used by deploy/rollback scripts."""
         logger.info("Received /shutdown request — initiating graceful shutdown")
         # Signal uvicorn to stop after responding
@@ -329,7 +371,7 @@ def create_app(config: EngineConfig) -> FastAPI:
 
     # --- Prometheus metrics ---
     @app.get("/metrics")
-    async def metrics():
+    async def metrics() -> Response:
         return Response(
             content=generate_latest(PROM_REGISTRY),
             media_type=CONTENT_TYPE_LATEST,
@@ -337,8 +379,8 @@ def create_app(config: EngineConfig) -> FastAPI:
 
     # --- list models ---
     @app.get("/v1/models")
-    async def list_models():
-        models = []
+    async def list_models() -> dict[str, Any]:
+        models: list[dict[str, Any]] = []
         if _engine is not None:
             models.append(
                 {
@@ -352,7 +394,9 @@ def create_app(config: EngineConfig) -> FastAPI:
 
     # --- chat completions ---
     @app.post("/v1/chat/completions")
-    async def chat_completions(req: ChatCompletionRequest):
+    async def chat_completions(
+        req: ChatCompletionRequest,
+    ) -> ChatCompletionResponse | StreamingResponse:
         if _engine is None or not _engine.ready:
             raise HTTPException(503, detail="Engine not ready")
 
@@ -369,7 +413,7 @@ def create_app(config: EngineConfig) -> FastAPI:
                     media_type="text/event-stream",
                 )
             # non-streaming
-            final: dict = {}
+            final: dict[str, Any] = {}
             async for chunk in _engine.generate(
                 prompt=prompt,
                 request_id=request_id,
@@ -407,7 +451,7 @@ def create_app(config: EngineConfig) -> FastAPI:
         except Exception as exc:
             REQUEST_COUNT.labels(endpoint="chat_completions", status="error").inc()
             logger.exception("chat_completions error")
-            raise HTTPException(500, detail=str(exc))
+            raise HTTPException(500, detail=str(exc)) from exc
         finally:
             ACTIVE_REQUESTS.dec()
 
@@ -415,7 +459,12 @@ def create_app(config: EngineConfig) -> FastAPI:
         request_id: str, prompt: str, req: ChatCompletionRequest
     ) -> AsyncGenerator[str, None]:
         try:
-            async for chunk in _engine.generate(
+            # 2026-10-18 — capture + narrow the module-global engine; it is
+            # Optional and could be torn down while a stream is in flight.
+            engine = _engine
+            if engine is None:
+                raise RuntimeError("engine unavailable during stream")
+            async for chunk in engine.generate(
                 prompt=prompt,
                 request_id=request_id,
                 temperature=req.temperature,
@@ -430,7 +479,7 @@ def create_app(config: EngineConfig) -> FastAPI:
                     "id": request_id,
                     "object": "chat.completion.chunk",
                     "created": int(time.time()),
-                    "model": _engine.model_name,
+                    "model": engine.model_name,
                     "choices": [
                         {
                             "index": 0,
@@ -454,7 +503,9 @@ def create_app(config: EngineConfig) -> FastAPI:
 
     # --- completions ---
     @app.post("/v1/completions")
-    async def completions(req: CompletionRequest):
+    async def completions(
+        req: CompletionRequest,
+    ) -> CompletionResponse | StreamingResponse:
         if _engine is None or not _engine.ready:
             raise HTTPException(503, detail="Engine not ready")
 
@@ -476,7 +527,7 @@ def create_app(config: EngineConfig) -> FastAPI:
             total_completion_tokens = 0
 
             for idx, prompt_text in enumerate(prompts):
-                final: dict = {}
+                final: dict[str, Any] = {}
                 async for chunk in _engine.generate(
                     prompt=prompt_text,
                     request_id=f"{request_id}-{idx}",
@@ -516,7 +567,7 @@ def create_app(config: EngineConfig) -> FastAPI:
         except Exception as exc:
             REQUEST_COUNT.labels(endpoint="completions", status="error").inc()
             logger.exception("completions error")
-            raise HTTPException(500, detail=str(exc))
+            raise HTTPException(500, detail=str(exc)) from exc
         finally:
             ACTIVE_REQUESTS.dec()
 
@@ -524,7 +575,12 @@ def create_app(config: EngineConfig) -> FastAPI:
         request_id: str, prompt: str, req: CompletionRequest
     ) -> AsyncGenerator[str, None]:
         try:
-            async for chunk in _engine.generate(
+            # 2026-10-18 — capture + narrow the module-global engine (see
+            # _stream_chat for rationale).
+            engine = _engine
+            if engine is None:
+                raise RuntimeError("engine unavailable during stream")
+            async for chunk in engine.generate(
                 prompt=prompt,
                 request_id=request_id,
                 temperature=req.temperature,
@@ -537,7 +593,7 @@ def create_app(config: EngineConfig) -> FastAPI:
                     "id": request_id,
                     "object": "text_completion",
                     "created": int(time.time()),
-                    "model": _engine.model_name,
+                    "model": engine.model_name,
                     "choices": [
                         {
                             "index": 0,
@@ -564,6 +620,7 @@ def create_app(config: EngineConfig) -> FastAPI:
 # CLI entry-point
 # ---------------------------------------------------------------------------
 
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="vLLM model serving runtime")
     parser.add_argument("--model-path", required=True, help="HF model id or local path")
@@ -571,9 +628,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--max-model-len", type=int, default=4096)
     parser.add_argument("--gpu-memory-utilization", type=float, default=0.90)
     parser.add_argument("--dtype", default="auto")
-    parser.add_argument("--quantization", default=None, choices=["awq", "gptq", "squeezellm", None])
+    # 2026-10-20 — vLLM 0.32 methods we actually produce/serve: fp8
+    # (llmcompressor → compressed-tensors), gptq (gptqmodel), awq
+    # (serving externally produced checkpoints; our producer path was
+    # purged). squeezellm is dead in vLLM since ~0.4 — removed.
+    parser.add_argument("--quantization", default=None, choices=["fp8", "gptq", "awq", None])
     parser.add_argument("--max-num-seqs", type=int, default=256)
-    parser.add_argument("--swap-space", type=int, default=4)
     parser.add_argument("--host", default="0.0.0.0")
     parser.add_argument("--port", type=int, default=8000)
     parser.add_argument("--trust-remote-code", action="store_true")
@@ -599,7 +659,6 @@ def main() -> None:
         trust_remote_code=args.trust_remote_code,
         quantization=args.quantization,
         enforce_eager=args.enforce_eager,
-        swap_space=args.swap_space,
         max_num_seqs=args.max_num_seqs,
     )
 
@@ -607,7 +666,7 @@ def main() -> None:
 
     shutdown_event = asyncio.Event()
 
-    def _handle_signal(sig, frame):
+    def _handle_signal(sig: int, frame: FrameType | None) -> None:
         logger.info("Received signal %s, shutting down ...", sig)
         shutdown_event.set()
 

@@ -128,6 +128,7 @@ exports.Prisma.OrganizationScalarFieldEnum = {
   status: 'status',
   statusReason: 'statusReason',
   settings: 'settings',
+  billingTenantId: 'billingTenantId',
   createdAt: 'createdAt',
   updatedAt: 'updatedAt'
 };
@@ -319,6 +320,9 @@ exports.Prisma.RequestLogScalarFieldEnum = {
   requestId: 'requestId',
   endpoint: 'endpoint',
   method: 'method',
+  userId: 'userId',
+  apiKeyId: 'apiKeyId',
+  ipHash: 'ipHash',
   strategyId: 'strategyId',
   strategyName: 'strategyName',
   modelsUsed: 'modelsUsed',

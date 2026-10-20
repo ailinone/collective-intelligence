@@ -30,22 +30,18 @@ Usage
         --target-length 32768 \
         --eval-only
 """
+
 from __future__ import annotations
 
 import json
 import logging
-import math
 import os
 import random
-import sys
-import time
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Any
 
 import click
 import torch
-import torch.nn as nn
-from datasets import Dataset, load_dataset, load_from_disk
 from peft import LoraConfig, PeftModel, TaskType, get_peft_model
 from transformers import (
     AutoConfig,
@@ -55,17 +51,21 @@ from transformers import (
 )
 from trl import SFTConfig, SFTTrainer
 
+# 2026-10-18 datasets ships no py.typed and the repo's datasets/ data directory
+# shadows the installed package for mypy, so the imports below resolve to Any.
+from datasets import Dataset, DatasetDict, load_dataset, load_from_disk  # type: ignore[attr-defined]
+
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 
 
 # ── RoPE scaling methods ─────────────────────────────────────
 def apply_rope_scaling(
-    config,
+    config: Any,
     original_max_position: int,
     target_max_position: int,
     method: str = "yarn",
-):
+) -> Any:
     """
     Apply RoPE scaling to a model config.
 
@@ -78,7 +78,10 @@ def apply_rope_scaling(
     scale_factor = target_max_position / original_max_position
     logger.info(
         "RoPE scaling: %s, factor=%.1fx (%d -> %d)",
-        method, scale_factor, original_max_position, target_max_position,
+        method,
+        scale_factor,
+        original_max_position,
+        target_max_position,
     )
 
     if method == "linear":
@@ -126,7 +129,7 @@ def load_long_context_dataset(
     target_length: int,
     eval_split: float = 0.05,
     seed: int = 42,
-) -> dict:
+) -> DatasetDict:
     """Load and prepare long-context training data.
 
     Concatenates shorter documents to fill the target context length.
@@ -163,7 +166,7 @@ def load_long_context_dataset(
     # Chunk into target_length sequences
     sequences = []
     for i in range(0, len(all_token_ids) - target_length, target_length):
-        chunk = all_token_ids[i: i + target_length]
+        chunk = all_token_ids[i : i + target_length]
         sequences.append({"input_ids": chunk, "text": tokenizer.decode(chunk)})
 
     logger.info("Created %d long-context sequences (length=%d)", len(sequences), target_length)
@@ -183,8 +186,8 @@ def create_needle_test(
     context_length: int,
     depth_percent: float,
     needle_value: str = "7429",
-    filler_text: Optional[str] = None,
-) -> Tuple[str, str]:
+    filler_text: str | None = None,
+) -> tuple[str, str]:
     """
     Create a needle-in-haystack test case.
 
@@ -233,17 +236,17 @@ def create_needle_test(
 def evaluate_needle_in_haystack(
     model: AutoModelForCausalLM,
     tokenizer: AutoTokenizer,
-    context_lengths: List[int],
-    depth_percents: List[float],
+    context_lengths: list[int],
+    depth_percents: list[float],
     device: str = "cuda",
     max_new_tokens: int = 64,
-) -> Dict:
+) -> dict[str, Any]:
     """
     Run needle-in-haystack evaluation across context lengths and depths.
     Returns a matrix of pass/fail results.
     """
     model.eval()
-    results = {}
+    results: dict[int, dict[float, dict[str, Any]]] = {}
 
     gen_config = GenerationConfig(
         max_new_tokens=max_new_tokens,
@@ -260,11 +263,17 @@ def evaluate_needle_in_haystack(
         for depth in depth_percents:
             needle_value = str(random.randint(1000, 9999))
             prompt, expected = create_needle_test(
-                tokenizer, ctx_len, depth, needle_value=needle_value,
+                tokenizer,
+                ctx_len,
+                depth,
+                needle_value=needle_value,
             )
 
             inputs = tokenizer(
-                prompt, return_tensors="pt", truncation=True, max_length=ctx_len,
+                prompt,
+                return_tensors="pt",
+                truncation=True,
+                max_length=ctx_len,
             ).to(device)
 
             actual_len = inputs["input_ids"].shape[1]
@@ -272,7 +281,7 @@ def evaluate_needle_in_haystack(
             try:
                 output = model.generate(**inputs, generation_config=gen_config)
                 response = tokenizer.decode(
-                    output[0][inputs["input_ids"].shape[1]:],
+                    output[0][inputs["input_ids"].shape[1] :],
                     skip_special_tokens=True,
                 )
                 found = expected in response
@@ -301,7 +310,7 @@ def evaluate_needle_in_haystack(
             if results[ctx_len][depth]["found"]:
                 correct += 1
 
-    summary = {
+    summary: dict[str, Any] = {
         "overall_accuracy": correct / max(total, 1),
         "total_tests": total,
         "correct": correct,
@@ -320,7 +329,9 @@ def evaluate_needle_in_haystack(
 @click.command()
 @click.option("--base-model", required=True, type=str, help="Path to aligned base model.")
 @click.option("--target-length", default=32768, type=int, help="Target context length.")
-@click.option("--method", default="yarn", type=click.Choice(["linear", "ntk", "yarn", "dynamic_ntk"]))
+@click.option(
+    "--method", default="yarn", type=click.Choice(["linear", "ntk", "yarn", "dynamic_ntk"])
+)
 @click.option("--dataset", default=None, type=str, help="Path to long-context dataset.")
 @click.option("--output-dir", default="./models/ailin-1b-32k", type=str, help="Output directory.")
 @click.option("--epochs", default=1, type=int, help="Training epochs.")
@@ -336,7 +347,7 @@ def main(
     base_model: str,
     target_length: int,
     method: str,
-    dataset: Optional[str],
+    dataset: str | None,
     output_dir: str,
     epochs: int,
     lr: float,
@@ -347,7 +358,7 @@ def main(
     eval_only: bool,
     wandb_project: str,
     seed: int,
-):
+) -> None:
     """Extend model context window and fine-tune on long documents."""
     torch.manual_seed(seed)
     random.seed(seed)
@@ -361,7 +372,8 @@ def main(
     if target_length <= original_max_pos:
         logger.warning(
             "Target length (%d) <= original (%d). No scaling needed.",
-            target_length, original_max_pos,
+            target_length,
+            original_max_pos,
         )
         if not eval_only:
             logger.info("Skipping RoPE scaling.")
@@ -381,7 +393,9 @@ def main(
     )
 
     tokenizer = AutoTokenizer.from_pretrained(
-        base_model, trust_remote_code=True, padding_side="right",
+        base_model,
+        trust_remote_code=True,
+        padding_side="right",
     )
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
@@ -407,7 +421,10 @@ def main(
         # Load long-context dataset
         logger.info("Loading long-context dataset...")
         data_splits = load_long_context_dataset(
-            dataset, tokenizer, target_length, seed=seed,
+            dataset,
+            tokenizer,
+            target_length,
+            seed=seed,
         )
 
         os.environ.setdefault("WANDB_PROJECT", wandb_project)
@@ -476,13 +493,18 @@ def main(
 
     # Test at various lengths and depths
     test_lengths = [
-        l for l in [1024, 2048, 4096, 8192, 16384, 32768, 65536, 131072]
-        if l <= target_length
+        length
+        for length in [1024, 2048, 4096, 8192, 16384, 32768, 65536, 131072]
+        if length <= target_length
     ]
     depth_percents = [0, 10, 25, 50, 75, 90, 100]
 
     needle_results = evaluate_needle_in_haystack(
-        model, tokenizer, test_lengths, depth_percents, device=device,
+        model,
+        tokenizer,
+        test_lengths,
+        depth_percents,
+        device=device,
     )
 
     # Print results

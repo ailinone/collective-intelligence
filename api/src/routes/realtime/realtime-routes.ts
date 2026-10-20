@@ -39,6 +39,7 @@ import { narrowAs } from '@/utils/type-guards';
 import { nanoid } from 'nanoid';
 import { createRealtimeSession } from '@/services/realtime-session-service';
 import { getAuthService } from '@/services/auth-service';
+import { AILIN_IDENTITY_DIRECTIVE } from '@/core/orchestration/prompts/identity-policy';
 
 const log = logger.child({ module: 'realtime-routes' });
 
@@ -609,6 +610,13 @@ export async function registerRealtimeRoutes(server: FastifyInstance): Promise<v
             // caller's alias back is the honest answer.
             modelName = selection.model ?? modelName;
 
+            // Native realtime transports do not pass through
+            // OrchestrationEngine, so compose the same identity directive here
+            // rather than forwarding caller instructions ungrounded.
+            const effectiveInstructions = sessionConfig.instructions
+              ? `${AILIN_IDENTITY_DIRECTIVE}\n\n${sessionConfig.instructions}`
+              : AILIN_IDENTITY_DIRECTIVE;
+
             let connectError: string | null = null;
             try {
               if (realtimeClient instanceof GoogleLiveClient) {
@@ -618,7 +626,7 @@ export async function registerRealtimeRoutes(server: FastifyInstance): Promise<v
                     'TEXT',
                     'AUDIO',
                   ]) as ('TEXT' | 'AUDIO')[],
-                  systemInstruction: sessionConfig.instructions,
+                  systemInstruction: effectiveInstructions,
                   speechConfig: sessionConfig.voice
                     ? { voiceConfig: { prebuiltVoiceConfig: { voiceName: sessionConfig.voice } } }
                     : undefined,
@@ -629,7 +637,7 @@ export async function registerRealtimeRoutes(server: FastifyInstance): Promise<v
                   modalities: (sessionConfig.modalities ?? ['text', 'audio']) as (
                     'text' | 'audio'
                   )[],
-                  instructions: sessionConfig.instructions,
+                  instructions: effectiveInstructions,
                   voice: sessionConfig.voice ?? 'alloy',
                   temperature: sessionConfig.temperature ?? 0.8,
                   tools: sessionConfig.tools,
@@ -641,7 +649,7 @@ export async function registerRealtimeRoutes(server: FastifyInstance): Promise<v
                   modalities: (sessionConfig.modalities ?? ['text', 'audio']) as (
                     'text' | 'audio'
                   )[],
-                  instructions: sessionConfig.instructions,
+                  instructions: effectiveInstructions,
                   voice: (sessionConfig.voice ?? 'alloy') as string,
                   temperature: sessionConfig.temperature ?? 1,
                 });

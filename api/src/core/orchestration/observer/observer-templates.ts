@@ -77,6 +77,25 @@ function describeModelRange(min: number, max: number, pt: boolean): string {
 }
 
 /**
+ * CI-CHAT-0004 — deterministic, zero-latency request-received ack.
+ *
+ * Replaces the old hardcoded English "Your request has been received —
+ * analyzing it now.", which claimed analysis was already in progress at a
+ * tick where nothing beyond receipt had happened (context build, triage and
+ * strategy selection all run AFTER this chunk is yielded). The narration a
+ * client sees must only describe stages that have actually started, so this
+ * line states receipt + preparation only — and mirrors pt-BR for the same
+ * reason `buildImmediateOpeningNarration` does (same bounded heuristic, same
+ * self-correcting window).
+ */
+export function buildRequestReceivedNarration(userSample?: string): string {
+  const pt = looksLikePortuguese(userSample ?? '');
+  return pt
+    ? 'Sua solicitação foi recebida; preparando a execução.'
+    : 'Your request has been received; preparing to work on it.';
+}
+
+/**
  * Build the zero-latency opening narration line for a just-resolved strategy.
  * Pure and synchronous — safe to call from a hot path with no perf concern.
  *
@@ -101,4 +120,41 @@ export function buildImmediateOpeningNarration(
   }
   const modelWord = isSingular ? 'model' : 'models';
   return `Starting the "${label}" strategy with ${range} AI ${modelWord} working on your answer.`;
+}
+
+/** Inputs for `buildModelFailedNarration`. All optional — the template
+ *  degrades gracefully when the caller doesn't know how many analysts
+ *  are still healthy. */
+export interface ModelFailureInfo {
+  /** How many participants are still healthy / continuing (N-1 of the
+   *  issue's "seguindo com N-1"). Omitted → "the others". */
+  remaining?: number;
+  /** User-text sample for the pt/en guess (same convention as
+   *  `buildImmediateOpeningNarration`). */
+  userSample?: string;
+}
+
+/**
+ * ci#752 — deterministic, zero-LLM narration line for a `model_failed`
+ * observer event. A fan-out member failing (HTTP 4xx/5xx, timeout, empty
+ * response) is exactly the moment a watching user most wants IMMEDIATE
+ * narration — and the least moment to wait 4-9s on the narrator model — so
+ * `ObserverService.emit()` routes this event type through this template
+ * instead of `generateNarration()`. Never reveals the model name (the
+ * system prompt's "no model names" rule holds here too).
+ */
+export function buildModelFailedNarration(info: ModelFailureInfo): string {
+  const pt = looksLikePortuguese(info.userSample ?? '');
+  if (pt) {
+    if (info.remaining !== undefined) {
+      const participants = info.remaining === 1 ? 'participante restante' : 'participantes restantes';
+      return `Um dos participantes não respondeu; seguindo com ${info.remaining} ${participants}.`;
+    }
+    return 'Um dos participantes não respondeu; seguindo com os demais.';
+  }
+  if (info.remaining !== undefined) {
+    const participants = info.remaining === 1 ? 'participant' : 'participants';
+    return `One of the participants didn't respond; continuing with ${info.remaining} ${participants}.`;
+  }
+  return "One of the participants didn't respond; continuing with the others.";
 }

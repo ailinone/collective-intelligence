@@ -2612,6 +2612,17 @@ export class OpenAICompatibleHubAdapter extends ProviderAdapter {
         contentValue = deltaRaw.content;
       }
 
+      // Dedicated reasoning channel (ci#750, owner decision 2026-10-04):
+      // reasoning models routed through this hub (DeepSeek-style vendors)
+      // stream their chain of thought on `delta.reasoning_content`, distinct
+      // from `delta.content`. Forward it VERBATIM on the same field — it must
+      // never be folded into `content` (that would leak the reasoning as
+      // visible answer text). Absent on non-reasoning chunks.
+      const reasoningContent =
+        typeof deltaRaw.reasoning_content === 'string' && deltaRaw.reasoning_content.length > 0
+          ? deltaRaw.reasoning_content
+          : undefined;
+
       let toolCalls: ToolCall[] | undefined;
       if (Array.isArray(deltaRaw.tool_calls)) {
         const parsed = deltaRaw.tool_calls
@@ -2690,6 +2701,7 @@ export class OpenAICompatibleHubAdapter extends ProviderAdapter {
         delta: {
           ...(role ? { role } : {}),
           ...(contentValue !== undefined ? { content: contentValue } : {}),
+          ...(reasoningContent ? { reasoning_content: reasoningContent } : {}),
           ...(toolCalls ? { tool_calls: toolCalls } : {}),
         },
         finish_reason: finishReason,

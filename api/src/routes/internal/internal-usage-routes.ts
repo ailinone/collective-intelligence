@@ -22,9 +22,11 @@
  * dedicated `usage:read:on_behalf` scope is a cleaner follow-up (needs the id
  * dev-server client allowlist + BFF to request it).
  *
- * Attribution note: usage is ORG-scoped — per-API-key attribution does not
- * exist yet (RequestLog has no apiKeyId column); adding it is a separate
- * schema + write-path change.
+ * Attribution note: usage is ORG-scoped here. request_logs now carries
+ * user_id / api_key_id / ip_address (20261001000000_request_logs_attribution)
+ * and the chat write-path populates them; surfacing per-key aggregation in
+ * THIS endpoint is a read-path follow-up (the systems dashboard already
+ * consumes per-key attribution via the /ingest/batch push).
  */
 
 import { FastifyInstance } from 'fastify';

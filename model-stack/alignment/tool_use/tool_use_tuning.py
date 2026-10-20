@@ -25,20 +25,19 @@ Usage
         --base-model ./models/ailin-1b-safety \
         --dataset ./data/tool-use/tool_calls.jsonl
 """
+
 from __future__ import annotations
 
 import json
 import logging
 import os
 import re
-import sys
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import click
 import jsonschema
 import torch
-from datasets import Dataset, load_dataset, load_from_disk
 from peft import LoraConfig, PeftModel, TaskType, get_peft_model
 from transformers import (
     AutoModelForCausalLM,
@@ -46,6 +45,10 @@ from transformers import (
     GenerationConfig,
 )
 from trl import SFTConfig, SFTTrainer
+
+# 2026-10-18 datasets ships no py.typed and the repo's datasets/ data directory
+# shadows the installed package for mypy, so the imports below resolve to Any.
+from datasets import Dataset, DatasetDict, load_dataset, load_from_disk  # type: ignore[attr-defined]
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
@@ -58,7 +61,7 @@ TOOL_RESULT_START = "<tool_result>"
 TOOL_RESULT_END = "</tool_result>"
 
 
-def format_tool_schemas(tools: List[Dict]) -> str:
+def format_tool_schemas(tools: list[dict[str, Any]]) -> str:
     """Format a list of tool schemas into a system prompt section."""
     lines = ["You have access to the following tools:\n"]
     for tool in tools:
@@ -77,7 +80,7 @@ def format_tool_schemas(tools: List[Dict]) -> str:
     return "\n".join(lines)
 
 
-def format_tool_use_example(example: Dict) -> str:
+def format_tool_use_example(example: dict[str, Any]) -> str:
     """
     Format a tool-use training example.
 
@@ -113,10 +116,13 @@ def format_tool_use_example(example: Dict) -> str:
                 # Format tool calls
                 tc_parts = []
                 for tc in msg["tool_calls"]:
-                    call_json = json.dumps({
-                        "name": tc.get("name", ""),
-                        "arguments": tc.get("arguments", {}),
-                    }, indent=2)
+                    call_json = json.dumps(
+                        {
+                            "name": tc.get("name", ""),
+                            "arguments": tc.get("arguments", {}),
+                        },
+                        indent=2,
+                    )
                     tc_parts.append(f"{TOOL_CALL_START}\n{call_json}\n{TOOL_CALL_END}")
                 parts.append(f"<|assistant|>\n{''.join(tc_parts)}\n")
             elif msg.get("content"):
@@ -125,7 +131,8 @@ def format_tool_use_example(example: Dict) -> str:
         elif role == "tool":
             tool_name = msg.get("name", "")
             content = msg.get("content", "")
-            parts.append(f"{TOOL_RESULT_START}\n{json.dumps({'name': tool_name, 'result': content})}\n{TOOL_RESULT_END}\n")
+            result_json = json.dumps({"name": tool_name, "result": content})
+            parts.append(f"{TOOL_RESULT_START}\n{result_json}\n{TOOL_RESULT_END}\n")
 
     return "".join(parts)
 
@@ -135,7 +142,7 @@ def load_tool_use_dataset(
     dataset_path: str,
     eval_split: float = 0.05,
     seed: int = 42,
-) -> dict:
+) -> DatasetDict:
     """Load and format tool-use dataset."""
     path = Path(dataset_path)
 
@@ -169,7 +176,7 @@ def load_tool_use_dataset(
 
 
 # ── Tool call evaluation ────────────────────────────────────
-def extract_tool_calls(text: str) -> List[Dict]:
+def extract_tool_calls(text: str) -> list[dict[str, Any]]:
     """Extract tool calls from model output."""
     pattern = re.compile(
         rf"{re.escape(TOOL_CALL_START)}\s*(.*?)\s*{re.escape(TOOL_CALL_END)}",
@@ -185,7 +192,10 @@ def extract_tool_calls(text: str) -> List[Dict]:
     return calls
 
 
-def validate_tool_call(call: Dict, available_tools: List[Dict]) -> Dict[str, bool]:
+def validate_tool_call(
+    call: dict[str, Any],
+    available_tools: list[dict[str, Any]],
+) -> dict[str, bool]:
     """Validate a tool call against available tool schemas."""
     results = {
         "valid_json": True,
@@ -236,7 +246,7 @@ def evaluate_tool_use(
     max_examples: int = 100,
     max_new_tokens: int = 512,
     device: str = "cuda",
-) -> Dict[str, float]:
+) -> dict[str, float]:
     """Evaluate tool-call accuracy on held-out examples."""
     model.eval()
 
@@ -280,9 +290,13 @@ def evaluate_tool_use(
             prompt_text += f"<|{msg['role']}|>\n{msg['content']}\n"
         prompt_text += "<|assistant|>\n"
 
-        inputs = tokenizer(prompt_text, return_tensors="pt", truncation=True, max_length=3584).to(device)
+        inputs = tokenizer(prompt_text, return_tensors="pt", truncation=True, max_length=3584).to(
+            device
+        )
         output = model.generate(**inputs, generation_config=gen_config)
-        response = tokenizer.decode(output[0][inputs["input_ids"].shape[1]:], skip_special_tokens=True)
+        response = tokenizer.decode(
+            output[0][inputs["input_ids"].shape[1] :], skip_special_tokens=True
+        )
 
         # Extract and validate
         predicted_calls = extract_tool_calls(response)
@@ -298,10 +312,15 @@ def evaluate_tool_use(
                 name_correct += 1
             if validation["schema_valid"]:
                 schema_correct += 1
-            if validation["valid_json"] and validation["name_exists"] and validation["schema_valid"]:
+            if (
+                validation["valid_json"]
+                and validation["name_exists"]
+                and validation["schema_valid"]
                 # Also check if the name matches expected
-                if expected_calls and call.get("name") == expected_calls[0].get("name"):
-                    full_correct += 1
+                and expected_calls
+                and call.get("name") == expected_calls[0].get("name")
+            ):
+                full_correct += 1
 
     return {
         "total_examples": total,
@@ -316,7 +335,9 @@ def evaluate_tool_use(
 @click.command()
 @click.option("--base-model", required=True, type=str, help="Path to aligned base model.")
 @click.option("--dataset", required=True, type=str, help="Path to tool-use dataset.")
-@click.option("--output-dir", default="./models/ailin-1b-tool-use", type=str, help="Output directory.")
+@click.option(
+    "--output-dir", default="./models/ailin-1b-tool-use", type=str, help="Output directory."
+)
 @click.option("--epochs", default=3, type=int, help="Number of training epochs.")
 @click.option("--lr", default=2e-5, type=float, help="Learning rate.")
 @click.option("--batch-size", default=4, type=int, help="Per-device batch size.")
@@ -344,8 +365,8 @@ def main(
     eval_only: bool,
     wandb_project: str,
     seed: int,
-    resume_from: Optional[str],
-):
+    resume_from: str | None,
+) -> None:
     """Train model on tool-use / function-calling data."""
     torch.manual_seed(seed)
 
@@ -359,7 +380,9 @@ def main(
     )
 
     tokenizer = AutoTokenizer.from_pretrained(
-        base_model, trust_remote_code=True, padding_side="right",
+        base_model,
+        trust_remote_code=True,
+        padding_side="right",
     )
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
@@ -379,7 +402,15 @@ def main(
             r=lora_r,
             lora_alpha=lora_alpha,
             lora_dropout=0.05,
-            target_modules=["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"],
+            target_modules=[
+                "q_proj",
+                "k_proj",
+                "v_proj",
+                "o_proj",
+                "gate_proj",
+                "up_proj",
+                "down_proj",
+            ],
             bias="none",
             task_type=TaskType.CAUSAL_LM,
         )

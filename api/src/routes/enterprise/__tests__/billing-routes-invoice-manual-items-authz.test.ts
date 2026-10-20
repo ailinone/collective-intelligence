@@ -83,6 +83,7 @@ vi.mock('@/services/billing-usage-aggregation', () => ({
 }));
 
 import { registerEnterpriseBillingRoutes } from '@/routes/enterprise/billing-routes';
+import { InvoicePeriodOverlapError } from '@/utils/custom-errors';
 
 describe('POST /v1/enterprise/billing/invoices — manual line-item authorization', () => {
   let app: FastifyInstance;
@@ -290,6 +291,61 @@ describe('POST /v1/enterprise/billing/invoices — manual line-item authorizatio
       new Date(basePayload.periodEnd)
     );
     expect(createInvoiceMock).not.toHaveBeenCalled();
+  });
+
+  /**
+   * DB-constraint follow-up to the #654 overlap check above: findOverlappingInvoice
+   * is a SELECT run before createInvoice()'s INSERT, with no lock and no DB
+   * constraint tying the two together, so two concurrent requests for the
+   * same organization + an overlapping period (this route racing itself, or
+   * racing the daily usage-reconciliation job) can both pass the SELECT
+   * before either INSERT commits. A GiST exclusion constraint on `invoices`
+   * (no_overlapping_invoice_period, see
+   * prisma/migrations/20260927000000_invoice_period_no_overlap_exclusion) now
+   * makes the DB reject the second concurrent INSERT; createInvoice()
+   * (billing-service.ts) turns that DB error into InvoicePeriodOverlapError.
+   * This proves the route surfaces it as the same 409 the pre-check above
+   * already returns, rather than an unhandled 500 — i.e. of two racing
+   * requests, exactly one invoice is created and the loser gets a clean 409.
+   */
+  it('maps a DB-level invoice_period_overlap conflict (lost race past the pre-check) to 409, not 500', async () => {
+    // The pre-check passes (no known overlap yet) — the race is with a
+    // concurrent insert that commits between the SELECT and this INSERT.
+    findOverlappingInvoiceMock.mockResolvedValue(null);
+    aggregateUsageCostsMock.mockResolvedValue({
+      metrics: { totalCost: 42, costByModel: { 'gpt-4': 42 }, tokenUsage: 1000 },
+      events: [],
+    });
+    createInvoiceMock.mockRejectedValueOnce(new InvoicePeriodOverlapError());
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/v1/enterprise/billing/invoices',
+      payload: { ...basePayload },
+    });
+
+    expect(res.statusCode).toBe(409);
+    expect(JSON.parse(res.payload)).toMatchObject({ error: { code: 'invoice_period_overlap' } });
+    // Exactly one attempt — no retry-as-a-second-invoice, no silent swallow.
+    expect(createInvoiceMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('lets an unrelated createInvoice failure fall through as a non-409 error (no over-broad catch)', async () => {
+    findOverlappingInvoiceMock.mockResolvedValue(null);
+    aggregateUsageCostsMock.mockResolvedValue({
+      metrics: { totalCost: 42, costByModel: { 'gpt-4': 42 }, tokenUsage: 1000 },
+      events: [],
+    });
+    createInvoiceMock.mockRejectedValueOnce(new Error('stripe outage, unrelated to period overlap'));
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/v1/enterprise/billing/invoices',
+      payload: { ...basePayload },
+    });
+
+    expect(res.statusCode).not.toBe(409);
+    expect(JSON.parse(res.payload)).not.toMatchObject({ error: { code: 'invoice_period_overlap' } });
   });
 
   it('POST /invoices/:id/pay only allows a manual (non-Stripe) mark for platform admins', async () => {

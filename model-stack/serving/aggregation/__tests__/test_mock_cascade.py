@@ -37,14 +37,14 @@ from serving.aggregation.tiered_voter import Tier
 
 
 class TestMockCascadeBehavior:
-    def test_empty_context_yields_defaults(self):
+    def test_empty_context_yields_defaults(self) -> None:
         behavior = MockCascadeBehavior.from_context({})
         assert behavior.dissent_at_tier is None
         assert behavior.fail_tier is None
         assert behavior.disagree_tier is None
         assert behavior.confidence_overrides == {}
 
-    def test_full_payload_parses(self):
+    def test_full_payload_parses(self) -> None:
         behavior = MockCascadeBehavior.from_context(
             {
                 "mockCascade": {
@@ -60,14 +60,14 @@ class TestMockCascadeBehavior:
         assert behavior.disagree_tier == 5
         assert behavior.confidence_overrides == {1: 0.95, 3: 0.50}
 
-    def test_malformed_payload_falls_back_to_defaults(self):
+    def test_malformed_payload_falls_back_to_defaults(self) -> None:
         behavior = MockCascadeBehavior.from_context(
             {"mockCascade": {"dissentAtTier": "not-a-number"}}
         )
         # Conversion error → defaults preserved (but raises ValueError, then None)
         assert behavior.dissent_at_tier is None or isinstance(behavior.dissent_at_tier, int)
 
-    def test_non_dict_context_payload_ignored(self):
+    def test_non_dict_context_payload_ignored(self) -> None:
         behavior = MockCascadeBehavior.from_context({"mockCascade": "not-a-dict"})
         assert behavior.dissent_at_tier is None
 
@@ -79,7 +79,7 @@ class TestMockCascadeBehavior:
 
 class TestMockTierExecutor:
     @pytest.mark.asyncio
-    async def test_default_executor_returns_canonical_role_for_all_models(self):
+    async def test_default_executor_returns_canonical_role_for_all_models(self) -> None:
         executor = MockTierExecutor(Tier.ENCODER, MockCascadeBehavior())
         result = await executor(
             {
@@ -94,7 +94,7 @@ class TestMockTierExecutor:
         assert result.failed_models == ()
 
     @pytest.mark.asyncio
-    async def test_dissent_at_tier_splits_votes(self):
+    async def test_dissent_at_tier_splits_votes(self) -> None:
         behavior = MockCascadeBehavior(dissent_at_tier=int(Tier.ENCODER))
         executor = MockTierExecutor(Tier.ENCODER, behavior)
 
@@ -111,7 +111,7 @@ class TestMockTierExecutor:
         assert roles.count("dissent-mock") == 2
 
     @pytest.mark.asyncio
-    async def test_fail_tier_raises(self):
+    async def test_fail_tier_raises(self) -> None:
         behavior = MockCascadeBehavior(fail_tier=int(Tier.DENSE_TINY))
         executor = MockTierExecutor(Tier.DENSE_TINY, behavior)
 
@@ -124,7 +124,7 @@ class TestMockTierExecutor:
             )
 
     @pytest.mark.asyncio
-    async def test_disagree_tier_yields_all_disagree_role(self):
+    async def test_disagree_tier_yields_all_disagree_role(self) -> None:
         behavior = MockCascadeBehavior(disagree_tier=int(Tier.MOE_LIGHT))
         executor = MockTierExecutor(Tier.MOE_LIGHT, behavior)
 
@@ -138,7 +138,7 @@ class TestMockTierExecutor:
         assert all(v.role == "disagree-mock" for v in result.votes)
 
     @pytest.mark.asyncio
-    async def test_unknown_strategy_yields_fallback_role(self):
+    async def test_unknown_strategy_yields_fallback_role(self) -> None:
         executor = MockTierExecutor(Tier.ENCODER, MockCascadeBehavior())
         result = await executor(
             {
@@ -150,7 +150,7 @@ class TestMockTierExecutor:
         assert all(v.role == "fallback-default" for v in result.votes)
 
     @pytest.mark.asyncio
-    async def test_confidence_override_propagates_to_all_votes(self):
+    async def test_confidence_override_propagates_to_all_votes(self) -> None:
         behavior = MockCascadeBehavior(confidence_overrides={int(Tier.ENCODER): 0.42})
         executor = MockTierExecutor(Tier.ENCODER, behavior)
 
@@ -171,7 +171,7 @@ class TestMockTierExecutor:
 
 class TestCascadeIntegration:
     @pytest.mark.asyncio
-    async def test_default_cascade_short_circuits_when_threshold_met(self):
+    async def test_default_cascade_short_circuits_when_threshold_met(self) -> None:
         # Default ramp: T1=0.70 (below 0.85 threshold), T2=0.82 (above 0.80
         # threshold). Cumulative confidence after T2 should cross T2 threshold.
         decision = await mock_cascade_decide(
@@ -182,6 +182,7 @@ class TestCascadeIntegration:
 
         # The cascade should NOT activate all 6 tiers — it should short-
         # circuit somewhere before MOE_HEAVY.
+        assert decision.final_tier is not None
         assert int(decision.final_tier) <= int(Tier.DENSE_ANCHOR)
         assert decision.role == "moderator"
         assert decision.scheduler == "mock-cascade-24-tiered"
@@ -189,7 +190,7 @@ class TestCascadeIntegration:
         assert decision.short_circuited is True
 
     @pytest.mark.asyncio
-    async def test_dissent_at_every_tier_runs_full_cascade(self):
+    async def test_dissent_at_every_tier_runs_full_cascade(self) -> None:
         # NOTE: weighted_bayesian_majority's `confidence` is winner-share
         # (winner_score / total_weight), NOT the average per-vote
         # confidence. So unanimous votes always yield confidence=1.0
@@ -203,12 +204,13 @@ class TestCascadeIntegration:
             {"mockCascade": {"dissentTiers": [1, 2, 3, 4, 5, 6]}},
         )
 
+        assert decision.final_tier is not None
         assert int(decision.final_tier) == int(Tier.MOE_HEAVY)
         assert decision.short_circuited is False
         assert decision.tiers_activated == tuple(t for t in Tier)
 
     @pytest.mark.asyncio
-    async def test_tier_failure_does_not_break_cascade(self):
+    async def test_tier_failure_does_not_break_cascade(self) -> None:
         # Force T1 to fail; cascade should continue through T2 and beyond,
         # producing a valid decision from the tiers that did succeed.
         decision = await mock_cascade_decide(
@@ -225,7 +227,7 @@ class TestCascadeIntegration:
         assert decision.role == "moderator"
 
     @pytest.mark.asyncio
-    async def test_full_cascade_with_dissent_at_tier_1(self):
+    async def test_full_cascade_with_dissent_at_tier_1(self) -> None:
         # Half of T1 dissents; running confidence drops, escalation to T2.
         decision = await mock_cascade_decide(
             "debate",
@@ -239,10 +241,11 @@ class TestCascadeIntegration:
         # moderator (not dissent-mock).
         assert decision.role == "moderator"
         # At least Tier 2 should have been activated due to T1 dissent.
+        assert decision.final_tier is not None
         assert int(decision.final_tier) >= int(Tier.DENSE_TINY)
 
     @pytest.mark.asyncio
-    async def test_canonical_roles_per_strategy(self):
+    async def test_canonical_roles_per_strategy(self) -> None:
         # Sanity: every strategy/decisionType pair returns the right role
         # through the cascade.
         cases = [
@@ -264,7 +267,7 @@ class TestCascadeIntegration:
 
 
 class TestDefaults:
-    def test_default_confidence_ramp_is_monotonic(self):
+    def test_default_confidence_ramp_is_monotonic(self) -> None:
         ordered = [
             Tier.ENCODER,
             Tier.DENSE_TINY,
@@ -281,7 +284,7 @@ class TestDefaults:
         for prev, nxt in pairwise(ordered):
             assert DEFAULT_TIER_CONFIDENCE[prev] < DEFAULT_TIER_CONFIDENCE[nxt]
 
-    def test_t1_default_is_below_t1_threshold(self):
+    def test_t1_default_is_below_t1_threshold(self) -> None:
         # T1 default 0.70 should be below threshold 0.85 so cascade
         # naturally escalates instead of always short-circuiting at T1.
         from serving.aggregation.tiered_voter import EnsembleConfig

@@ -1,0 +1,35 @@
+# 2026-10-19 SOTA validated set — direct-dependency pins.
+#
+# This is the exact version set the "Integration Smoke" CI job validates the
+# code against (resolved from PyPI on 2026-10-19; floors+caps live in
+# pyproject.toml). It is NOT a transitive lock — it pins the contract surface
+# (what our code imports). Regenerate with the same PyPI query when bumping,
+# and re-run the Integration Smoke job before merging the bump.
+#
+# torch: vllm 0.32.0 pins torch==2.13.0 EXACTLY (resolver evidence: run
+# 39313132178), so 2.13.0 is the frontier, not 2.14.x. Install per-platform
+# CUDA wheel per the official index; the pin below is the validated
+# training-env version.
+torch==2.13.0
+# transformers capped by vllm 0.32's own constraint (>=5.16.1,<5.20):
+# 5.19.0 is the highest version compatible with the latest vLLM. Evidence:
+# ResolutionImpossible on run 39310116258 when we tried >=5.20.
+transformers==5.19.0
+trl==1.16.0
+vllm==0.32.0
+peft==0.21.2
+accelerate==1.15.0
+deepspeed==0.19.7
+datasets==5.1.0
+tokenizers==0.23.3
+sentence-transformers==6.1.0
+lm-eval==0.4.13
+wandb==0.31.0
+optimum==2.3.0
+
+# gpu-extra producer backends (quantization) — validated 2026-10-19:
+#   flash-attn==2.8.3.post2
+#   gptqmodel==7.6.0
+#   llmcompressor==0.14.0
+#   bitsandbytes==0.50.2
+#   compressed-tensors==0.19.0

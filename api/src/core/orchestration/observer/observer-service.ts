@@ -56,6 +56,7 @@ import type { ObserverEvent, ObserverNarration, ChatRequest, ChatResponse } from
 import type { ObserverConfig, ObserverFeed } from './observer-types';
 import type { ProviderAdapter } from '@/providers/base/provider-adapter';
 import { OBSERVER_PROMPTS } from './observer-prompts';
+import { buildModelFailedNarration } from './observer-templates';
 
 const log = logger.child({ component: 'observer-service' });
 
@@ -387,6 +388,25 @@ export class ObserverService implements ObserverFeed {
   emit(event: ObserverEvent): void {
     if (!this.config.enabled) return;
 
+    // ci#752: a fan-out member failing is narrated from a DETERMINISTIC
+    // template — synchronous, zero LLM/network latency. A failure is exactly
+    // the moment the viewer most wants immediate narration and the worst
+    // moment to wait out the narrator's 4-9s floor; there is also no extra
+    // insight a reasoning model could add to "one participant dropped out".
+    // Uses `this.language` (the user-text sample the engine injected) for the
+    // pt/en guess, same convention as the opening line.
+    if (event.type === 'model_failed') {
+      const remaining =
+        event.metadata && typeof event.metadata.remaining === 'number'
+          ? event.metadata.remaining
+          : undefined;
+      this.emitImmediate(
+        event,
+        buildModelFailedNarration({ remaining, userSample: this.language })
+      );
+      return;
+    }
+
     const promise = (async () => {
       // Wait for backend resolution on first emit
       await this.ensureInitialized();
@@ -501,19 +521,21 @@ export class ObserverService implements ObserverFeed {
       // (interleaveNarration()/drainWhile()) pick these up on their next tick
       // (400ms/500ms) and deliver them to the client as they arrive, instead
       // of the whole narration landing as one chunk only once `content` below
-      // is fully assembled. NOTE: the <reasoning>/<think> tag strip below runs
-      // on the FULLY ASSEMBLED text, so a thinking-model's tag content can
-      // appear transiently in the raw fragment stream before it is known to
-      // strip it — an accepted tradeoff of true token streaming (the same
-      // trade every token-streaming LLM API makes).
+      // is fully assembled. Fragments pass through a streaming tag filter
+      // (CI-CHAT-0005): <reasoning>/<think> bodies and partial-tag prefixes are
+      // held/suppressed so tag content never flashes in the fragment stream
+      // ahead of the assembled-text strip below.
       const narrationId = `${this.strategyName}-${event.type}-${start}-${++this.narrationSeq}`;
+      const tagFilter = createThinkingTagFilter();
       let streamedAnyDelta = false;
       const onDelta = (delta: string): void => {
         if (!delta) return;
+        const safe = tagFilter.feed(delta);
+        if (!safe) return;
         streamedAnyDelta = true;
         this.narrationQueue.push({
           event,
-          narration: delta,
+          narration: safe,
           durationMs: Date.now() - start,
           partial: true,
           narrationId,
@@ -813,12 +835,123 @@ export function createNoOpObserverFeed(): ObserverFeed {
 }
 
 /**
+ * CI-CHAT-0005 — client-facing projection of a narration: the narrator's own
+ * reasoning stays internal. Both wire surfaces (off-channel SSE chunk and the
+ * non-streaming `metadata.observer_narrations` array) must go through this
+ * mapper so a future field can't leak on only one of them.
+ */
+export function toPublicNarration(narration: ObserverNarration): {
+  event: string;
+  narration: string;
+  duration_ms: number;
+  partial?: boolean;
+  narration_id?: string;
+} {
+  return {
+    event: narration.event.type,
+    narration: narration.narration,
+    duration_ms: narration.durationMs,
+    ...(narration.partial ? { partial: true as const } : {}),
+    ...(narration.narrationId ? { narration_id: narration.narrationId } : {}),
+  };
+}
+
+/**
+ * CI-CHAT-0005 — streaming guard for the narrator's token-level fragments.
+ *
+ * `<reasoning>`/`<think>` blocks are stripped from the FULLY ASSEMBLED text
+ * after the backend call, but raw deltas are pushed onto the client queue as
+ * they arrive — so tag content could appear transiently in the fragment
+ * stream before the strip ran. This stateful filter closes that window:
+ * tag bodies are suppressed as they stream, and a trailing partial tag
+ * prefix (e.g. `<thi`) is held back until it resolves either way.
+ */
+export function createThinkingTagFilter(): { feed: (delta: string) => string; flush: () => string } {
+  const OPEN_TAGS = ['<reasoning>', '<think>'] as const;
+  const CLOSE_TAGS = ['</reasoning>', '</think>'] as const;
+  let buffer = '';
+  let inTag = false;
+
+  // Longest suffix of `buffer` that is a proper prefix of any boundary tag —
+  // ambiguous tail that must be held until the next delta resolves it.
+  function partialTagSuffix(): number {
+    const lower = buffer.toLowerCase();
+    const candidates = [...OPEN_TAGS, ...CLOSE_TAGS];
+    for (let keep = Math.min(lower.length, 11); keep > 0; keep--) {
+      const suffix = lower.slice(-keep);
+      if (candidates.some((t) => t.startsWith(suffix))) return keep;
+    }
+    return 0;
+  }
+
+  function feed(delta: string): string {
+    if (!delta) return '';
+    buffer += delta;
+    let out = '';
+
+    for (;;) {
+      if (inTag) {
+        const closeIdx = buffer.toLowerCase().search(/<\/reasoning>|<\/think>/);
+        if (closeIdx === -1) {
+          // Still inside the tag; hold everything (minus a partial closing-tag
+          // tail that might be split across deltas).
+          const keep = partialTagSuffix();
+          buffer = buffer.slice(buffer.length - keep);
+          return out;
+        }
+        // Drop through the closing tag and resume outside it.
+        const lower = buffer.toLowerCase();
+        const matched = lower.slice(closeIdx).startsWith('</reasoning>') ? '</reasoning>' : '</think>';
+        buffer = buffer.slice(closeIdx + matched.length);
+        inTag = false;
+        continue;
+      }
+
+      const openIdx = buffer.toLowerCase().search(/<reasoning>|<think>/);
+      if (openIdx === -1) {
+        const keep = partialTagSuffix();
+        if (keep > 0) {
+          out += buffer.slice(0, buffer.length - keep);
+          buffer = buffer.slice(buffer.length - keep);
+        } else {
+          out += buffer;
+          buffer = '';
+        }
+        return out;
+      }
+      out += buffer.slice(0, openIdx);
+      const lower = buffer.toLowerCase();
+      const openTag = lower.slice(openIdx).startsWith('<reasoning>') ? '<reasoning>' : '<think>';
+      buffer = buffer.slice(openIdx + openTag.length);
+      inTag = true;
+    }
+  }
+
+  function flush(): string {
+    if (inTag) {
+      // Unclosed tag block at stream end: the assembled-text strip would have
+      // removed this content, so the fragment stream must drop it too.
+      buffer = '';
+      inTag = false;
+      return '';
+    }
+    const rest = buffer;
+    buffer = '';
+    return rest;
+  }
+
+  return { feed, flush };
+}
+
+/**
  * Build the off-channel SSE chunk that carries a single observer narration
  * (`ailin_metadata.type='observer'`, empty `delta.content` so naive OpenAI
  * clients ignore it). Shared by BaseStrategy.observerChunk() and the engine's
  * universal narration interleaver so both emit an identical wire shape.
+ * Public projection only (CI-CHAT-0005): no narrator reasoning on the wire.
  */
 export function buildObserverChunk(narration: ObserverNarration): ChatResponse {
+  const { duration_ms, ...pub } = toPublicNarration(narration);
   return {
     id: `obs-${Date.now()}`,
     object: 'chat.completion.chunk' as const,
@@ -834,12 +967,9 @@ export function buildObserverChunk(narration: ObserverNarration): ChatResponse {
     ],
     ailin_metadata: {
       type: 'observer',
-      event: narration.event.type,
-      narration: narration.narration,
-      reasoning: narration.reasoning,
-      observer_duration_ms: narration.durationMs,
-      ...(narration.partial ? { partial: true as const } : {}),
-      ...(narration.narrationId ? { narration_id: narration.narrationId } : {}),
+      ...pub,
+      // Wire key preserved (pre-existing chunk shape) — consumers may read it.
+      observer_duration_ms: duration_ms,
     },
   } as ChatResponse;
 }

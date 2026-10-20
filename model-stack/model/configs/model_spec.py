@@ -17,7 +17,6 @@ like parameter count.
 from __future__ import annotations
 
 import logging
-import math
 from enum import Enum
 from pathlib import Path
 from typing import Any, Literal
@@ -31,6 +30,7 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # Enums
 # ---------------------------------------------------------------------------
+
 
 class PositionEmbeddingType(str, Enum):
     ROPE = "rope"
@@ -70,14 +70,27 @@ class LRScheduler(str, Enum):
 # RoPE scaling config
 # ---------------------------------------------------------------------------
 
+
 class RoPEScalingConfig(BaseModel):
-    type: Literal["linear", "dynamic", "ntk"] = "linear"
+    """RoPE context-extension recipe.
+
+    2026-10-19 — "yarn" added: the modern default for post-training context
+    extension (Llama-3.1 / Qwen3 style). "linear" and "ntk" kept for
+    compatibility with v1 configs; "dynamic" (the old HF name for what is
+    effectively position interpolation at runtime) maps to "linear" here.
+    """
+
+    type: Literal["linear", "dynamic", "ntk", "yarn"] = "linear"
     factor: float = Field(gt=1.0)
+    # Original context the checkpoint was trained at — required by YaRN to
+    # place its frequency-correction ramps; ignored by linear/ntk.
+    original_max_position_embeddings: int = Field(default=4096, gt=0)
 
 
 # ---------------------------------------------------------------------------
 # Model specification
 # ---------------------------------------------------------------------------
+
 
 class ModelSpec(BaseModel):
     """Complete specification for a decoder-only transformer model."""
@@ -111,6 +124,9 @@ class ModelSpec(BaseModel):
     attention_dropout: float = Field(default=0.0, ge=0.0, le=1.0)
     attention_bias: bool = False
     use_flash_attention: bool = True
+    # 2026-10-19 — per-head RMSNorm on q/k pre-RoPE (Gemma-2 / Qwen3 style).
+    # Off by default: v1 checkpoints predate it. ailin-*-v2 configs enable it.
+    qk_norm: bool = False
 
     # Embeddings
     tie_word_embeddings: bool = True
@@ -133,8 +149,7 @@ class ModelSpec(BaseModel):
         n_heads = info.data.get("num_attention_heads")
         if n_heads is not None and n_heads % v != 0:
             raise ValueError(
-                f"num_attention_heads ({n_heads}) must be divisible by "
-                f"num_key_value_heads ({v})"
+                f"num_attention_heads ({n_heads}) must be divisible by num_key_value_heads ({v})"
             )
         return v
 
@@ -144,8 +159,7 @@ class ModelSpec(BaseModel):
         n_heads = info.data.get("num_attention_heads")
         if n_heads is not None and v % n_heads != 0:
             raise ValueError(
-                f"hidden_size ({v}) must be divisible by "
-                f"num_attention_heads ({n_heads})"
+                f"hidden_size ({v}) must be divisible by num_attention_heads ({n_heads})"
             )
         return v
 
@@ -187,7 +201,13 @@ class ModelSpec(BaseModel):
         if self.attention_bias:
             bias_params = h + kv_dim + kv_dim + h
 
-        return q_params + k_params + v_params + o_params + bias_params
+        # QK-norm adds one head_dim-sized weight per Q head and per KV head.
+        qk_norm_params = 0
+        if self.qk_norm:
+            qk_norm_params = self.num_attention_heads * self.head_dim
+            qk_norm_params += self.num_key_value_heads * self.head_dim
+
+        return q_params + k_params + v_params + o_params + bias_params + qk_norm_params
 
     @property
     def mlp_params_per_layer(self) -> int:
@@ -211,9 +231,7 @@ class ModelSpec(BaseModel):
     def params_per_layer(self) -> int:
         """Total parameters per transformer layer."""
         return (
-            self.attention_params_per_layer
-            + self.mlp_params_per_layer
-            + self.norm_params_per_layer
+            self.attention_params_per_layer + self.mlp_params_per_layer + self.norm_params_per_layer
         )
 
     @property
@@ -224,10 +242,7 @@ class ModelSpec(BaseModel):
         final_norm = self.hidden_size  # Final RMSNorm/LayerNorm
 
         # LM head
-        if self.tie_word_embeddings:
-            lm_head = 0
-        else:
-            lm_head = self.hidden_size * self.vocab_size
+        lm_head = 0 if self.tie_word_embeddings else self.hidden_size * self.vocab_size
 
         return embedding + layers + final_norm + lm_head
 
@@ -275,6 +290,7 @@ class ModelSpec(BaseModel):
 # Training specification
 # ---------------------------------------------------------------------------
 
+
 class TrainingSpec(BaseModel):
     """Training hyperparameters."""
 
@@ -311,7 +327,7 @@ class TrainingSpec(BaseModel):
     activation_checkpointing: bool = True
 
     @model_validator(mode="after")
-    def validate_lr_range(self) -> "TrainingSpec":
+    def validate_lr_range(self) -> TrainingSpec:
         if self.min_learning_rate >= self.learning_rate:
             raise ValueError("min_learning_rate must be less than learning_rate")
         return self
@@ -327,6 +343,7 @@ class TrainingSpec(BaseModel):
 # Evaluation benchmark spec
 # ---------------------------------------------------------------------------
 
+
 class BenchmarkSpec(BaseModel):
     name: str
     shots: int = Field(ge=0, default=0)
@@ -341,6 +358,7 @@ class EvaluationSpec(BaseModel):
 # Full config
 # ---------------------------------------------------------------------------
 
+
 class FullModelConfig(BaseModel):
     """Complete model + training + evaluation config."""
 
@@ -349,13 +367,13 @@ class FullModelConfig(BaseModel):
     evaluation: EvaluationSpec | None = None
 
     @classmethod
-    def from_yaml(cls, path: Path) -> "FullModelConfig":
+    def from_yaml(cls, path: Path) -> FullModelConfig:
         """Load a complete model config from a YAML file."""
         path = Path(path)
         if not path.exists():
             raise FileNotFoundError(f"Config file not found: {path}")
 
-        with open(path, "r", encoding="utf-8") as f:
+        with open(path, encoding="utf-8") as f:
             raw = yaml.safe_load(f)
 
         return cls(**raw)
@@ -390,6 +408,9 @@ class FullModelConfig(BaseModel):
             f"  GQA:           {m.is_gqa}",
             f"  Gated MLP:     {m.use_gated_mlp}",
             f"  Flash Attn:    {m.use_flash_attention}",
+            f"  QK-norm:       {m.qk_norm}",
+            f"  RoPE theta:    {m.rope_theta}",
+            f"  RoPE scaling:  {m.rope_scaling.type if m.rope_scaling else None}",
             f"  Dtype:         {m.dtype}",
         ]
 
@@ -399,16 +420,18 @@ class FullModelConfig(BaseModel):
 
         if self.training:
             t = self.training
-            lines.extend([
-                f"\nTraining:",
-                f"  LR:            {t.learning_rate}",
-                f"  Scheduler:     {t.lr_scheduler.value}",
-                f"  Warmup:        {t.warmup_steps} steps",
-                f"  Total steps:   {t.total_steps}",
-                f"  Batch size:    {t.global_batch_size}",
-                f"  Seq length:    {t.sequence_length}",
-                f"  Total tokens:  {t.total_tokens / 1e9:.1f}B",
-            ])
+            lines.extend(
+                [
+                    "\nTraining:",
+                    f"  LR:            {t.learning_rate}",
+                    f"  Scheduler:     {t.lr_scheduler.value}",
+                    f"  Warmup:        {t.warmup_steps} steps",
+                    f"  Total steps:   {t.total_steps}",
+                    f"  Batch size:    {t.global_batch_size}",
+                    f"  Seq length:    {t.sequence_length}",
+                    f"  Total tokens:  {t.total_tokens / 1e9:.1f}B",
+                ]
+            )
 
         return "\n".join(lines)
 
@@ -431,4 +454,5 @@ if __name__ == "__main__":
     print("\nParameter breakdown:")
 
     import json
+
     print(json.dumps(config.model.param_breakdown(), indent=2))

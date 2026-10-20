@@ -16,6 +16,9 @@ import { config as loadEnv } from 'dotenv';
 // Note: Cannot import logger here to avoid circular dependency
 // Logger will be available after config is initialized
 import { getErrorMessage } from '@/utils/type-guards';
+// A3 startup assertion (validateConfig): import-light (pricing-tiers only —
+// no config/logger dependency chain), so no circular-import risk.
+import { assertTargetPolicyBootConfiguration } from '@/services/strategy-family';
 import type {
   AppConfig,
   AuthMode,
@@ -1150,6 +1153,12 @@ export const config: AppConfig = deepFreeze({
     judgeMaxCostUsd: getEnvFloat('MEDIA_PLANNER_JUDGE_MAX_COST_USD', 0.02),
     judgeTimeoutMs: getEnvNumber('MEDIA_PLANNER_JUDGE_TIMEOUT_MS', 15000),
     judgeRubricVersion: getEnv('MEDIA_PLANNER_JUDGE_RUBRIC_VERSION', 'media-judge-v1'),
+    // Section C (document/PDF critics, wired 2026-09-27): same `judgeEnabled`
+    // master switch and cost/timeout budget as the media judge above — one
+    // "is judging on" decision, not two — but its own rubric version string
+    // since it is a distinct text-only rubric domain (see
+    // document-judge-evaluator.types.ts's module doc).
+    documentJudgeRubricVersion: getEnv('MEDIA_PLANNER_DOCUMENT_JUDGE_RUBRIC_VERSION', 'document-judge-v1'),
   },
 
   security: {
@@ -1615,6 +1624,19 @@ export function validateConfig(): void {
         'both debit the same prepaid wallet for the same tiered requests, so enabling both ' +
         'double-charges every request. Enable exactly one.'
     );
+  }
+
+  // A3 target-policy startup assertion (ENT-001 Phase 1,
+  // a3-deny-matrix-design.md §7.2): TARGET_POLICY_MODE=enforce promises real
+  // per-target denials keyed on billing plan data. With billing credentials
+  // missing, every decision would land on the availability failure path —
+  // a silent global allow (low-risk) / global deny (high-risk) driven by a
+  // config accident. Refuse to boot instead. The pure helper lives in
+  // strategy-family.ts (import-light: only pricing-tiers, no config cycle).
+  try {
+    assertTargetPolicyBootConfiguration();
+  } catch (err) {
+    errors.push(getErrorMessage(err));
   }
 
   if (config.payments.stripe.enabled) {

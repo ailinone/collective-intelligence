@@ -19,6 +19,7 @@
 import type { FastifyInstance } from 'fastify';
 import { prisma } from '@/database/client';
 import { authenticate, requireRole } from '@/middleware/auth-middleware';
+import { requirePermission } from '@/middleware/require-permission-middleware';
 import { rejectAnonymousGuestKeyPreHandler } from '@/services/anonymous-quota-gate';
 import { rejectChatFreeTierKeyPreHandler } from '@/services/free-tier-quota-gate';
 import { getAuthService } from '@/services/auth-service';
@@ -1024,6 +1025,11 @@ export async function registerUserManagementRoutes(server: FastifyInstance): Pro
         rejectAnonymousGuestKeyPreHandler,
         rejectChatFreeTierKeyPreHandler,
         requireRole('admin', 'owner'),
+        // SEC-01: the coarse role check above only proves claims; back it with
+        // the fine-grained RBAC model (Role -> Permission -> RolePermission).
+        // The hierarchy-rank check further down in the handler still applies on
+        // top of this (an admin cannot delete an owner).
+        requirePermission('users:delete'),
       ],
       schema: {
         tags: ['Users'],

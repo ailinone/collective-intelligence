@@ -71,6 +71,10 @@ python alignment/sft/train_sft.py --config alignment/sft/sft_config.yaml
 python alignment/dpo/train_dpo.py --config alignment/dpo/dpo_config.yaml
 python alignment/safety/safety_tuning.py --config alignment/safety/safety_config.yaml
 python alignment/tool-use/tool_use_tuning.py --model ./checkpoints/safety
+# GRPO with verifiable rewards (RLVR) — the 2026 post-training standard
+python alignment/grpo/train_grpo.py --model ./checkpoints/tool-use \
+  --config alignment/grpo/grpo_config.yaml \
+  --dataset ./data/grpo_prompts.jsonl --output-dir ./checkpoints/grpo
 
 # 5. Evaluate
 python evals/runner.py --model ./checkpoints/final --suites reasoning,coding,safety,tool-use
@@ -91,7 +95,7 @@ python serving/runtime/serve.py --model ./checkpoints/final --port 8081
 | `tokenizer/` | BPE training and evaluation |
 | `model/` | Architecture (transformer), configs, scaling laws |
 | `pretraining/` | Distributed training, checkpointing, resume |
-| `alignment/` | SFT, DPO, RLHF, safety, tool-use, long-context |
+| `alignment/` | SFT, DPO, GRPO (RLVR), safety, tool-use, long-context |
 | `serving/` | vLLM runtime, quantization, rollout/rollback |
 | `registry/` | Model + checkpoint registry, champion/challenger |
 | `evals/` | Benchmark suite (reasoning, coding, safety, etc.) |
@@ -104,11 +108,17 @@ python serving/runtime/serve.py --model ./checkpoints/final --port 8081
 The model stack has its own CI workflow (`.github/workflows/model-stack-ci.yml`)
 that runs on changes to `model-stack/`:
 
-- **Lint + typecheck**: ruff + mypy
-- **Unit tests**: pytest on pipeline components
+- **Lint + typecheck**: ruff + mypy (hermetic env, no ML stack)
+- **Integration smoke**: real torch/trl/vllm on the runner — version
+  contract enforcement, vLLM V1 API gates, a real 1-step GRPO run, and the
+  2026-10 architecture checks (SDPA==math, cached-decode RoPE fix, YaRN)
+- **Unit tests**: pytest on pipeline components + architecture
 - **Eval gate**: benchmark suite must pass thresholds
 - **Promotion gate**: champion/challenger must approve
 - **Deploy gate**: blue-green with health verification
+
+The validated dependency set for each refresh cycle is recorded in
+`requirements-<YYYY-MM>.txt` (current: `requirements-2026-10.txt`).
 
 The existing `ci/api` quality gates are extended to verify that the own-model
 provider adapter can reach the serving endpoint.

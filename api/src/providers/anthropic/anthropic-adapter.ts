@@ -647,14 +647,26 @@ export class AnthropicAdapter extends ProviderAdapter {
         return params;
       };
 
-      const response = await this.withRetry(
+      // Route through the resilience stack (bulkhead → breaker → timeout) so
+      // an Anthropic outage fast-fails and is isolated per-provider — same
+      // direct-executeThroughBulkhead pattern the other hot-path adapters use
+      // (google-adapter.ts, mistral-adapter.ts, deepseek-adapter.ts, etc.).
+      // REL-02: `withRetry` also routes through `executeThroughBulkhead`, but
+      // wraps its ENTIRE multi-attempt backoff loop as a single breaker
+      // operation — under a real outage that delays each pre-open failure by
+      // up to ~4 attempts of exponential backoff before it even counts,
+      // instead of the near-instant per-attempt failure this single-shot
+      // wrap gives every other adapter. The sampling-param fallback retry
+      // inside `createMessageWithParamFallback` is unaffected — it is a
+      // single, targeted retry for a known-recoverable 400, not a blind
+      // retry-on-any-failure, and stays invisible to the breaker on success.
+      const response = await this.executeThroughBulkhead(
         async () =>
           this.createMessageWithParamFallback<Anthropic.Message>(normalizedModel, buildParams, {
             signal: options?.signal,
           }),
         'chat completion',
-        this.estimateTokenCost(request),
-        options?.signal
+        this.estimateTokenCost(request)
       );
 
       const duration = Date.now() - startTime;
@@ -747,7 +759,14 @@ export class AnthropicAdapter extends ProviderAdapter {
         return params;
       };
 
-      const stream = await this.withRetry(
+      // Only connection establishment runs through the resilience stack; the
+      // stream read loop below stays outside the bulkhead slot so streaming
+      // semantics are preserved (the slot is not held for the stream
+      // lifetime) — same pattern as google-adapter.ts's chatCompletionStream
+      // and deepseek-adapter.ts's chatCompletionStream. See the non-streaming
+      // chatCompletion() above for why this is a direct executeThroughBulkhead
+      // call rather than withRetry.
+      const stream = await this.executeThroughBulkhead(
         async () =>
           this.createMessageWithParamFallback<
             AsyncIterable<Anthropic.RawMessageStreamEvent>
@@ -773,17 +792,15 @@ export class AnthropicAdapter extends ProviderAdapter {
       const toolCallByBlockIndex = new Map<number, { toolCallIndex: number; id: string; name: string }>();
       let nextToolCallIndex = 0;
 
-      // Extended thinking (LOTE AZ follow-up): a `thinking` content block
-      // has no counterpart in the shared `ChatResponse.delta` shape, so it
-      // is surfaced as synthetic `<think>...</think>` text wrapped around
-      // its `thinking_delta` fragments — the SAME convention DeepSeek-R1
-      // and QwQ's own native inline tags already use, which the shared
-      // reasoning-extraction pipeline (see `base-strategy.ts`'s
-      // `extractReasoning` and `convertResponse` below) already parses.
-      // Track which block indices are `thinking` blocks purely to know
-      // when `content_block_stop` should close that synthetic tag.
-      const thinkingBlockIndices = new Set<number>();
-
+      // Extended thinking (ci#750, owner decision 2026-10-04): a `thinking`
+      // content block's `thinking_delta` fragments are surfaced on the
+      // DEDICATED `delta.reasoning_content` channel (the DeepSeek-style
+      // convention every ci adapter now speaks) — NEVER inside
+      // `delta.content`. Previously they were wrapped in synthetic
+      // `<think>...</think>` text tags and emitted as content, which leaked
+      // the entire chain of thought as visible answer text on every direct
+      // streaming path (chat-routes single/auto) that does not strip those
+      // tags. `text_delta` fragments continue to flow as `delta.content`.
       for await (const event of stream) {
         if (firstChunk) {
           const duration = Date.now() - startTime;
@@ -810,15 +827,12 @@ export class AnthropicAdapter extends ProviderAdapter {
                 },
               ],
             });
-          } else if (block.type === 'thinking') {
-            thinkingBlockIndices.add(event.index);
-            yield this.buildStreamChunk(modelToUse, { content: '<think>' });
           }
-          // `redacted_thinking` blocks carry only opaque encrypted `data`
-          // (no `thinking_delta` follows) — nothing to surface, and since
-          // its index is never added to `thinkingBlockIndices` the
-          // `content_block_stop` handler below correctly emits no closing
-          // tag for it either.
+          // `thinking` blocks need no start-of-stream emission: their
+          // fragments arrive as `thinking_delta` events below and are
+          // forwarded on `delta.reasoning_content`. `redacted_thinking`
+          // blocks carry only opaque encrypted `data` (no `thinking_delta`
+          // follows) — nothing to surface.
           continue;
         }
 
@@ -826,7 +840,9 @@ export class AnthropicAdapter extends ProviderAdapter {
           if (event.delta.type === 'text_delta') {
             yield this.convertStreamChunk(event, modelToUse);
           } else if (event.delta.type === 'thinking_delta') {
-            yield this.buildStreamChunk(modelToUse, { content: event.delta.thinking });
+            yield this.buildStreamChunk(modelToUse, {
+              reasoning_content: event.delta.thinking,
+            });
           } else if (event.delta.type === 'input_json_delta') {
             const tracked = toolCallByBlockIndex.get(event.index);
             if (tracked) {
@@ -851,9 +867,9 @@ export class AnthropicAdapter extends ProviderAdapter {
         }
 
         if (event.type === 'content_block_stop') {
-          if (thinkingBlockIndices.has(event.index)) {
-            yield this.buildStreamChunk(modelToUse, { content: '</think>\n\n' });
-          }
+          // Thinking blocks need no closing emission either — their fragments
+          // were already forwarded on `delta.reasoning_content` as they
+          // arrived (ci#750).
           continue;
         }
 
@@ -1331,16 +1347,17 @@ export class AnthropicAdapter extends ProviderAdapter {
 
     // Extract text content
     const textContent = response.content.find(isTextBlock);
-    // Extended thinking (LOTE AZ follow-up): surface Claude's own thinking
-    // block the same way DeepSeek-R1/QwQ's native inline `<think>` tags
-    // already flow through this pipeline (see `base-strategy.ts`'s
-    // `extractReasoning`), so existing reasoning-capture logic works
-    // unchanged regardless of which vendor produced the reasoning. A
-    // `redacted_thinking` block (opaque encrypted content) is deliberately
-    // NOT matched here — there is no real text to surface for it.
+    // Extended thinking (ci#750, owner decision 2026-10-04): surface Claude's
+    // own thinking block on the DEDICATED `message.reasoning_content` channel
+    // (the DeepSeek-style convention every ci adapter speaks) — NEVER inline
+    // in `message.content` via `<think>` tags. Previously the reasoning was
+    // prepended to content as `<think>...</think>\n\n`, which leaked the
+    // entire chain of thought as visible answer text on every non-streaming
+    // path whose consumer does not run `extractReasoning`/the outbound
+    // normalizer. A `redacted_thinking` block (opaque encrypted content) is
+    // deliberately NOT matched here — there is no real text to surface for it.
     const thinkingBlock = response.content.find(isThinkingBlock);
     const answerText = textContent?.text || '';
-    const content = thinkingBlock ? `<think>${thinkingBlock.thinking}</think>\n\n${answerText}` : answerText;
 
     // Extract tool uses with type guard
     const toolUses: Array<{
@@ -1372,7 +1389,8 @@ export class AnthropicAdapter extends ProviderAdapter {
           index: 0,
           message: {
             role: 'assistant',
-            content,
+            content: answerText,
+            ...(thinkingBlock ? { reasoning_content: thinkingBlock.thinking } : {}),
             tool_calls:
               toolUses.length > 0
                 ? toolUses.map(

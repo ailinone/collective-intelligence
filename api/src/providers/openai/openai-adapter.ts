@@ -2282,6 +2282,20 @@ export class OpenAIAdapter extends ProviderAdapter {
       created: response.created,
       model: requestedModel, // Use requested model for abstraction
       choices: response.choices.map((choice): ChatChoice => {
+        // Dedicated reasoning channel (ci#750, owner decision 2026-10-04):
+        // reasoning models behind the OpenAI wire protocol (DeepSeek-style)
+        // return their chain of thought on `message.reasoning_content`. The
+        // SDK's message type doesn't model the extension, so read it through
+        // a cast and forward it VERBATIM — never folded into `content`.
+        const messageWire = choice.message as OpenAI.Chat.Completions.ChatCompletionMessage & {
+          reasoning_content?: unknown;
+        };
+        const messageReasoningContent =
+          typeof messageWire.reasoning_content === 'string' &&
+          messageWire.reasoning_content.length > 0
+            ? messageWire.reasoning_content
+            : undefined;
+
         // Type guard for tool_calls
         let convertedToolCalls: ToolCall[] | undefined = undefined;
         if (choice.message.tool_calls && Array.isArray(choice.message.tool_calls)) {
@@ -2359,6 +2373,7 @@ export class OpenAIAdapter extends ProviderAdapter {
           message: {
             role: choice.message.role,
             content: messageContent || '',
+            ...(messageReasoningContent ? { reasoning_content: messageReasoningContent } : {}),
             ...(convertedToolCalls && convertedToolCalls.length > 0
               ? { tool_calls: convertedToolCalls }
               : {}),
@@ -2404,6 +2419,22 @@ export class OpenAIAdapter extends ProviderAdapter {
         const role = choice.delta.role === 'developer' ? 'assistant' : choice.delta.role;
         const normalizedRole: 'user' | 'assistant' | 'system' =
           role === 'user' || role === 'assistant' || role === 'system' ? role : 'assistant';
+
+        // Dedicated reasoning channel (ci#750, owner decision 2026-10-04):
+        // reasoning models behind the OpenAI wire protocol (DeepSeek-style
+        // `reasoning_content`, forwarded by many OpenAI-compatible vendors)
+        // stream their chain of thought on `delta.reasoning_content`. The
+        // SDK's `Delta` type doesn't model the extension, so read it through
+        // a cast and forward it VERBATIM on the same field — it must never be
+        // folded into `delta.content` (that would leak the reasoning as
+        // visible answer text).
+        const deltaWire = choice.delta as ChatCompletionChunk.Choice.Delta & {
+          reasoning_content?: unknown;
+        };
+        const reasoningContent =
+          typeof deltaWire.reasoning_content === 'string' && deltaWire.reasoning_content.length > 0
+            ? deltaWire.reasoning_content
+            : undefined;
 
         // Handle tool calls with type safety
         let toolCalls: ToolCall[] | undefined = undefined;
@@ -2476,6 +2507,7 @@ export class OpenAIAdapter extends ProviderAdapter {
           delta: {
             role: normalizedRole,
             content: choice.delta.content || undefined,
+            ...(reasoningContent ? { reasoning_content: reasoningContent } : {}),
             tool_calls: toolCalls,
           },
           finish_reason: finishReason,

@@ -132,7 +132,7 @@ export async function registerImagesRoutes(server: FastifyInstance): Promise<voi
             type: 'string',
             default: 'auto',
             description:
-              'Model ID or "auto" for intelligent selection. When "auto", Ailin orchestrates across 500+ models to find the best image generation model.',
+              'Model ID or "auto" for intelligent selection. When "auto", Ailin orchestrates across the full model catalog to find the best image generation model.',
           },
           prompt: {
             type: 'string',
@@ -540,7 +540,7 @@ export async function registerImagesRoutes(server: FastifyInstance): Promise<voi
             type: 'string',
             default: 'auto',
             description:
-              'Model ID or "auto" for intelligent selection. When "auto", Ailin orchestrates across 500+ models to find the best image editing model.',
+              'Model ID or "auto" for intelligent selection. When "auto", Ailin orchestrates across the full model catalog to find the best image editing model.',
           },
           n: {
             type: 'integer',
@@ -940,7 +940,7 @@ export async function registerImagesRoutes(server: FastifyInstance): Promise<voi
             type: 'string',
             default: 'auto',
             description:
-              'Model ID or "auto" for intelligent selection. When "auto", Ailin orchestrates across 500+ models to find the best image editing model.',
+              'Model ID or "auto" for intelligent selection. When "auto", Ailin orchestrates across the full model catalog to find the best image editing model.',
           },
           n: {
             type: 'integer',

@@ -144,6 +144,21 @@ export class MassiveParallelStrategy extends BaseStrategy {
     // 2. Execute with early-exit: stop when high-agreement responses arrive
     const executions = await this.executeAllModelsWithEarlyExit(request, selectedModels, context);
 
+    // ci#752: narrate fan-out failures — until now a failed model was only
+    // visible in the aggregate succeeded/failed counts of the
+    // synthesis_complete summary, never as its own observer event.
+    const successfulCount = executions.filter((e) => e.success).length;
+    for (const failed of executions.filter((e) => !e.success)) {
+      this.emitModelFailedEvent(context, {
+        modelId: failed.model.id,
+        modelName: failed.model.name,
+        provider: failed.model.provider,
+        role: 'primary',
+        errorMessage: failed.error,
+        remaining: successfulCount,
+      });
+    }
+
     // Observer: complete
     this.emitObserverEvent(context, {
       type: 'synthesis_complete',

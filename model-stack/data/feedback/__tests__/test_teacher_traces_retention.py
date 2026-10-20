@@ -15,6 +15,8 @@ import os
 from datetime import datetime, timezone
 from pathlib import Path
 
+import pytest
+
 
 def _touch_trace(staging_dir: Path, name: str, age_days: float) -> Path:
     """Create a trace file and backdate its mtime by `age_days`."""
@@ -26,7 +28,7 @@ def _touch_trace(staging_dir: Path, name: str, age_days: float) -> Path:
 
 
 class TestPruneOldTraces:
-    def test_removes_files_older_than_threshold(self, tmp_path: Path):
+    def test_removes_files_older_than_threshold(self, tmp_path: Path) -> None:
         from data.feedback.teacher_traces import prune_old_traces
 
         old1 = _touch_trace(tmp_path, "teacher-traces-2026-01-01.jsonl", age_days=60)
@@ -43,7 +45,7 @@ class TestPruneOldTraces:
         assert not old2.exists()
         assert recent.exists()
 
-    def test_keeps_files_at_exactly_threshold(self, tmp_path: Path):
+    def test_keeps_files_at_exactly_threshold(self, tmp_path: Path) -> None:
         from data.feedback.teacher_traces import prune_old_traces
 
         # Right at threshold should NOT be pruned (cutoff is strict <)
@@ -56,7 +58,7 @@ class TestPruneOldTraces:
         assert removed == []
         assert recent.exists()
 
-    def test_only_matches_default_glob(self, tmp_path: Path):
+    def test_only_matches_default_glob(self, tmp_path: Path) -> None:
         from data.feedback.teacher_traces import prune_old_traces
 
         # File matching the glob should be pruned
@@ -70,14 +72,14 @@ class TestPruneOldTraces:
         assert not target.exists()
         assert unrelated.exists()
 
-    def test_missing_dir_is_noop(self, tmp_path: Path):
+    def test_missing_dir_is_noop(self, tmp_path: Path) -> None:
         from data.feedback.teacher_traces import prune_old_traces
 
         missing = tmp_path / "does-not-exist"
         removed = prune_old_traces(missing, max_age_days=30)
         assert removed == []
 
-    def test_custom_pattern(self, tmp_path: Path):
+    def test_custom_pattern(self, tmp_path: Path) -> None:
         from data.feedback.teacher_traces import prune_old_traces
 
         target = _touch_trace(tmp_path, "custom-prefix-2026-01-01.jsonl", age_days=60)
@@ -90,37 +92,37 @@ class TestPruneOldTraces:
 
 
 class TestRetentionDaysFromEnv:
-    def test_default_when_unset(self, monkeypatch):
+    def test_default_when_unset(self, monkeypatch: pytest.MonkeyPatch) -> None:
         from data.feedback.teacher_traces import retention_days_from_env
 
         monkeypatch.delenv("COORD_TEACHER_TRACES_RETENTION_DAYS", raising=False)
         assert retention_days_from_env() == 30
 
-    def test_custom_default(self, monkeypatch):
+    def test_custom_default(self, monkeypatch: pytest.MonkeyPatch) -> None:
         from data.feedback.teacher_traces import retention_days_from_env
 
         monkeypatch.delenv("COORD_TEACHER_TRACES_RETENTION_DAYS", raising=False)
         assert retention_days_from_env(default=7) == 7
 
-    def test_reads_valid_int(self, monkeypatch):
+    def test_reads_valid_int(self, monkeypatch: pytest.MonkeyPatch) -> None:
         from data.feedback.teacher_traces import retention_days_from_env
 
         monkeypatch.setenv("COORD_TEACHER_TRACES_RETENTION_DAYS", "60")
         assert retention_days_from_env() == 60
 
-    def test_falls_back_on_negative(self, monkeypatch):
+    def test_falls_back_on_negative(self, monkeypatch: pytest.MonkeyPatch) -> None:
         from data.feedback.teacher_traces import retention_days_from_env
 
         monkeypatch.setenv("COORD_TEACHER_TRACES_RETENTION_DAYS", "-1")
         assert retention_days_from_env(default=30) == 30
 
-    def test_falls_back_on_non_int(self, monkeypatch):
+    def test_falls_back_on_non_int(self, monkeypatch: pytest.MonkeyPatch) -> None:
         from data.feedback.teacher_traces import retention_days_from_env
 
         monkeypatch.setenv("COORD_TEACHER_TRACES_RETENTION_DAYS", "thirty")
         assert retention_days_from_env(default=30) == 30
 
-    def test_falls_back_on_empty_string(self, monkeypatch):
+    def test_falls_back_on_empty_string(self, monkeypatch: pytest.MonkeyPatch) -> None:
         from data.feedback.teacher_traces import retention_days_from_env
 
         monkeypatch.setenv("COORD_TEACHER_TRACES_RETENTION_DAYS", "  ")

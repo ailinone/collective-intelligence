@@ -1091,6 +1091,34 @@ describe('BytePlusModelArkAdapter — chatCompletionStream', () => {
     }
   });
 
+  it('forwards reasoning on delta.reasoning_content, never folding it into delta.content (ci#750 pinning)', async () => {
+    const restore = stubSse([
+      'data: {"id":"1","model":"m","choices":[{"index":0,"delta":{"role":"assistant","reasoning_content":"17*23 = "}}]}\n',
+      'data: {"id":"1","model":"m","choices":[{"index":0,"delta":{"reasoning_content":"391"}}]}\n',
+      'data: {"id":"1","model":"m","choices":[{"index":0,"delta":{"content":"The answer is 391."},"finish_reason":"stop"}]}\n',
+      'data: [DONE]\n',
+    ]);
+    try {
+      let content = '';
+      let reasoning = '';
+      for await (const chunk of makeAdapter().chatCompletionStream({
+        model: 'seed-2-0-lite-260228',
+        messages: [{ role: 'user', content: 'Hi' }],
+      })) {
+        const delta = chunk.choices[0]?.delta;
+        if (typeof delta?.content === 'string') content += delta.content;
+        if (typeof (delta as unknown as Record<string, unknown>)?.reasoning_content === 'string') {
+          reasoning += (delta as unknown as Record<string, unknown>).reasoning_content;
+        }
+      }
+      expect(reasoning).toBe('17*23 = 391');
+      expect(content).toBe('The answer is 391.');
+      expect(content).not.toContain('<think>');
+    } finally {
+      restore();
+    }
+  });
+
   it('tolerates a frame split across chunk boundaries and skips unparseable frames', async () => {
     const restore = stubSse([
       'data: {"id":"1","model":"m","choices":[{"index":0,"delta":',

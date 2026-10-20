@@ -72,7 +72,7 @@ def _malformed_triage_response() -> dict[str, Any]:
 
 
 class TestTeacherProxyConfig:
-    def test_defaults_apply_when_env_unset(self, monkeypatch):
+    def test_defaults_apply_when_env_unset(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.delenv("COORD_TEACHER_CI_API_URL", raising=False)
         monkeypatch.delenv("COORD_TEACHER_AUTH_TOKEN", raising=False)
         monkeypatch.delenv("COORD_TEACHER_TIMEOUT_SECONDS", raising=False)
@@ -82,7 +82,7 @@ class TestTeacherProxyConfig:
         assert config.timeout_seconds == 5.0
         assert config.log_payloads is False
 
-    def test_env_overrides_defaults(self, monkeypatch):
+    def test_env_overrides_defaults(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("COORD_TEACHER_CI_API_URL", "http://custom:9999")
         monkeypatch.setenv("COORD_TEACHER_AUTH_TOKEN", "t0k3n")
         monkeypatch.setenv("COORD_TEACHER_TIMEOUT_SECONDS", "10")
@@ -101,7 +101,7 @@ class TestTeacherProxyConfig:
 
 class TestTeacherProxyDecide:
     @pytest.mark.asyncio
-    async def test_well_formed_triage_response_yields_aggregated_decision(self):
+    async def test_well_formed_triage_response_yields_aggregated_decision(self) -> None:
         proxy = TeacherProxy(TeacherProxyConfig(ci_api_endpoint="http://stub"))
         with patch.object(
             proxy, "_call_triage", new=AsyncMock(return_value=_triage_response("auditor"))
@@ -122,7 +122,7 @@ class TestTeacherProxyDecide:
         assert decision.final_tier == Tier.ENCODER
 
     @pytest.mark.asyncio
-    async def test_confidence_clamped_to_unit_interval(self):
+    async def test_confidence_clamped_to_unit_interval(self) -> None:
         proxy = TeacherProxy(TeacherProxyConfig())
         # Triage returns out-of-range confidence — must be clamped.
         with patch.object(
@@ -138,7 +138,7 @@ class TestTeacherProxyDecide:
         assert decision.confidence == 1.0
 
     @pytest.mark.asyncio
-    async def test_malformed_triage_falls_back_to_strategy_default(self):
+    async def test_malformed_triage_falls_back_to_strategy_default(self) -> None:
         proxy = TeacherProxy(TeacherProxyConfig())
         with patch.object(
             proxy,
@@ -155,7 +155,7 @@ class TestTeacherProxyDecide:
         assert decision.aggregation_method == "teacher_proxy_passthrough"
 
     @pytest.mark.asyncio
-    async def test_upstream_error_returns_defensive_fallback(self):
+    async def test_upstream_error_returns_defensive_fallback(self) -> None:
         proxy = TeacherProxy(TeacherProxyConfig())
         with patch.object(
             proxy,
@@ -173,7 +173,7 @@ class TestTeacherProxyDecide:
         assert decision.aggregation_method == "teacher_proxy_fallback"
 
     @pytest.mark.asyncio
-    async def test_default_roles_are_strategy_appropriate(self):
+    async def test_default_roles_are_strategy_appropriate(self) -> None:
         """Each strategy has a sensible default role for fallback."""
         assert TeacherProxy._default_role_for("tri-role-collective", "role-for-turn") == "auditor"
         assert TeacherProxy._default_role_for("debate", "moderator-selection") == "moderator"
@@ -187,12 +187,12 @@ class TestTeacherProxyDecide:
         assert TeacherProxy._default_role_for("unknown-strategy", "x") == "fallback-default"
 
     @pytest.mark.asyncio
-    async def test_request_payload_carries_context(self):
+    async def test_request_payload_carries_context(self) -> None:
         """The payload sent to triage embeds the strategy + decision_type + context."""
         proxy = TeacherProxy(TeacherProxyConfig())
-        captured = {}
+        captured: dict[str, Any] = {}
 
-        async def fake_call(payload):
+        async def fake_call(payload: dict[str, Any]) -> dict[str, Any]:
             captured["payload"] = payload
             return _triage_response("auditor")
 

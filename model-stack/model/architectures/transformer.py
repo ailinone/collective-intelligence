@@ -23,11 +23,11 @@ from __future__ import annotations
 import logging
 import math
 from pathlib import Path
-from typing import Any
+from typing import Any, TypedDict
 
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
+import torch.nn.functional as fn
 from torch import Tensor
 
 logger = logging.getLogger(__name__)
@@ -36,6 +36,7 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # RMSNorm
 # ---------------------------------------------------------------------------
+
 
 class RMSNorm(nn.Module):
     """Root Mean Square Layer Normalization (Zhang & Sennrich, 2019)."""
@@ -55,8 +56,19 @@ class RMSNorm(nn.Module):
 # RoPE (Rotary Positional Encoding)
 # ---------------------------------------------------------------------------
 
+
 class RotaryEmbedding(nn.Module):
-    """Rotary Positional Embedding (Su et al., 2021)."""
+    """Rotary Positional Embedding (Su et al., 2021).
+
+    2026-10-19 — context-extension scaling support (linear / ntk / yarn),
+    matching the modern long-context recipes (Llama-3, Qwen3 use YaRN for
+    post-training extension; high ``base`` alone covers native long context).
+    YaRN implements Peng et al., 2023 (https://arxiv.org/abs/2309.00071)
+    including the attention-softmax rescale ``0.1 * ln(factor) + 1``.
+    """
+
+    _YARN_BETA_FAST = 32
+    _YARN_BETA_SLOW = 1
 
     def __init__(
         self,
@@ -64,20 +76,81 @@ class RotaryEmbedding(nn.Module):
         max_position_embeddings: int = 4096,
         base: float = 10000.0,
         device: torch.device | None = None,
+        scaling: dict[str, Any] | None = None,
     ) -> None:
         super().__init__()
         self.dim = dim
         self.max_position_embeddings = max_position_embeddings
         self.base = base
+        self.scaling_type: str | None = scaling.get("type") if scaling else None
+        self.scaling_factor: float = float(scaling.get("factor", 1.0)) if scaling else 1.0
+        # YaRN rescales the attention scores themselves (not just positions);
+        # callers must multiply q (post-RoPE) by this factor.
+        self.attention_scaling: float = 1.0
 
-        inv_freq = 1.0 / (
-            self.base ** (torch.arange(0, self.dim, 2, dtype=torch.float32, device=device) / self.dim)
-        )
+        inv_freq = self._compute_inv_freq(dim, base, max_position_embeddings, device)
         self.register_buffer("inv_freq", inv_freq, persistent=False)
         self._build_cache(max_position_embeddings, device)
 
+    def _compute_inv_freq(
+        self,
+        dim: int,
+        base: float,
+        max_position_embeddings: int,
+        device: torch.device | None,
+    ) -> Tensor:
+        """Base inverse frequencies, modified in-place by ntk / yarn scaling."""
+        inv_freq = 1.0 / (
+            base ** (torch.arange(0, dim, 2, dtype=torch.float32, device=device) / dim)
+        )
+
+        if self.scaling_type == "ntk":
+            # "NTK-aware" interpolation: stretch the base so low-frequency
+            # (long-wavelength) dims interpolate more than high-frequency ones.
+            base_eff = base * (self.scaling_factor ** (dim / (dim - 2)))
+            inv_freq = 1.0 / (
+                base_eff ** (torch.arange(0, dim, 2, dtype=torch.float32, device=device) / dim)
+            )
+        elif self.scaling_type == "yarn":
+            inv_freq = self._yarn_inv_freq(inv_freq, dim, base, max_position_embeddings, device)
+        return inv_freq
+
+    def _yarn_inv_freq(
+        self,
+        inv_freq: Tensor,
+        dim: int,
+        base: float,
+        max_position_embeddings: int,
+        device: torch.device | None,
+    ) -> Tensor:
+        """YaRN frequency interpolation with per-dim correction ramps."""
+        factor = self.scaling_factor
+        pos = float(max_position_embeddings) * factor
+
+        def correction_dim(num_rot: float) -> float:
+            return dim * math.log(pos / (num_rot * 2 * math.pi)) / (2 * math.log(base))
+
+        low_d = correction_dim(self._YARN_BETA_FAST)
+        high_d = correction_dim(self._YARN_BETA_SLOW)
+        dim_arange = torch.arange(0, dim, 2, dtype=torch.float32, device=device) / 2
+        ramp = torch.clamp((dim_arange - low_d) / (high_d - low_d), 0.0, 1.0)
+
+        # Interpolate between the original frequency and a fully
+        # factor-compressed one, in log space, weighted by the ramp.
+        inv_freq_interp = inv_freq / (
+            1.0 + (factor - 1.0) * torch.where(ramp > 0, ramp, torch.zeros_like(ramp))
+        )
+        # Guard against non-finite values for degenerate factors.
+        inv_freq_interp = torch.where(torch.isfinite(inv_freq_interp), inv_freq_interp, inv_freq)
+        self.attention_scaling = 0.1 * math.log(factor) + 1.0
+        return inv_freq_interp
+
     def _build_cache(self, seq_len: int, device: torch.device | None = None) -> None:
         t = torch.arange(seq_len, dtype=torch.float32, device=device or self.inv_freq.device)
+        if self.scaling_type == "linear":
+            # Positional interpolation: rescale positions by 1/factor so the
+            # extended range maps back onto the trained position range.
+            t = t / self.scaling_factor
         freqs = torch.outer(t, self.inv_freq)
         emb = torch.cat((freqs, freqs), dim=-1)
         self.register_buffer("cos_cached", emb.cos(), persistent=False)
@@ -123,6 +196,7 @@ def apply_rotary_pos_emb(
 # Attention
 # ---------------------------------------------------------------------------
 
+
 class Attention(nn.Module):
     """
     Multi-Head / Grouped-Query Attention with RoPE.
@@ -140,6 +214,8 @@ class Attention(nn.Module):
         attention_dropout: float = 0.0,
         attention_bias: bool = False,
         use_flash_attention: bool = True,
+        qk_norm: bool = False,
+        rope_scaling: dict[str, Any] | None = None,
     ) -> None:
         super().__init__()
         self.hidden_size = hidden_size
@@ -148,17 +224,35 @@ class Attention(nn.Module):
         self.head_dim = hidden_size // num_attention_heads
         self.num_kv_groups = num_attention_heads // num_key_value_heads
         self.attention_dropout = attention_dropout
+        self.qk_norm = qk_norm
 
-        self.q_proj = nn.Linear(hidden_size, num_attention_heads * self.head_dim, bias=attention_bias)
-        self.k_proj = nn.Linear(hidden_size, num_key_value_heads * self.head_dim, bias=attention_bias)
-        self.v_proj = nn.Linear(hidden_size, num_key_value_heads * self.head_dim, bias=attention_bias)
-        self.o_proj = nn.Linear(num_attention_heads * self.head_dim, hidden_size, bias=attention_bias)
+        self.q_proj = nn.Linear(
+            hidden_size, num_attention_heads * self.head_dim, bias=attention_bias
+        )
+        self.k_proj = nn.Linear(
+            hidden_size, num_key_value_heads * self.head_dim, bias=attention_bias
+        )
+        self.v_proj = nn.Linear(
+            hidden_size, num_key_value_heads * self.head_dim, bias=attention_bias
+        )
+        self.o_proj = nn.Linear(
+            num_attention_heads * self.head_dim, hidden_size, bias=attention_bias
+        )
 
         self.rotary_emb = RotaryEmbedding(
             self.head_dim,
             max_position_embeddings=max_position_embeddings,
             base=rope_theta,
+            scaling=rope_scaling,
         )
+
+        # 2026-10-19 — QK-norm (Gemma-2 / Qwen3 style): per-head RMSNorm on
+        # q/k before RoPE. Stabilizes attention logits at long context and is
+        # standard in every 2025+ small-model recipe. Off by default so v1
+        # checkpoints remain loadable; ailin-*-v2 configs enable it.
+        if qk_norm:
+            self.q_norm = RMSNorm(self.head_dim)
+            self.k_norm = RMSNorm(self.head_dim)
 
         self.use_flash_attention = use_flash_attention
         self._flash_available = self._check_flash_attention()
@@ -167,7 +261,8 @@ class Attention(nn.Module):
     def _check_flash_attention() -> bool:
         """Check if Flash Attention 2 is available."""
         try:
-            from flash_attn import flash_attn_func
+            from flash_attn import flash_attn_func  # noqa: F401  # 2026-10-18 availability probe only
+
             return True
         except ImportError:
             return False
@@ -202,9 +297,28 @@ class Attention(nn.Module):
         k = k.view(batch_size, seq_len, self.num_kv_heads, self.head_dim).transpose(1, 2)
         v = v.view(batch_size, seq_len, self.num_kv_heads, self.head_dim).transpose(1, 2)
 
-        # Apply RoPE
-        cos, sin = self.rotary_emb(q, seq_len)
+        # QK-norm before RoPE (see __init__ note)
+        if self.qk_norm:
+            q = self.q_norm(q)
+            k = self.k_norm(k)
+
+        # 2026-10-19 — RoPE position fix for cached decode. Previously the
+        # rotary cache was rebuilt for the CURRENT CHUNK length only, so every
+        # decoded token got position 0 instead of its true offset — custom
+        # generate() silently degraded beyond the first token. Positions now
+        # always span [past_len, past_len + seq_len).
+        past_len = past_key_value[0].shape[2] if past_key_value is not None else 0
+        total_len = past_len + seq_len
+        if position_ids is None:
+            position_ids = (
+                torch.arange(past_len, total_len, device=hidden_states.device)
+                .unsqueeze(0)
+                .expand(batch_size, -1)
+            )
+        cos, sin = self.rotary_emb(q, total_len)
         q, k = apply_rotary_pos_emb(q, k, cos, sin, position_ids)
+        if self.rotary_emb.attention_scaling != 1.0:
+            q = q * self.rotary_emb.attention_scaling
 
         # Handle KV cache for inference
         if past_key_value is not None:
@@ -213,15 +327,12 @@ class Attention(nn.Module):
 
         new_cache = (k, v) if use_cache else None
 
-        # Expand KV for GQA
-        k = self._repeat_kv(k, self.num_kv_groups)
-        v = self._repeat_kv(v, self.num_kv_groups)
-
-        # Compute attention
-        if self.use_flash_attention and self._flash_available and not use_cache:
-            attn_output = self._flash_attention(q, k, v)
-        else:
-            attn_output = self._standard_attention(q, k, v, attention_mask)
+        # 2026-10-19 — backend dispatch. KV stays UN-repeated for FlashAttention2
+        # and SDPA (both support GQA natively: flash_attn via kv head count,
+        # SDPA via enable_gqa since torch 2.5), removing the 4x KV memory
+        # traffic the old always-repeat path paid. Only the manual math
+        # fallback needs expanded KV.
+        attn_output = self._attend(q, k, v, attention_mask, use_cache=use_cache)
 
         # Reshape and project output
         attn_output = attn_output.transpose(1, 2).contiguous().view(batch_size, seq_len, -1)
@@ -229,8 +340,57 @@ class Attention(nn.Module):
 
         return output, new_cache
 
+    def _attend(
+        self,
+        q: Tensor,
+        k: Tensor,
+        v: Tensor,
+        attention_mask: Tensor | None,
+        use_cache: bool,
+    ) -> Tensor:
+        """Select the attention backend for this forward."""
+        # 1) FlashAttention 2 (prefill/training only — no KV-cache path).
+        if (
+            self.use_flash_attention
+            and self._flash_available
+            and not use_cache
+            and attention_mask is None
+        ):
+            return self._flash_attention(q, k, v)
+
+        # 2) torch SDPA — default everywhere else. For single-token decode
+        # (q_len == 1) attending to the full cached KV needs no causal mask.
+        q_len = q.shape[2]
+        if q_len == 1 or attention_mask is None:
+            return self._sdpa_attention(q, k, v, attention_mask)
+
+        # 3) Manual math — only for the rare full-sequence forward WITH an
+        # explicit additive padding mask (SDPA cannot combine is_causal with
+        # attn_mask in one call).
+        k_exp = self._repeat_kv(k, self.num_kv_groups)
+        v_exp = self._repeat_kv(v, self.num_kv_groups)
+        return self._standard_attention(q, k_exp, v_exp, attention_mask)
+
+    def _sdpa_attention(
+        self,
+        q: Tensor,
+        k: Tensor,
+        v: Tensor,
+        attention_mask: Tensor | None = None,
+    ) -> Tensor:
+        """torch.nn.functional.scaled_dot_product_attention (GQA-native)."""
+        return fn.scaled_dot_product_attention(
+            q,
+            k,
+            v,
+            attn_mask=attention_mask,
+            dropout_p=self.attention_dropout if self.training else 0.0,
+            is_causal=attention_mask is None and q.shape[2] > 1,
+            enable_gqa=self.num_kv_groups > 1,
+        )
+
     def _flash_attention(self, q: Tensor, k: Tensor, v: Tensor) -> Tensor:
-        """Flash Attention 2 forward pass."""
+        """Flash Attention 2 forward pass (native GQA — kv stays unrepeated)."""
         from flash_attn import flash_attn_func
 
         # flash_attn expects [B, S, H, D]
@@ -239,7 +399,9 @@ class Attention(nn.Module):
         v = v.transpose(1, 2)
 
         output = flash_attn_func(
-            q, k, v,
+            q,
+            k,
+            v,
             dropout_p=self.attention_dropout if self.training else 0.0,
             causal=True,
         )
@@ -252,20 +414,15 @@ class Attention(nn.Module):
         v: Tensor,
         attention_mask: Tensor | None = None,
     ) -> Tensor:
-        """Standard scaled dot-product attention with causal mask."""
-        # Try PyTorch 2.0 SDPA first
-        try:
-            output = F.scaled_dot_product_attention(
-                q, k, v,
-                attn_mask=attention_mask,
-                dropout_p=self.attention_dropout if self.training else 0.0,
-                is_causal=attention_mask is None,
-            )
-            return output
-        except Exception:
-            pass
+        """Manual scaled dot-product attention with causal mask.
 
-        # Manual fallback
+        2026-10-19 — SDPA promotion moved to _attend(): this used to try SDPA
+        inside a bare try/except, silently falling back to math on any error
+        (including backend-capability ones) with no way to tell which path
+        ran. Callers now choose the backend explicitly; this method is the
+        documented last-resort math path.
+        """
+        # Manual path
         scale = 1.0 / math.sqrt(self.head_dim)
         attn_weights = torch.matmul(q, k.transpose(-2, -1)) * scale
 
@@ -281,10 +438,10 @@ class Attention(nn.Module):
         if attention_mask is not None:
             attn_weights = attn_weights + attention_mask
 
-        attn_weights = F.softmax(attn_weights, dim=-1, dtype=torch.float32).to(q.dtype)
+        attn_weights = fn.softmax(attn_weights, dim=-1, dtype=torch.float32).to(q.dtype)
 
         if self.training and self.attention_dropout > 0:
-            attn_weights = F.dropout(attn_weights, p=self.attention_dropout)
+            attn_weights = fn.dropout(attn_weights, p=self.attention_dropout)
 
         return torch.matmul(attn_weights, v)
 
@@ -292,6 +449,7 @@ class Attention(nn.Module):
 # ---------------------------------------------------------------------------
 # MLP with SwiGLU
 # ---------------------------------------------------------------------------
+
 
 class SwiGLUMLP(nn.Module):
     """
@@ -307,7 +465,7 @@ class SwiGLUMLP(nn.Module):
         self.down_proj = nn.Linear(intermediate_size, hidden_size, bias=False)
 
     def forward(self, x: Tensor) -> Tensor:
-        gate = F.silu(self.gate_proj(x))
+        gate = fn.silu(self.gate_proj(x))
         up = self.up_proj(x)
         return self.down_proj(gate * up)
 
@@ -341,6 +499,7 @@ class StandardMLP(nn.Module):
 # Transformer Layer
 # ---------------------------------------------------------------------------
 
+
 class TransformerLayer(nn.Module):
     """Single transformer decoder layer: pre-norm attention + MLP."""
 
@@ -359,6 +518,8 @@ class TransformerLayer(nn.Module):
         use_gated_mlp: bool = True,
         hidden_act: str = "silu",
         norm_type: str = "rmsnorm",
+        qk_norm: bool = False,
+        rope_scaling: dict[str, Any] | None = None,
     ) -> None:
         super().__init__()
 
@@ -380,6 +541,8 @@ class TransformerLayer(nn.Module):
             attention_dropout=attention_dropout,
             attention_bias=attention_bias,
             use_flash_attention=use_flash_attention,
+            qk_norm=qk_norm,
+            rope_scaling=rope_scaling,
         )
 
         # MLP
@@ -420,6 +583,15 @@ class TransformerLayer(nn.Module):
 # Full Model
 # ---------------------------------------------------------------------------
 
+
+class TransformerOutput(TypedDict):
+    """Return payload of AilinTransformer.forward."""
+
+    loss: Tensor | None
+    logits: Tensor
+    past_key_values: list[tuple[Tensor, Tensor]] | None
+
+
 class AilinTransformer(nn.Module):
     """
     Complete GPT-style decoder-only transformer.
@@ -456,6 +628,8 @@ class AilinTransformer(nn.Module):
         use_scaled_init: bool = True,
         gradient_checkpointing: bool = False,
         embedding_dropout: float = 0.0,
+        qk_norm: bool = False,
+        rope_scaling: dict[str, Any] | None = None,
     ) -> None:
         super().__init__()
         self.vocab_size = vocab_size
@@ -468,27 +642,33 @@ class AilinTransformer(nn.Module):
 
         # Token embedding
         self.embed_tokens = nn.Embedding(vocab_size, hidden_size)
-        self.embed_dropout = nn.Dropout(embedding_dropout) if embedding_dropout > 0 else nn.Identity()
+        self.embed_dropout = (
+            nn.Dropout(embedding_dropout) if embedding_dropout > 0 else nn.Identity()
+        )
 
         # Transformer layers
-        self.layers = nn.ModuleList([
-            TransformerLayer(
-                hidden_size=hidden_size,
-                num_attention_heads=num_attention_heads,
-                num_key_value_heads=num_key_value_heads,
-                intermediate_size=intermediate_size,
-                max_position_embeddings=max_position_embeddings,
-                rope_theta=rope_theta,
-                layer_norm_eps=layer_norm_eps,
-                attention_dropout=attention_dropout,
-                attention_bias=attention_bias,
-                use_flash_attention=use_flash_attention,
-                use_gated_mlp=use_gated_mlp,
-                hidden_act=hidden_act,
-                norm_type=norm_type,
-            )
-            for _ in range(num_layers)
-        ])
+        self.layers = nn.ModuleList(
+            [
+                TransformerLayer(
+                    hidden_size=hidden_size,
+                    num_attention_heads=num_attention_heads,
+                    num_key_value_heads=num_key_value_heads,
+                    intermediate_size=intermediate_size,
+                    max_position_embeddings=max_position_embeddings,
+                    rope_theta=rope_theta,
+                    layer_norm_eps=layer_norm_eps,
+                    attention_dropout=attention_dropout,
+                    attention_bias=attention_bias,
+                    use_flash_attention=use_flash_attention,
+                    use_gated_mlp=use_gated_mlp,
+                    hidden_act=hidden_act,
+                    norm_type=norm_type,
+                    qk_norm=qk_norm,
+                    rope_scaling=rope_scaling,
+                )
+                for _ in range(num_layers)
+            ]
+        )
 
         # Final norm
         if norm_type == "rmsnorm":
@@ -585,7 +765,7 @@ class AilinTransformer(nn.Module):
         past_key_values: list[tuple[Tensor, Tensor]] | None = None,
         use_cache: bool = False,
         labels: Tensor | None = None,
-    ) -> dict[str, Tensor | list | None]:
+    ) -> TransformerOutput:
         """
         Forward pass.
 
@@ -605,9 +785,13 @@ class AilinTransformer(nn.Module):
         # Position IDs
         if position_ids is None:
             past_len = past_key_values[0][0].shape[2] if past_key_values is not None else 0
-            position_ids = torch.arange(
-                past_len, past_len + seq_len, dtype=torch.long, device=input_ids.device
-            ).unsqueeze(0).expand(batch_size, -1)
+            position_ids = (
+                torch.arange(
+                    past_len, past_len + seq_len, dtype=torch.long, device=input_ids.device
+                )
+                .unsqueeze(0)
+                .expand(batch_size, -1)
+            )
 
         # Embed tokens
         hidden_states = self.embed_tokens(input_ids)
@@ -653,8 +837,11 @@ class AilinTransformer(nn.Module):
 
         # LM head
         if self.tie_word_embeddings:
-            logits = F.linear(hidden_states, self.embed_tokens.weight)
+            logits = fn.linear(hidden_states, self.embed_tokens.weight)
         else:
+            # lm_head is None only when weights are tied; see __init__ (2026-10-18)
+            if self.lm_head is None:
+                raise RuntimeError("lm_head is missing but tie_word_embeddings is False")
             logits = self.lm_head(hidden_states)
 
         # Compute loss if labels provided
@@ -663,7 +850,7 @@ class AilinTransformer(nn.Module):
             # Shift logits and labels for next-token prediction
             shift_logits = logits[..., :-1, :].contiguous()
             shift_labels = labels[..., 1:].contiguous()
-            loss = F.cross_entropy(
+            loss = fn.cross_entropy(
                 shift_logits.view(-1, self.vocab_size),
                 shift_labels.view(-1),
                 ignore_index=-100,
@@ -693,11 +880,8 @@ class AilinTransformer(nn.Module):
         past_key_values = None
 
         for _ in range(max_new_tokens):
-            if past_key_values is not None:
-                # Only process the last token
-                current_input = generated[:, -1:]
-            else:
-                current_input = generated
+            # Only the last token is processed when KV caches are populated
+            current_input = generated[:, -1:] if past_key_values is not None else generated
 
             outputs = self.forward(
                 current_input,
@@ -720,7 +904,7 @@ class AilinTransformer(nn.Module):
             # Top-p (nucleus) filtering
             if top_p < 1.0:
                 sorted_logits, sorted_indices = torch.sort(logits, descending=True)
-                cumulative_probs = torch.cumsum(F.softmax(sorted_logits, dim=-1), dim=-1)
+                cumulative_probs = torch.cumsum(fn.softmax(sorted_logits, dim=-1), dim=-1)
                 sorted_indices_to_remove = cumulative_probs > top_p
                 sorted_indices_to_remove[..., 1:] = sorted_indices_to_remove[..., :-1].clone()
                 sorted_indices_to_remove[..., 0] = False
@@ -730,7 +914,7 @@ class AilinTransformer(nn.Module):
                 logits[indices_to_remove] = float("-inf")
 
             # Sample
-            probs = F.softmax(logits, dim=-1)
+            probs = fn.softmax(logits, dim=-1)
             next_token = torch.multinomial(probs, num_samples=1)
             generated = torch.cat([generated, next_token], dim=-1)
 
@@ -743,6 +927,7 @@ class AilinTransformer(nn.Module):
 # ---------------------------------------------------------------------------
 # Factory function
 # ---------------------------------------------------------------------------
+
 
 def from_config(config: dict[str, Any]) -> AilinTransformer:
     """Create an AilinTransformer from a config dict (e.g., from YAML)."""
@@ -769,6 +954,8 @@ def from_config(config: dict[str, Any]) -> AilinTransformer:
         use_scaled_init=model_cfg.get("use_scaled_init", True),
         gradient_checkpointing=model_cfg.get("gradient_checkpointing", False),
         embedding_dropout=model_cfg.get("embedding_dropout", 0.0),
+        qk_norm=model_cfg.get("qk_norm", False),
+        rope_scaling=model_cfg.get("rope_scaling"),
     )
 
 
@@ -776,7 +963,7 @@ def from_yaml(path: str | Path) -> AilinTransformer:
     """Load model from a YAML config file."""
     import yaml
 
-    with open(path, "r", encoding="utf-8") as f:
+    with open(path, encoding="utf-8") as f:
         config = yaml.safe_load(f)
 
     model = from_config(config)
@@ -789,8 +976,8 @@ def from_yaml(path: str | Path) -> AilinTransformer:
 # ---------------------------------------------------------------------------
 
 if __name__ == "__main__":
-    import sys
     import json
+    import sys
 
     logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 

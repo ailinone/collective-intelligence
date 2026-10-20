@@ -41,6 +41,7 @@ describe('buildMediaCritics', () => {
 
     expect(result.critics).toEqual([]);
     expect(result.qualityJudgingUnavailableReason).toBe(QUALITY_JUDGING_UNAVAILABLE_REASON);
+    expect(result.imageEditJudge).toBeUndefined();
   });
 
   it('degrades gracefully (does not throw) when resolveMediaJudgeModelId rejects', async () => {
@@ -54,5 +55,23 @@ describe('buildMediaCritics', () => {
     expect(result.critics).toEqual([]);
     expect(result.qualityJudgingUnavailableReason).toContain(QUALITY_JUDGING_UNAVAILABLE_REASON);
     expect(result.qualityJudgingUnavailableReason).toContain('catalog unavailable');
+    expect(result.imageEditJudge).toBeUndefined();
+  });
+
+  // Section D (wired 2026-09-27): `imageEditJudge` must be the SAME
+  // `spec_compliance` evaluator already present in `critics`, not a second,
+  // independently-resolved instance — see media-critics-factory.ts's
+  // `imageEditJudge` doc comment for why (one judge-model resolution, reused).
+  it('imageEditJudge is the same spec_compliance evaluator instance already in critics, and satisfies ImageEditJudge', async () => {
+    const resolveMediaJudgeModelId = vi.fn().mockResolvedValue('vision-judge-model');
+    const result = await buildMediaCritics({
+      providerRegistry: fakeRegistry(),
+      resolveMediaJudgeModelId,
+    });
+
+    const specComplianceCritic = result.critics.find((c) => c.role === 'spec_compliance');
+    expect(result.imageEditJudge).toBeDefined();
+    expect(result.imageEditJudge).toBe(specComplianceCritic?.evaluator);
+    expect(typeof result.imageEditJudge?.evaluateImageEdit).toBe('function');
   });
 });

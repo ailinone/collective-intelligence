@@ -32,7 +32,8 @@ dpo:
 data:
   dataset_path: ./data/preference/pairs.jsonl
   max_length: 4096
-  max_prompt_length: 1024
+  # NOTE: no max_prompt_length — DPOConfig dropped it before trl 1.16
+  # (max_length covers the full prompt+completion truncation budget).
   eval_split: 0.05
   preprocessing_num_workers: 8
 

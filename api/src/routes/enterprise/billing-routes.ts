@@ -35,6 +35,7 @@ import {
   findOverlappingInvoice,
 } from '@/services/billing-service';
 import { aggregateUsageCosts } from '@/services/billing-usage-aggregation';
+import { InvoicePeriodOverlapError } from '@/utils/custom-errors';
 import type {
   BillingConfig,
   BillingSubscription,
@@ -640,9 +641,27 @@ export async function registerEnterpriseBillingRoutes(server: FastifyInstance): 
         delete invoicePayload.currency;
       }
 
-      const invoice = await createInvoice(invoicePayload);
-
-      return reply.send(invoice);
+      try {
+        const invoice = await createInvoice(invoicePayload);
+        return reply.send(invoice);
+      } catch (error: unknown) {
+        // Belt-and-suspenders backstop to the findOverlappingInvoice check
+        // above: that SELECT-then-INSERT is still check-then-act, so a
+        // concurrent request (another self-service call, or the daily usage
+        // job) can slip in between. createInvoice() turns the resulting DB
+        // exclusion-constraint violation into InvoicePeriodOverlapError —
+        // surface it the same way the pre-check above already does, instead
+        // of letting a raw 500 leak.
+        if (error instanceof InvoicePeriodOverlapError) {
+          return reply.status(409).send({
+            error: {
+              code: 'invoice_period_overlap',
+              message: 'An existing invoice already covers part of this period.',
+            },
+          });
+        }
+        throw error;
+      }
     }
   );
 

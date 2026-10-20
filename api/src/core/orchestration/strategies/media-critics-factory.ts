@@ -60,6 +60,14 @@ export interface MediaCriticsFactoryDeps extends MediaJudgeModelResolutionDeps {
 export interface MediaCriticsFactoryResult {
   readonly critics: readonly MediaCriticConfig[];
   readonly qualityJudgingUnavailableReason?: string;
+  /** The SAME `spec_compliance`-role evaluator already present in `critics`
+   *  above, surfaced here with its concrete `MediaJudgeEvaluator` type
+   *  (which `MediaCriticConfig.evaluator: StrategyOutputEvaluator` widens
+   *  away) so callers can pass it as `MediaPlannerStrategy`'s
+   *  `imageEditJudge` (Section D) without a second judge-model resolution —
+   *  `MediaJudgeEvaluator.evaluateImageEdit` already satisfies that shape.
+   *  `undefined` under the exact same degrade conditions as `critics: []`. */
+  readonly imageEditJudge?: MediaJudgeEvaluator;
 }
 
 export async function buildMediaCritics(
@@ -86,20 +94,26 @@ export async function buildMediaCritics(
   }
 
   const mediaClient = new ProviderMediaJudgeClient({ registry: deps.providerRegistry });
+  const evaluatorsByRole = new Map<string, MediaJudgeEvaluator>(
+    MEDIA_CRITIC_ROLES.map((role): [string, MediaJudgeEvaluator] => [
+      role,
+      new MediaJudgeEvaluator(
+        {
+          enabled: true,
+          judgeModelId,
+          maxCostUsd: config.mediaPlanner.judgeMaxCostUsd,
+          timeoutMs: config.mediaPlanner.judgeTimeoutMs,
+          rubricVersion: config.mediaPlanner.judgeRubricVersion,
+          criticRole: role,
+        },
+        mediaClient
+      ),
+    ])
+  );
   const critics: MediaCriticConfig[] = MEDIA_CRITIC_ROLES.map((role) => ({
     role,
-    evaluator: new MediaJudgeEvaluator(
-      {
-        enabled: true,
-        judgeModelId,
-        maxCostUsd: config.mediaPlanner.judgeMaxCostUsd,
-        timeoutMs: config.mediaPlanner.judgeTimeoutMs,
-        rubricVersion: config.mediaPlanner.judgeRubricVersion,
-        criticRole: role,
-      },
-      mediaClient
-    ),
+    evaluator: evaluatorsByRole.get(role)!,
   }));
 
-  return { critics };
+  return { critics, imageEditJudge: evaluatorsByRole.get('spec_compliance') };
 }

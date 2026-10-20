@@ -11,6 +11,10 @@ import type { ChatRequest, OrchestrationResult } from '@/types';
 import { recordUsageEvents } from '@/services/usage-analytics-service';
 import { recordQuotaUsage } from '@/services/quota-service';
 import { debitChatRequest } from '@/services/prepaid-wallet-gate';
+import {
+  isBillingUsageReportEnabled,
+  reportUsageToBilling,
+} from '@/services/billing-usage-report-client';
 import { logger } from '@/utils/logger';
 
 const log = logger.child({ component: 'billing-usage-tracker' });
@@ -63,6 +67,14 @@ export interface TrackChatUsageOptions {
   organizationId: string;
   userId?: string;
   requestId: string;
+  /**
+   * The organization the BILLING side charges when it differs from
+   * `organizationId` (per-user ailin-auto billing: the acting user's own
+   * org). Routed to `debitChatRequest` and the billing plan-usage report
+   * ONLY — analytics, quota counters and the usage event stay keyed on
+   * `organizationId`. Absent = billing identity equals `organizationId`.
+   */
+  billingOrganizationId?: string;
   request: ChatRequest;
   result?: OrchestrationResult;
   cacheHit: boolean;
@@ -70,6 +82,22 @@ export interface TrackChatUsageOptions {
   totalTokensOverride?: number;
   totalCostOverride?: number;
   modelsOverride?: ModelUsageSummary[];
+  /**
+   * REAL per-direction token counts for callers that have no per-model
+   * breakdown (the /v1/responses, /extended-thinking and /ultra-thinking
+   * routes summarize usage without model legs). When present this REPLACES
+   * the aggregated model usage for BOTH the prepaid-wallet debit and the
+   * billing-profile markup — without it those routes debited 0/0 tokens
+   * (totalTokensOverride only feeds the analytics total, never the debit).
+   */
+  tokenUsageOverride?: { promptTokens: number; completionTokens: number };
+  /**
+   * The wallet gate's hold for this request. When present the debit SETTLES
+   * that exact reservation (releasing the remainder at once) instead of
+   * taking the unreserved branch while the hold self-expires at the TTL —
+   * available balance stays accurate after every billed request.
+   */
+  holdId?: string;
   /** Defaults to `full`. See {@link UsageAccountingMode}. */
   accounting?: UsageAccountingMode;
 }
@@ -77,8 +105,26 @@ export interface TrackChatUsageOptions {
 export async function trackChatUsage(options: TrackChatUsageOptions): Promise<void> {
   try {
     const models = options.modelsOverride ?? summarizeModels(options.result);
-    const tokenUsage = aggregateTokenUsage(models);
-    const totalTokens = normalizeTokens(options.totalTokensOverride ?? tokenUsage.totalTokens);
+    const tokenUsage = options.tokenUsageOverride
+      ? {
+          promptTokens: options.tokenUsageOverride.promptTokens,
+          completionTokens: options.tokenUsageOverride.completionTokens,
+          totalTokens:
+            options.tokenUsageOverride.promptTokens + options.tokenUsageOverride.completionTokens,
+        }
+      : aggregateTokenUsage(models);
+    // When the caller supplies REAL per-direction counts, their sum IS the
+    // total: letting a disagreeing totalTokensOverride win would put an
+    // analytics row at odds with what the wallet ledger just debited (and with
+    // the quota counter below, which shares this number). The legacy
+    // totalTokensOverride-first precedence only applies when no override was
+    // given — the /v1/responses-style call sites pass both, derived from the
+    // same usage object, so this only decides the inconsistent edge.
+    const totalTokens = normalizeTokens(
+      options.tokenUsageOverride
+        ? tokenUsage.totalTokens
+        : options.totalTokensOverride ?? tokenUsage.totalTokens
+    );
     const providerCost = sanitizeCostValue(
       options.totalCostOverride ?? options.result?.totalCost ?? 0
     );
@@ -93,19 +139,40 @@ export async function trackChatUsage(options: TrackChatUsageOptions): Promise<vo
       (options.cacheHit ? 'cache' : 'streaming');
 
     const analyticsOnly = options.accounting === 'analytics-only';
+    const billingOrganizationId = options.billingOrganizationId ?? options.organizationId;
+
+    // Billing-side plan usage (ADR-ENTITLEMENTS-CONTRACT "Caminho A"):
+    // reports api_requests:+1 to the tenant's Usage counters in billing —
+    // the consumption side of the /v1/plans/resolve limits. Dorment until
+    // BILLING_USAGE_REPORT_ENABLED=true (never throws; 409/replay is
+    // success because idempotency_key IS this requestId).
+    const billingUsageReport = isBillingUsageReportEnabled()
+      ? reportUsageToBilling(
+          billingOrganizationId,
+          options.requestId,
+          [{ resourceType: 'api_requests', amount: 1 }],
+          // The END USER's ci User.id — the account_id the tenant-namespace
+          // resolver needs when BILLING_TENANT_MAPPING_ENABLED is on.
+          options.userId
+        )
+      : Promise.resolve();
 
     await Promise.all([
+      billingUsageReport,
       // Prepaid wallet debit on the user's REAL tokens at the tier rate. No-op
       // when the gate flag is off or the model is not a tiered cell. Single
       // chokepoint covering streaming, non-streaming, and cache-hit paths.
+      // Charged to billingOrganizationId when set (per-user ailin-auto
+      // billing) — the end user's own wallet, not the key principal's.
       analyticsOnly
         ? Promise.resolve()
         : debitChatRequest({
-            organizationId: options.organizationId,
+            organizationId: billingOrganizationId,
             request: options.request,
             promptTokens: tokenUsage.promptTokens,
             completionTokens: tokenUsage.completionTokens,
             requestId: options.requestId,
+            holdId: options.holdId,
           }),
       recordUsageEvents({
         organizationId: options.organizationId,

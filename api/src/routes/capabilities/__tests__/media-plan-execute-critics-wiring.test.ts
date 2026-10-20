@@ -118,6 +118,26 @@ vi.mock('@/core/orchestration/strategies/media-critics-factory', () => ({
   buildMediaCritics: (...args: unknown[]) => buildMediaCriticsMock(...args),
 }));
 
+// Section C (wired 2026-09-27): same capture pattern as MediaConsensusStrategy
+// above — DocumentReviewStrategy's own `execute()` is never reached by this
+// test file's planner-finalizes-immediately mock (no document action in the
+// plan), so the only way to assert what it was CONSTRUCTED with is to
+// capture the constructor args, same as the MediaConsensusStrategy mock.
+const documentReviewConstructorCalls: unknown[] = [];
+vi.mock('@/core/orchestration/strategies/document-review-strategy', () => {
+  class MockDocumentReviewStrategy {
+    constructor(deps: unknown) {
+      documentReviewConstructorCalls.push(deps);
+    }
+  }
+  return { DocumentReviewStrategy: MockDocumentReviewStrategy };
+});
+
+const buildDocumentCriticsMock = vi.fn();
+vi.mock('@/core/orchestration/strategies/document-critics-factory', () => ({
+  buildDocumentCritics: (...args: unknown[]) => buildDocumentCriticsMock(...args),
+}));
+
 describe('POST /v1/capabilities/media-plan/execute — critics wiring (MEDIA_PLANNER_JUDGE_ENABLED=true)', () => {
   let server: FastifyInstance;
 
@@ -136,12 +156,22 @@ describe('POST /v1/capabilities/media-plan/execute — critics wiring (MEDIA_PLA
 
   beforeEach(() => {
     mockConstructorCalls.length = 0;
+    documentReviewConstructorCalls.length = 0;
     buildMediaCriticsMock.mockReset();
+    buildDocumentCriticsMock.mockReset();
+    // Sane default for every test below that doesn't care about document
+    // critics specifically — only the dedicated tests further down override
+    // this to assert on it.
+    buildDocumentCriticsMock.mockResolvedValue({ critics: [], documentJudgingUnavailableReason: undefined });
   });
 
   it('wires the critics + reason returned by buildMediaCritics into MediaConsensusStrategy', async () => {
     const fakeCritics = [{ role: 'spec_compliance', evaluator: { mode: 'llm_judge', id: 'x', evaluate: vi.fn() } }];
-    buildMediaCriticsMock.mockResolvedValue({ critics: fakeCritics, qualityJudgingUnavailableReason: undefined });
+    buildMediaCriticsMock.mockResolvedValue({
+      critics: fakeCritics,
+      qualityJudgingUnavailableReason: undefined,
+      imageEditJudge: fakeCritics[0].evaluator,
+    });
 
     await server.inject({
       method: 'POST',
@@ -177,5 +207,28 @@ describe('POST /v1/capabilities/media-plan/execute — critics wiring (MEDIA_PLA
     };
     expect(deps.critics).toEqual([]);
     expect(deps.qualityJudgingUnavailableReason).toBe(degradeReason);
+  });
+
+  // Section C (wired 2026-09-27)
+  it('wires the critics returned by buildDocumentCritics into DocumentReviewStrategy', async () => {
+    buildMediaCriticsMock.mockResolvedValue({ critics: [], qualityJudgingUnavailableReason: undefined });
+    const fakeDocumentCritics = [
+      { role: 'factual_accuracy', evaluator: { mode: 'llm_judge', id: 'doc-x', evaluate: vi.fn() } },
+    ];
+    buildDocumentCriticsMock.mockResolvedValue({
+      critics: fakeDocumentCritics,
+      documentJudgingUnavailableReason: undefined,
+    });
+
+    await server.inject({
+      method: 'POST',
+      url: '/v1/capabilities/media-plan/execute',
+      payload: { messages: [{ role: 'user', content: 'make a video and a picture of a cat' }] },
+    });
+
+    expect(buildDocumentCriticsMock).toHaveBeenCalledTimes(1);
+    expect(documentReviewConstructorCalls).toHaveLength(1);
+    const deps = documentReviewConstructorCalls[0] as { critics: unknown };
+    expect(deps.critics).toBe(fakeDocumentCritics);
   });
 });

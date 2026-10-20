@@ -61,11 +61,12 @@
  *    file's purpose. Chat's client is expected to send the literal
  *    `ailin-auto` string over the dedicated key per the documented contract.
  *  - Within the daily allowance: no-op, request proceeds as today.
- *    `ailin-auto` never populates `ailin_tier`/`ailin_tier_rate` (verified —
- *    see anonymous-quota-gate.ts header for the same caveat about
- *    `prepaid-wallet-gate.ts`'s separate `ailin_alias` fallback bug, which
- *    applies equally to `ailin-auto`), so it is not billed through
- *    `pricing-tier-billing.ts` either.
+ *    `ailin-auto` itself never populates `ailin_tier`/`ailin_tier_rate` (the
+ *    alias resolves tier-less), so it is not billed through
+ *    `pricing-tier-billing.ts`. EXCEPTION (owner decision 2026-10-02, see
+ *    auto-preset-billing.ts): a wallet-billable acting user skips this
+ *    counter entirely and chat-routes.ts re-sets the tier carrier server-side
+ *    so the prepaid wallet gate/debit charges their own organization.
  *  - Once exceeded: chat-routes.ts rejects the `ailin-auto` request outright
  *    with 429 `free_quota_exceeded`. This module does NOT swap the model or
  *    silently fall through to a paid tier — silently billing a user for a
@@ -89,11 +90,12 @@
  * `anonymous-quota-gate.ts`'s house style: fail-closed here would hard-block
  * a legitimately-in-quota user's chat entirely, which the free-tier feature
  * exists to prevent. Fail-open's downside is bounded to "some extra free
- * `ailin-auto` requests during a Redis outage" — no money moves either way,
- * since `ailin-auto` is categorically exempt from billing regardless of this
- * counter's state, and the cost-ceiling half of this gate (max_cost + the
- * strategy cap) is enforced independently in chat-routes.ts / triage-service.ts,
- * not by this module, so it does not fail open with the quota count.
+ * `ailin-auto` requests during a Redis outage" — no money moves either way
+ * for genuinely free-tier users (wallet-billable per-user billing never
+ * reaches this counter; see auto-preset-billing.ts), and the cost-ceiling
+ * half of this gate (max_cost + the strategy cap) is enforced independently
+ * in chat-routes.ts / triage-service.ts, not by this module, so it does not
+ * fail open with the quota count.
  */
 
 import type { FastifyReply, FastifyRequest } from 'fastify';
@@ -229,16 +231,53 @@ export async function checkAndConsumeFreeTierAutoQuota(
   }
 }
 
+// ── Credits-continue consent ────────────────────────────────────────────
+// When today's free ailin-auto allowance is exhausted, the chat backend may
+// send this header to spend the user's prepaid wallet credits instead. The
+// header is only ever honored inside the chat-free-tier scope (dedicated key
+// + raw model "ailin-auto" + a forwarded real userId) — that key is
+// server-side-only in the chat backend, so an external caller can neither
+// reach the scope nor forge the consent.
+export const CREDITS_CONTINUE_HEADER = 'x-ailin-credits-continue';
+
+export function isCreditsContinueRequested(headers: {
+  [k: string]: string | string[] | undefined;
+}): boolean {
+  const raw = headers[CREDITS_CONTINUE_HEADER];
+  const value = Array.isArray(raw) ? raw[0] : raw;
+  return value === '1' || value === 'true';
+}
+
+/**
+ * The published billable cell a credits-continue request is metered at. The
+ * `auto` strategy is the EXACT orchestration ailin-auto already runs — the
+ * only change is that the request now carries a SERVER-SET tier carrier and
+ * is therefore billed/gated by the prepaid wallet like any `<strategy>:<tier>`
+ * cell. `base` is the rate card's DEFAULT_TIER.
+ */
+export const CREDITS_CONTINUE_MODEL_CELL = 'auto:base';
+
+/** Optional enrichment on the 429: can the user pay to continue right now? */
+export interface CreditsContinueOffer {
+  balance_usd: number | null;
+  model_cell: string;
+}
+
 /** The standard 429 body shape for an exhausted authenticated free-tier quota. */
-export function freeTierQuotaExceededBody(resetAt: string): {
+export function freeTierQuotaExceededBody(
+  resetAt: string,
+  creditsContinue?: CreditsContinueOffer
+): {
   error: { code: string; message: string; reset_at: string };
+  credits_continue?: CreditsContinueOffer;
 } {
   return {
     error: {
       code: 'free_quota_exceeded',
-      message: 'Your 5 free daily messages are used. Select a paid model to continue.',
+      message: 'Your 5 free daily messages are used. Upgrade your plan or add credits to continue.',
       reset_at: resetAt,
     },
+    ...(creditsContinue ? { credits_continue: creditsContinue } : {}),
   };
 }
 

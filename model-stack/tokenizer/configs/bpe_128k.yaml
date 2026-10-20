@@ -1,0 +1,111 @@
+# Copyright (C) 2026 Ailin One, Inc.
+#
+# This file is part of Collective Intelligence Engine (ci).
+# Licensed under the GNU Affero General Public License v3.0 or later.
+# See LICENSE in the repository root, or <https://www.gnu.org/licenses/>.
+#
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Source: https://github.com/ailinone/collective-intelligence
+
+# ============================================================================
+# BPE Tokenizer Configuration — 128k Vocabulary (2026-10 modern recipe)
+# ============================================================================
+# Companion to model/configs/ailin-1b-v2.yaml (vocab_size 131072). Matches
+# the 2025/2026 small-model standard (Llama-3 128k / Qwen3 151k class):
+# ~2.5x fewer tokens per character than the v1 32k vocab on multilingual
+# text, which directly cuts inference cost (tokens = billing unit for
+# compute) and improves fertility for pt/en/code mixes.
+# ============================================================================
+
+tokenizer:
+  algorithm: bpe
+  vocab_size: 131072
+  min_frequency: 2
+  max_sequence_length: 32768
+
+  # Special tokens (same contract as bpe_32k — indices 0–14 reserved)
+  special_tokens:
+    - "<|pad|>"       # 0 — padding token
+    - "<|eos|>"       # 1 — end of sequence / end of text
+    - "<|bos|>"       # 2 — beginning of sequence
+    - "<|unk|>"       # 3 — unknown token
+    - "<|sep|>"       # 4 — separator between segments
+    - "<|mask|>"      # 5 — masked token (for MLM-style objectives)
+    - "<|system|>"    # 6 — system message marker
+    - "<|user|>"      # 7 — user turn marker
+    - "<|assistant|>" # 8 — assistant turn marker
+    - "<|tool|>"      # 9 — tool call marker
+    - "<|code|>"      # 10 — code block start
+    - "<|/code|>"     # 11 — code block end
+    - "<|fim_prefix|>"  # 12 — fill-in-the-middle prefix
+    - "<|fim_middle|>"  # 13 — fill-in-the-middle middle
+    - "<|fim_suffix|>"  # 14 — fill-in-the-middle suffix
+    # 2026-10 — reasoning-era tokens (thinking-mode / tool-use training)
+    - "<|think|>"     # 15 — start of reasoning block
+    - "<|/think|>"    # 16 — end of reasoning block
+    - "<|tool_call|>" # 17 — structured tool invocation
+
+  # Pre-tokenization (same GPT-4 style regex as v1)
+  pre_tokenizer:
+    type: byte_level
+    add_prefix_space: false
+    use_regex: true
+    regex_pattern: "(?i:'s|'t|'re|'ve|'m|'ll|'d)|[^\\r\\n\\p{L}\\p{N}]?\\p{L}+|\\p{N}{1,3}| ?[^\\s\\p{L}\\p{N}]+[\\r\\n]*|\\s*[\\r\\n]+|\\s+(?!\\S)|\\s+"
+
+  # Normalization
+  normalizer:
+    type: sequence
+    steps:
+      - type: nfc
+      - type: lowercase_accent_strip
+        enabled: false  # case-sensitive tokenization
+
+  # Decoder
+  decoder:
+    type: byte_level
+
+  # Post-processor (adds BOS/EOS)
+  post_processor:
+    type: template
+    single: "<|bos|> $A <|eos|>"
+    pair: "<|bos|> $A <|sep|> $B <|eos|>"
+    special_tokens:
+      "<|bos|>": 2
+      "<|eos|>": 1
+      "<|sep|>": 4
+
+# Training parameters
+training:
+  corpus_paths: []  # Filled at training time
+  max_corpus_size_gb: 40  # larger vocab needs a larger training corpus
+  sample_ratio: 1.0
+
+  # BPE training settings
+  initial_alphabet_from_corpus: true
+  show_progress: true
+  limit_alphabet: 2000
+
+  # Byte-fallback for OOV
+  byte_fallback: true
+  add_byte_tokens: true
+
+# Evaluation
+evaluation:
+  eval_languages:
+    - en
+    - pt     # primary production language, promoted from the v1 eval list
+    - zh
+    - de
+    - fr
+    - es
+    - ja
+    - ko
+    - ru
+    - ar
+    - hi
+  metrics:
+    - fertility           # Tokens per word
+    - compression_ratio   # Bytes per token
+    - vocab_coverage      # % of vocab used on eval set
+    - unknown_rate         # % of <unk> tokens
+    - sequence_length_p95 # 95th percentile sequence length

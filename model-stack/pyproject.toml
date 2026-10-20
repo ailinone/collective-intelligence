@@ -21,19 +21,32 @@ requires-python = ">=3.10"
 authors = [{ name = "Ailin Team" }]
 
 dependencies = [
-    "torch>=2.2.0",
-    "transformers>=4.38.0",
-    "datasets>=2.17.0",
-    "tokenizers>=0.15.0",
-    "accelerate>=0.27.0",
-    "deepspeed>=0.14.0",
-    "vllm>=0.3.0",
-    "wandb>=0.16.0",
+    # 2026-10-19 — SOTA refresh: every floor moved to the current (PyPI,
+    # 2026-10-19) major of each framework, range-capped to the next major so
+    # a fresh release can't silently break the training env overnight.
+    # Validated set recorded in requirements-2026-10.txt; runtime-validated
+    # by the "Integration Smoke" CI job (real torch/trl/vllm on the runner).
+    # NOTE — transformers is capped <5.20, NOT at the latest 5.20.2: vllm
+    # 0.32.0 (latest vllm) requires transformers>=5.16.1,<5.20.0. First CI
+    # run of this branch proved >=5.20 is unresolvable alongside vllm
+    # (ResolutionImpossible, run 39310116258) — the ecosystem frontier is
+    # what vLLM ships against, so 5.19.0 is the real SOTA-compatible pick.
+    # Same story for torch: vllm 0.32.0 pins torch==2.13.0 EXACTLY (run
+    # 39313132178), so the torch frontier here is 2.13.0, not 2.14.x.
+    "torch>=2.13.0,<2.14",
+    "transformers>=5.16.1,<5.20",
+    "datasets>=5.1.0,<6",
+    "tokenizers>=0.23.0,<0.24",
+    "accelerate>=1.15.0,<2",
+    "deepspeed>=0.19.0,<0.20",
+    "vllm>=0.32.0,<0.33",
+    "wandb>=0.31.0",
     "sentencepiece>=0.2.0",
     "pydantic>=2.6.0",
     "click>=8.1.0",
-    "trl>=0.7.0",
-    "lm-eval>=0.4.0",
+    "trl>=1.16.0,<2",
+    "peft>=0.21.0,<0.22",
+    "lm-eval>=0.4.13,<0.5",
     "scipy>=1.12.0",
     "scikit-learn>=1.4.0",
     "datasketch>=1.6.0",
@@ -45,7 +58,7 @@ dependencies = [
     "jsonlines>=4.0.0",
     "pyarrow>=15.0.0",
     "pandas>=2.2.0",
-    "sentence-transformers>=2.5.0",
+    "sentence-transformers>=6.1.0,<7",
     "faiss-cpu>=1.7.0",
     "langdetect>=1.0.9",
     "rich>=13.7.0",
@@ -63,15 +76,27 @@ dev = [
     "pytest>=8.0.0",
     "pytest-cov>=4.1.0",
     "pytest-asyncio>=0.23.0",
-    "ruff>=0.2.0",
-    "mypy>=1.8.0",
+    # 2026-10-18: range floors (not open floats) so a freshly released
+    # linter can't re-break main overnight — synced with the range pins in
+    # .github/workflows/model-stack-ci.yml "Install dev tools" and with
+    # [tool.ruff] required-version below. Bump all three together.
+    "ruff>=0.17.1,<0.18",
+    "mypy>=2.4.0,<2.5",
     "types-PyYAML>=6.0.0",
     "types-tqdm>=4.66.0",
     "types-jsonschema>=4.21.0",
 ]
 gpu = [
-    "flash-attn>=2.5.0",
+    "flash-attn>=2.8.3,<3",
     "faiss-gpu>=1.7.0",
+    # GPTQ backend for transformers-native GPTQConfig quantization
+    # (auto-gptq is unmaintained/dead — gptqmodel is the maintained fork).
+    "gptqmodel>=7.6.0",
+    # FP8/INT8 one-shot quantization producing compressed-tensors
+    # checkpoints that vLLM serves natively (successor of the dead
+    # autoawq path for production serving).
+    "llmcompressor>=0.14.0",
+    "bitsandbytes>=0.50.0",
 ]
 
 [project.scripts]
@@ -96,6 +121,10 @@ include = [
 [tool.ruff]
 line-length = 100
 target-version = "py310"
+# Must stay in lockstep with the range pins in the Model Stack CI workflow
+# and the dev floors above — a local ruff outside this range fails loudly
+# instead of silently reporting different rules than CI.
+required-version = ">=0.17.1,<0.18"
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "N", "UP", "B", "SIM"]
@@ -114,6 +143,28 @@ strict = true
 warn_return_any = true
 warn_unused_configs = true
 
+# 2026-10-18 — torch (and torch-only) relaxation, scoped to the training-
+# facing modules. torch is deliberately NOT installed in the CI lint env
+# (its default pip wheel drags the multi-GB CUDA/nvidia-* stack — see the
+# "Install dev tools" comment in .github/workflows/model-stack-ci.yml),
+# so with --ignore-missing-imports every torch API resolves to Any. That
+# makes two strict checks pure false positives there:
+#   @torch.no_grad()      -> "Untyped decorator"  (disallow_untyped_decorators)
+#   class X(nn.Module)    -> "Class cannot subclass Module (has type Any)"
+#                                                          (disallow_subclassing_any)
+# Only those two checks are disabled, only here; the modules remain
+# otherwise fully strict. serving/, registry/, evals/, data/, flywheel/ and
+# experiments/ keep the unmodified strict profile. Revisit if torch (CPU
+# wheel) ever becomes installable in the lint job.
+[[tool.mypy.overrides]]
+module = [
+  "model.*",
+  "alignment.*",
+  "pretraining.*",
+]
+disallow_untyped_decorators = false
+disallow_subclassing_any = false
+
 [tool.pytest.ini_options]
 # Discover tests in:
 #   - tests/                 — legacy / integration test home (may not exist
@@ -125,6 +176,7 @@ testpaths = [
     "tests",
     "alignment",
     "data",
+    "model",
     "evals",
     "serving",
 ]

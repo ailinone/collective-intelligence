@@ -13,7 +13,10 @@
  * network, no LLM, no `await` anywhere in this module.
  */
 import { describe, it, expect } from 'vitest';
-import { buildImmediateOpeningNarration } from '../observer-templates';
+import {
+  buildImmediateOpeningNarration,
+  buildRequestReceivedNarration,
+} from '../observer-templates';
 
 describe('buildImmediateOpeningNarration', () => {
   it('is a pure synchronous function (not a Promise)', () => {
@@ -103,6 +106,28 @@ describe('buildImmediateOpeningNarration', () => {
     }
     // 1000 calls of pure string work must be near-instant; a real network/LLM
     // call would blow this budget on a SINGLE call, let alone a thousand.
+    expect(Date.now() - start).toBeLessThan(200);
+  });
+});
+
+describe('buildRequestReceivedNarration (CI-CHAT-0004)', () => {
+  it('acknowledges receipt without claiming analysis already in progress', () => {
+    const en = buildRequestReceivedNarration();
+    expect(en).toMatch(/received/i);
+    // The old hardcoded line claimed "analyzing it now" before any analysis
+    // stage had started — a material misrepresentation of the execution.
+    expect(en.toLowerCase()).not.toContain('analyzing');
+  });
+
+  it('mirrors pt-BR from the user sample', () => {
+    const pt = buildRequestReceivedNarration('me ajude com isso, não sei por onde começar');
+    expect(pt).toMatch(/recebida/i);
+    expect(pt.toLowerCase()).not.toContain('analyzing');
+  });
+
+  it('is pure and synchronous', () => {
+    const start = Date.now();
+    for (let i = 0; i < 1000; i++) buildRequestReceivedNarration('oi');
     expect(Date.now() - start).toBeLessThan(200);
   });
 });

@@ -315,7 +315,7 @@ async function runRetrievalBenchmark() {
       const groundLabel = judgeErrorType ? `N/A(${judgeErrorType})` : groundedness.score.toFixed(2);
       console.log(`${icon} recall=${keywordRecall.toFixed(2)} ground=${groundLabel} hallFree=${hallucinationScore.toFixed(2)} | ${latencyMs}ms`);
     } catch (e) {
-      console.log(`EXCEPTION: ${e.message}`);
+      console.log(`EXCEPTION: ${e.message}${e.cause ? ` [${e.cause.code || e.cause.message}]` : ''}`);
       results.push({
         caseId: tc.id, status: 0, latencyMs: 0,
         keywordRecall: 0, keywordsExpected: tc.expectedKeywords.length, keywordsFound: 0,

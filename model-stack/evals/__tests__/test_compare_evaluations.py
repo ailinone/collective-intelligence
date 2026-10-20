@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -21,8 +22,8 @@ def _make_report(
     role_accuracy: float,
     brier_score: float,
     total_records: int = 1000,
-    per_strategy: dict | None = None,
-) -> dict:
+    per_strategy: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     return {
         "decider_label": "test",
         "total_records": total_records,
@@ -43,7 +44,7 @@ def _make_report(
 
 
 class TestCompareDecisions:
-    def test_promote_on_meaningful_improvement(self):
+    def test_promote_on_meaningful_improvement(self) -> None:
         from evals.compare_evaluations import compare
 
         champion = _make_report(role_accuracy=0.80, brier_score=0.18)
@@ -54,7 +55,7 @@ class TestCompareDecisions:
         assert report.role_accuracy_delta_pp == pytest.approx(5.0)
         assert "+5.00pp" in report.reason or "5.00" in report.reason
 
-    def test_reject_on_any_accuracy_drop(self):
+    def test_reject_on_any_accuracy_drop(self) -> None:
         from evals.compare_evaluations import compare
 
         champion = _make_report(role_accuracy=0.85, brier_score=0.15)
@@ -64,7 +65,7 @@ class TestCompareDecisions:
         assert report.decision == "reject"
         assert "below champion" in report.reason
 
-    def test_inconclusive_on_below_threshold_improvement(self):
+    def test_inconclusive_on_below_threshold_improvement(self) -> None:
         from evals.compare_evaluations import compare
 
         champion = _make_report(role_accuracy=0.80, brier_score=0.18)
@@ -74,7 +75,7 @@ class TestCompareDecisions:
         assert report.decision == "inconclusive"
         assert "below" in report.reason and "threshold" in report.reason
 
-    def test_reject_on_brier_regression_even_with_accuracy_gain(self):
+    def test_reject_on_brier_regression_even_with_accuracy_gain(self) -> None:
         from evals.compare_evaluations import compare
 
         champion = _make_report(role_accuracy=0.80, brier_score=0.10)
@@ -92,7 +93,7 @@ class TestCompareDecisions:
 
 
 class TestPerStrategyProtection:
-    def test_reject_when_one_strategy_regresses_despite_average_gain(self):
+    def test_reject_when_one_strategy_regresses_despite_average_gain(self) -> None:
         """Average-only gating misses Simpson's-paradox regressions.
 
         If 4 strategies improve a lot and 1 regresses catastrophically,
@@ -135,7 +136,7 @@ class TestPerStrategyProtection:
         assert "s4/decision" in report.regressed_strategies
         assert "per-strategy regression" in report.reason
 
-    def test_promote_when_all_strategies_improve_uniformly(self):
+    def test_promote_when_all_strategies_improve_uniformly(self) -> None:
         from evals.compare_evaluations import compare
 
         champion_per_strategy = {
@@ -157,7 +158,7 @@ class TestPerStrategyProtection:
         assert report.decision == "promote"
         assert report.regressed_strategies == []
 
-    def test_strategy_present_in_one_side_only(self):
+    def test_strategy_present_in_one_side_only(self) -> None:
         """Operators must notice when the strategy set differs between
         runs (different sft-coord input or partial training). Treat as
         zero-records on the missing side and report it via per-strategy
@@ -194,7 +195,7 @@ class TestPerStrategyProtection:
 
 
 class TestLoader:
-    def test_load_report_validates_required_keys(self, tmp_path: Path):
+    def test_load_report_validates_required_keys(self, tmp_path: Path) -> None:
         from evals.compare_evaluations import load_report
 
         bad_path = tmp_path / "bad.json"
@@ -203,7 +204,7 @@ class TestLoader:
         with pytest.raises(ValueError, match="missing required keys"):
             load_report(bad_path)
 
-    def test_load_report_happy_path(self, tmp_path: Path):
+    def test_load_report_happy_path(self, tmp_path: Path) -> None:
         from evals.compare_evaluations import load_report
 
         good_path = tmp_path / "good.json"
@@ -217,7 +218,7 @@ class TestLoader:
 
 
 class TestCli:
-    def test_cli_promote_path(self, tmp_path: Path):
+    def test_cli_promote_path(self, tmp_path: Path) -> None:
         from click.testing import CliRunner
 
         from evals.compare_evaluations import cli
@@ -245,7 +246,7 @@ class TestCli:
         comparison = json.loads(out_path.read_text(encoding="utf-8"))
         assert comparison["decision"] == "promote"
 
-    def test_cli_reject_with_exit_code(self, tmp_path: Path):
+    def test_cli_reject_with_exit_code(self, tmp_path: Path) -> None:
         from click.testing import CliRunner
 
         from evals.compare_evaluations import cli

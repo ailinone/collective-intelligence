@@ -170,7 +170,7 @@ export async function registerAudioRoutes(server: FastifyInstance): Promise<void
             type: 'string',
             default: 'auto',
             description:
-              'Model ID or "auto" for intelligent selection. When "auto", Ailin orchestrates across 500+ models to find the best TTS model for your requirements.',
+              'Model ID or "auto" for intelligent selection. When "auto", Ailin orchestrates across the full model catalog to find the best TTS model for your requirements.',
           },
           input: {
             type: 'string',
@@ -851,7 +851,7 @@ export async function registerAudioRoutes(server: FastifyInstance): Promise<void
             type: 'string',
             default: 'auto',
             description:
-              'Model ID or "auto" for intelligent selection. When "auto", Ailin orchestrates across 500+ models to find the best audio translation model.',
+              'Model ID or "auto" for intelligent selection. When "auto", Ailin orchestrates across the full model catalog to find the best audio translation model.',
           },
           prompt: {
             type: 'string',

@@ -34,6 +34,7 @@ logger = logging.getLogger(__name__)
 # Embedding computation
 # ---------------------------------------------------------------------------
 
+
 def compute_embeddings(
     texts: list[str],
     model_name: str = "all-MiniLM-L6-v2",
@@ -62,12 +63,15 @@ def compute_embeddings(
     )
 
     logger.info("Embeddings shape: %s", embeddings.shape)
-    return embeddings
+    # 2026-10-18 boundary conversion: model.encode is untyped (no stubs),
+    # coerce to ndarray without copying.
+    return np.asarray(embeddings)
 
 
 # ---------------------------------------------------------------------------
 # Clustering / duplicate detection
 # ---------------------------------------------------------------------------
+
 
 def find_semantic_duplicates_faiss(
     embeddings: np.ndarray,
@@ -175,6 +179,7 @@ def find_semantic_duplicates_sklearn(
 # Core pipeline
 # ---------------------------------------------------------------------------
 
+
 def run_semantic_dedup(
     input_path: Path,
     output_path: Path,
@@ -224,7 +229,7 @@ def run_semantic_dedup(
         with jsonlines.open(output_path, mode="w") as writer:
             for r in records:
                 writer.write(r)
-        report = {
+        report: dict[str, Any] = {
             "total_documents": total_docs,
             "documents_kept": total_docs,
             "documents_removed": 0,
@@ -295,7 +300,12 @@ def run_semantic_dedup(
     with open(report_path, "w", encoding="utf-8") as f:
         json.dump(report, f, indent=2)
 
-    logger.info("Semantic dedup complete: kept=%d removed=%d (%.1f%% reduction)", kept, removed, report["reduction_percent"])
+    logger.info(
+        "Semantic dedup complete: kept=%d removed=%d (%.1f%% reduction)",
+        kept,
+        removed,
+        report["reduction_percent"],
+    )
     return report
 
 
@@ -303,18 +313,42 @@ def run_semantic_dedup(
 # CLI
 # ---------------------------------------------------------------------------
 
+
 @click.command("semantic-dedup")
-@click.option("--input", "input_path", required=True, type=click.Path(exists=True), help="Input JSONL file")
-@click.option("--output", "output_path", required=True, type=click.Path(), help="Output deduplicated JSONL file")
-@click.option("--report", "report_path", default=None, type=click.Path(), help="Output report JSON path")
+@click.option(
+    "--input",
+    "input_path",
+    required=True,
+    type=click.Path(exists=True),
+    help="Input JSONL file",
+)
+@click.option(
+    "--output",
+    "output_path",
+    required=True,
+    type=click.Path(),
+    help="Output deduplicated JSONL file",
+)
+@click.option(
+    "--report", "report_path", default=None, type=click.Path(), help="Output report JSON path"
+)
 @click.option("--threshold", default=0.9, type=float, help="Cosine similarity threshold (0.0-1.0)")
-@click.option("--model", "model_name", default="all-MiniLM-L6-v2", help="Sentence transformer model name")
+@click.option(
+    "--model",
+    "model_name",
+    default="all-MiniLM-L6-v2",
+    help="Sentence transformer model name",
+)
 @click.option("--batch-size", default=256, type=int, help="Embedding batch size")
 @click.option("--text-field", default="text", help="Field name containing document text")
 @click.option("--max-docs", default=None, type=int, help="Maximum documents to process")
 @click.option("--device", default=None, help="Device for embedding model (cuda, cpu, mps)")
 @click.option("--no-faiss", is_flag=True, default=False, help="Disable FAISS, use sklearn fallback")
-@click.option("--log-level", default="INFO", type=click.Choice(["DEBUG", "INFO", "WARNING", "ERROR"]))
+@click.option(
+    "--log-level",
+    default="INFO",
+    type=click.Choice(["DEBUG", "INFO", "WARNING", "ERROR"]),
+)
 def cli(
     input_path: str,
     output_path: str,
@@ -355,7 +389,7 @@ def cli(
         use_faiss=not no_faiss,
     )
 
-    click.echo(f"\n--- Semantic Dedup Report ---")
+    click.echo("\n--- Semantic Dedup Report ---")
     click.echo(f"Total documents:   {report['total_documents']:>10,}")
     click.echo(f"Documents kept:    {report['documents_kept']:>10,}")
     click.echo(f"Documents removed: {report['documents_removed']:>10,}")

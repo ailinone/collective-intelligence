@@ -155,10 +155,26 @@ interface ChunkRow {
 // ─── Service ─────────────────────────────────────────────────────────────────
 
 export class VectorStoreIngestService {
+  private embedderOverride: CapabilityEmbedder | undefined;
+
   constructor(
     private readonly pool: Pool = getCapabilityPool(),
-    private readonly embedder: CapabilityEmbedder = getCapabilityEmbedder()
-  ) {}
+    embedder?: CapabilityEmbedder
+  ) {
+    this.embedderOverride = embedder;
+  }
+
+  /**
+   * Resolved on first use, not at construction. The default embedder needs
+   * credentials (OPENAI_API_KEY or HCRA_EMBEDDER_URL); resolving it in the
+   * constructor made route registration, and therefore the whole API boot,
+   * throw when no embedder was configured even though no vector-store
+   * request had been made. Failure now surfaces on the ingest/search call.
+   */
+  private get embedder(): CapabilityEmbedder {
+    this.embedderOverride ??= getCapabilityEmbedder();
+    return this.embedderOverride;
+  }
 
   /**
    * Chunk + embed + persist a file's content for a vector-store association.

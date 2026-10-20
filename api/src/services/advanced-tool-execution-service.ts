@@ -214,6 +214,15 @@ export interface ToolResult {
     mimeType?: string;
     meta?: Record<string, unknown>;
   };
+  /**
+   * Real cost of this tool call, when known (e.g. `generate_media`'s
+   * generation + judge spend via `computeModalityCost`). Same shape as
+   * `@/types/tool.ToolResult.cost` — see its doc comment. Absent rather
+   * than `0` when no cost signal is known. Aggregated into
+   * `OrchestrationResult.totalCost` by the tool-execution loop in
+   * `base-strategy.ts`.
+   */
+  cost?: number;
 }
 
 export interface ToolExecutionContext {

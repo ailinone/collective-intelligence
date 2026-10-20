@@ -23,6 +23,64 @@ const serviceName = process.env.SERVICE_NAME || process.env.OTEL_SERVICE_NAME ||
 const env = process.env.NODE_ENV || 'development';
 
 /**
+ * Serializes errors for pino. Filters expected premature-close errors and
+ * falls back to a basic shape for non-Error values.
+ */
+function serializeErr(err: unknown) {
+  // Safely extract error message and code without type assertions
+  let errorMessage = '';
+  let errorCode = '';
+
+  if (err && typeof err === 'object' && err !== null && 'message' in err) {
+    const messageDescriptor = Object.getOwnPropertyDescriptor(err, 'message');
+    if (messageDescriptor) {
+      errorMessage = String(messageDescriptor.value || '').toLowerCase();
+    }
+  }
+
+  if (err && typeof err === 'object' && err !== null && 'code' in err) {
+    const codeDescriptor = Object.getOwnPropertyDescriptor(err, 'code');
+    if (codeDescriptor && typeof codeDescriptor.value === 'string') {
+      errorCode = codeDescriptor.value;
+    }
+  }
+
+  // Don't serialize premature close errors - they're expected for metrics endpoint
+  // This prevents them from being logged as errors
+  if (errorMessage === 'premature close' || errorCode === 'ERR_STREAM_PREMATURE_CLOSE') {
+    // Return minimal info for premature close (these are expected)
+    return {
+      type: 'PrematureCloseError',
+      message:
+        'Client connection closed before response completed (expected for /metrics scraping)',
+      code: errorCode || 'ERR_STREAM_PREMATURE_CLOSE',
+    };
+  }
+
+  // Use default pino error serialization for other errors
+  // Safe to cast to Error here since stdSerializers.err handles unknown types
+  if (err instanceof Error) {
+    return stdSerializers.err(err);
+  }
+
+  // For non-Error types, return a basic error object
+  // Safely extract stack property without type assertion
+  let stackValue: string | undefined;
+  if (err && typeof err === 'object' && err !== null && 'stack' in err) {
+    const stackDescriptor = Object.getOwnPropertyDescriptor(err, 'stack');
+    if (stackDescriptor && typeof stackDescriptor.value === 'string') {
+      stackValue = stackDescriptor.value;
+    }
+  }
+
+  return {
+    type: 'UnknownError',
+    message: typeof err === 'string' ? err : 'Unknown error',
+    stack: stackValue,
+  };
+}
+
+/**
  * Create logger instance
  */
 export const logger = pino({
@@ -71,59 +129,12 @@ export const logger = pino({
 
   // Custom serializer to filter out expected errors
   serializers: {
-    err: (err: unknown) => {
-      // Safely extract error message and code without type assertions
-      let errorMessage = '';
-      let errorCode = '';
-
-      if (err && typeof err === 'object' && err !== null && 'message' in err) {
-        const messageDescriptor = Object.getOwnPropertyDescriptor(err, 'message');
-        if (messageDescriptor) {
-          errorMessage = String(messageDescriptor.value || '').toLowerCase();
-        }
-      }
-
-      if (err && typeof err === 'object' && err !== null && 'code' in err) {
-        const codeDescriptor = Object.getOwnPropertyDescriptor(err, 'code');
-        if (codeDescriptor && typeof codeDescriptor.value === 'string') {
-          errorCode = codeDescriptor.value;
-        }
-      }
-
-      // Don't serialize premature close errors - they're expected for metrics endpoint
-      // This prevents them from being logged as errors
-      if (errorMessage === 'premature close' || errorCode === 'ERR_STREAM_PREMATURE_CLOSE') {
-        // Return minimal info for premature close (these are expected)
-        return {
-          type: 'PrematureCloseError',
-          message:
-            'Client connection closed before response completed (expected for /metrics scraping)',
-          code: errorCode || 'ERR_STREAM_PREMATURE_CLOSE',
-        };
-      }
-
-      // Use default pino error serialization for other errors
-      // Safe to cast to Error here since stdSerializers.err handles unknown types
-      if (err instanceof Error) {
-        return stdSerializers.err(err);
-      }
-
-      // For non-Error types, return a basic error object
-      // Safely extract stack property without type assertion
-      let stackValue: string | undefined;
-      if (err && typeof err === 'object' && err !== null && 'stack' in err) {
-        const stackDescriptor = Object.getOwnPropertyDescriptor(err, 'stack');
-        if (stackDescriptor && typeof stackDescriptor.value === 'string') {
-          stackValue = stackDescriptor.value;
-        }
-      }
-
-      return {
-        type: 'UnknownError',
-        message: typeof err === 'string' ? err : 'Unknown error',
-        stack: stackValue,
-      };
-    },
+    // Many call sites log `{ error }` rather than `{ err }`. Without a serializer
+    // under that key pino prints an Error as `{}`, dropping message and stack.
+    // Error instances get the same treatment as `err`; strings and plain objects
+    // pass through untouched so existing log output is unchanged.
+    error: (error: unknown) => (error instanceof Error ? serializeErr(error) : error),
+    err: serializeErr,
   },
 });
 

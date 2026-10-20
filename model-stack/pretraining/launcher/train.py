@@ -23,20 +23,20 @@ Usage
     # Resume from latest checkpoint
     accelerate launch ... train.py --config ... --resume
 """
+
 from __future__ import annotations
 
 import hashlib
 import json
 import logging
 import math
-import os
 import signal
 import sys
 import time
-from contextlib import nullcontext
+from collections.abc import Iterator
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any
 
 import click
 import torch
@@ -44,7 +44,7 @@ import torch.nn as nn
 import yaml
 from accelerate import Accelerator, DistributedDataParallelKwargs
 from accelerate.utils import set_seed
-from torch.utils.data import DataLoader, Dataset, IterableDataset
+from torch.utils.data import DataLoader, IterableDataset
 
 logger = logging.getLogger(__name__)
 
@@ -52,7 +52,7 @@ logger = logging.getLogger(__name__)
 _SHUTDOWN_REQUESTED = False
 
 
-def _signal_handler(signum, frame):
+def _signal_handler(signum: int, frame: Any) -> None:
     global _SHUTDOWN_REQUESTED
     _SHUTDOWN_REQUESTED = True
     logger.warning("Shutdown requested (signal %s). Will save checkpoint and exit.", signum)
@@ -87,7 +87,7 @@ class TrainConfig:
     # optimizer
     lr: float = 3e-4
     weight_decay: float = 0.1
-    betas: tuple = (0.9, 0.95)
+    betas: tuple[float, float] = (0.9, 0.95)
     eps: float = 1e-8
 
     # scheduler
@@ -122,8 +122,8 @@ class TrainConfig:
     log_interval: int = 10
     wandb_enabled: bool = True
     wandb_project: str = "ailin-pretrain"
-    wandb_entity: Optional[str] = None
-    wandb_tags: list = field(default_factory=lambda: ["1b", "pretrain"])
+    wandb_entity: str | None = None
+    wandb_tags: list[str] = field(default_factory=lambda: ["1b", "pretrain"])
 
     # data
     train_path: str = "./data/pretrain/train"
@@ -137,10 +137,10 @@ class TrainConfig:
     gradient_checkpointing: bool = True
 
     # raw yaml for hashing
-    _raw: Dict[str, Any] = field(default_factory=dict, repr=False)
+    _raw: dict[str, Any] = field(default_factory=dict, repr=False)
 
     @classmethod
-    def from_yaml(cls, path: str) -> "TrainConfig":
+    def from_yaml(cls, path: str) -> TrainConfig:
         with open(path) as f:
             raw = yaml.safe_load(f)
 
@@ -211,8 +211,12 @@ class TrainConfig:
     def config_hash(self) -> str:
         """Deterministic hash of the model-relevant config (for checkpoint validation)."""
         keys = [
-            "hidden_size", "num_attention_heads", "num_key_value_heads",
-            "num_hidden_layers", "intermediate_size", "vocab_size",
+            "hidden_size",
+            "num_attention_heads",
+            "num_key_value_heads",
+            "num_hidden_layers",
+            "intermediate_size",
+            "vocab_size",
             "max_position_embeddings",
         ]
         payload = {k: getattr(self, k) for k in keys}
@@ -265,14 +269,19 @@ class PreTokenizedDataset(IterableDataset):
         self.data_path = data_path
         self.max_seq_length = max_seq_length
         self.seed = seed
-        self._real_data = None
+        # 2026-10-18 Any: holds a HuggingFace datasets.Dataset when real data loads
+        self._real_data: Any = None
         self._try_load()
 
-    def _try_load(self):
+    def _try_load(self) -> None:
         path = Path(self.data_path)
         if path.exists() and path.is_dir():
             try:
-                from datasets import load_from_disk
+                # 2026-10-18 attr-defined ignore: the local datasets/ catalog dir
+                # shadows the HuggingFace `datasets` package, which is not
+                # installed in the lint env
+                from datasets import load_from_disk  # type: ignore[attr-defined]  # 2026-10-18
+
                 self._real_data = load_from_disk(str(path))
                 logger.info("Loaded real dataset from %s (%d examples)", path, len(self._real_data))
             except Exception:
@@ -280,6 +289,7 @@ class PreTokenizedDataset(IterableDataset):
                 npy_files = sorted(path.glob("*.npy"))
                 if npy_files:
                     import numpy as np
+
                     self._mmap_files = [np.load(str(f), mmap_mode="r") for f in npy_files]
                     logger.info("Loaded %d memmap shards from %s", len(npy_files), path)
                 else:
@@ -287,7 +297,7 @@ class PreTokenizedDataset(IterableDataset):
         else:
             logger.warning("Data path %s does not exist; using synthetic data.", path)
 
-    def __iter__(self):
+    def __iter__(self) -> Iterator[dict[str, Any]]:
         worker_info = torch.utils.data.get_worker_info()
         worker_id = worker_info.id if worker_info else 0
         rng = torch.Generator().manual_seed(self.seed + worker_id)
@@ -317,7 +327,7 @@ class PreTokenizedDataset(IterableDataset):
                 }
 
 
-def build_dataloaders(cfg: TrainConfig):
+def build_dataloaders(cfg: TrainConfig) -> tuple[DataLoader, DataLoader]:
     train_dataset = PreTokenizedDataset(cfg.train_path, cfg.max_seq_length, cfg.seed)
     val_dataset = PreTokenizedDataset(cfg.val_path, cfg.max_seq_length, cfg.seed + 1000)
 
@@ -345,7 +355,7 @@ def get_cosine_schedule_with_warmup(
     warmup_steps: int,
     max_steps: int,
     min_lr_ratio: float = 0.1,
-):
+) -> torch.optim.lr_scheduler.LambdaLR:
     """Cosine schedule with linear warmup and minimum LR floor."""
 
     def lr_lambda(current_step: int) -> float:
@@ -373,7 +383,8 @@ def estimate_mfu(
     n_params = sum(p.numel() for p in model.parameters())
     flops_per_sec = 6 * n_params * tokens_per_sec
     total_gpu_flops = gpu_flops_bf16 * num_gpus
-    return flops_per_sec / total_gpu_flops
+    # 2026-10-18 float() boundary conversion: p.numel() types as Any without torch stubs
+    return float(flops_per_sec / total_gpu_flops)
 
 
 # ── Evaluation ───────────────────────────────────────────────
@@ -383,7 +394,7 @@ def evaluate(
     val_loader: DataLoader,
     accelerator: Accelerator,
     eval_steps: int,
-) -> Dict[str, float]:
+) -> dict[str, float]:
     """Run evaluation loop and return val_loss + perplexity."""
     model.eval()
     total_loss = 0.0
@@ -402,9 +413,13 @@ def evaluate(
 
         # Gather across processes
         gathered_loss = accelerator.gather(loss.unsqueeze(0)).sum().item()
-        gathered_tokens = accelerator.gather(
-            torch.tensor([num_tokens], device=accelerator.device, dtype=torch.float)
-        ).sum().item()
+        gathered_tokens = (
+            accelerator.gather(
+                torch.tensor([num_tokens], device=accelerator.device, dtype=torch.float)
+            )
+            .sum()
+            .item()
+        )
 
         total_loss += gathered_loss * num_tokens
         total_tokens += gathered_tokens
@@ -424,8 +439,8 @@ def save_checkpoint(
     scheduler: Any,
     step: int,
     cfg: TrainConfig,
-    metrics: Dict[str, float],
-):
+    metrics: dict[str, float],
+) -> None:
     save_path = Path(cfg.save_dir) / f"step-{step}"
     save_path.mkdir(parents=True, exist_ok=True)
 
@@ -446,7 +461,7 @@ def save_checkpoint(
     logger.info("Saved checkpoint at step %d to %s", step, save_path)
 
 
-def load_latest_checkpoint(cfg: TrainConfig) -> Optional[Path]:
+def load_latest_checkpoint(cfg: TrainConfig) -> Path | None:
     ckpt_dir = Path(cfg.save_dir)
     if not ckpt_dir.exists():
         return None
@@ -457,7 +472,7 @@ def load_latest_checkpoint(cfg: TrainConfig) -> Optional[Path]:
     return checkpoints[-1] if checkpoints else None
 
 
-def prune_checkpoints(cfg: TrainConfig):
+def prune_checkpoints(cfg: TrainConfig) -> None:
     """Keep only the last N checkpoints + best K by val loss."""
     ckpt_dir = Path(cfg.save_dir)
     if not ckpt_dir.exists():
@@ -485,17 +500,18 @@ def prune_checkpoints(cfg: TrainConfig):
     best_set = {ckpt for ckpt, _ in best_by_loss[: cfg.keep_best_k]}
 
     # Keep last-N
-    keep_set = set(checkpoints[-cfg.keep_last_n:]) | best_set
+    keep_set = set(checkpoints[-cfg.keep_last_n :]) | best_set
 
     for ckpt in checkpoints:
         if ckpt not in keep_set:
             import shutil
+
             shutil.rmtree(ckpt)
             logger.info("Pruned checkpoint: %s", ckpt)
 
 
 # ── Main training loop ───────────────────────────────────────
-def train(cfg: TrainConfig, resume: bool = False):
+def train(cfg: TrainConfig, resume: bool = False) -> None:
     # TF32
     if cfg.tf32:
         torch.backends.cuda.matmul.allow_tf32 = True
@@ -546,7 +562,9 @@ def train(cfg: TrainConfig, resume: bool = False):
     no_decay = {"bias", "LayerNorm.weight", "layer_norm.weight", "norm.weight"}
     param_groups = [
         {
-            "params": [p for n, p in model.named_parameters() if not any(nd in n for nd in no_decay)],
+            "params": [
+                p for n, p in model.named_parameters() if not any(nd in n for nd in no_decay)
+            ],
             "weight_decay": cfg.weight_decay,
         },
         {
@@ -563,7 +581,10 @@ def train(cfg: TrainConfig, resume: bool = False):
 
     # Scheduler
     scheduler = get_cosine_schedule_with_warmup(
-        optimizer, cfg.warmup_steps, cfg.max_steps, cfg.min_lr_ratio,
+        optimizer,
+        cfg.warmup_steps,
+        cfg.max_steps,
+        cfg.min_lr_ratio,
     )
 
     # Data
@@ -572,7 +593,11 @@ def train(cfg: TrainConfig, resume: bool = False):
 
     # Prepare with accelerate
     model, optimizer, train_loader, val_loader, scheduler = accelerator.prepare(
-        model, optimizer, train_loader, val_loader, scheduler,
+        model,
+        optimizer,
+        train_loader,
+        val_loader,
+        scheduler,
     )
 
     # Resume
@@ -608,7 +633,15 @@ def train(cfg: TrainConfig, resume: bool = False):
     while global_step < cfg.max_steps:
         if _SHUTDOWN_REQUESTED:
             logger.warning("Graceful shutdown: saving checkpoint at step %d", global_step)
-            save_checkpoint(accelerator, model, optimizer, scheduler, global_step, cfg, {"val_loss": best_val_loss})
+            save_checkpoint(
+                accelerator,
+                model,
+                optimizer,
+                scheduler,
+                global_step,
+                cfg,
+                {"val_loss": best_val_loss},
+            )
             break
 
         # Get batch
@@ -661,7 +694,9 @@ def train(cfg: TrainConfig, resume: bool = False):
                 log_dict = {
                     "train/loss": avg_loss,
                     "train/lr": current_lr,
-                    "train/grad_norm": grad_norm.item() if isinstance(grad_norm, torch.Tensor) else grad_norm,
+                    "train/grad_norm": (
+                        grad_norm.item() if isinstance(grad_norm, torch.Tensor) else grad_norm
+                    ),
                     "train/tokens_per_sec": tokens_per_sec,
                     "train/mfu": mfu,
                     "train/step": global_step,
@@ -670,9 +705,12 @@ def train(cfg: TrainConfig, resume: bool = False):
                 if accelerator.is_main_process:
                     logger.info(
                         "step=%d loss=%.4f lr=%.2e grad_norm=%.3f tok/s=%.0f mfu=%.2f%%",
-                        global_step, avg_loss, current_lr,
+                        global_step,
+                        avg_loss,
+                        current_lr,
                         log_dict["train/grad_norm"],
-                        tokens_per_sec, mfu * 100,
+                        tokens_per_sec,
+                        mfu * 100,
                     )
 
                 if cfg.wandb_enabled:
@@ -690,7 +728,9 @@ def train(cfg: TrainConfig, resume: bool = False):
                 if accelerator.is_main_process:
                     logger.info(
                         "Eval step=%d val_loss=%.4f perplexity=%.2f",
-                        global_step, eval_metrics["val_loss"], eval_metrics["perplexity"],
+                        global_step,
+                        eval_metrics["val_loss"],
+                        eval_metrics["perplexity"],
                     )
 
                 if cfg.wandb_enabled:
@@ -725,10 +765,16 @@ def train(cfg: TrainConfig, resume: bool = False):
 
 # ── CLI ──────────────────────────────────────────────────────
 @click.command()
-@click.option("--config", required=True, type=click.Path(exists=True), help="Path to YAML config file.")
+@click.option(
+    "--config", required=True, type=click.Path(exists=True), help="Path to YAML config file."
+)
 @click.option("--resume", is_flag=True, default=False, help="Resume from latest checkpoint.")
-@click.option("--override", multiple=True, help="Override config values, e.g. --override training.max_steps=50000")
-def main(config: str, resume: bool, override: tuple):
+@click.option(
+    "--override",
+    multiple=True,
+    help="Override config values, e.g. --override training.max_steps=50000",
+)
+def main(config: str, resume: bool, override: tuple[str, ...]) -> None:
     """Launch pre-training for Ailin-1B."""
     cfg = TrainConfig.from_yaml(config)
 
@@ -741,7 +787,7 @@ def main(config: str, resume: bool, override: tuple):
         if hasattr(cfg, attr_name):
             current = getattr(cfg, attr_name)
             cast_type = type(current)
-            if cast_type == bool:
+            if cast_type is bool:
                 setattr(cfg, attr_name, value.lower() in ("true", "1", "yes"))
             else:
                 setattr(cfg, attr_name, cast_type(value))

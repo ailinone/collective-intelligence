@@ -25,25 +25,24 @@ Usage
         --base-model ./models/ailin-1b-sft-merged \
         --dataset ./data/preference/pairs.jsonl
 """
+
 from __future__ import annotations
 
 import json
 import logging
 import os
-import sys
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Any
 
 import click
 import torch
-import torch.nn as nn
-from datasets import Dataset, load_dataset, load_from_disk
 from transformers import (
     AutoModelForSequenceClassification,
     AutoTokenizer,
-    TrainingArguments,
 )
 from trl import RewardConfig, RewardTrainer
+
+from datasets import DatasetDict, load_dataset, load_from_disk  # type: ignore[attr-defined]
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
@@ -56,7 +55,7 @@ def load_preference_dataset(
     max_length: int = 4096,
     eval_split: float = 0.05,
     seed: int = 42,
-) -> dict:
+) -> DatasetDict:
     """
     Load preference pairs and format for RewardTrainer.
     Expected input format (JSONL):
@@ -81,7 +80,7 @@ def load_preference_dataset(
 
     logger.info("Loaded %d preference pairs", len(dataset))
 
-    def format_pair(example):
+    def format_pair(example: dict[str, Any]) -> dict[str, list[int]]:
         """Format into chosen/rejected text pairs for RewardTrainer."""
         prompt = example.get("prompt", "")
 
@@ -130,7 +129,7 @@ def load_preference_dataset(
 def load_reward_model(
     base_model_path: str,
     torch_dtype: torch.dtype = torch.bfloat16,
-):
+) -> tuple[Any, Any]:
     """
     Load base model with a reward (sequence classification) head.
     The head projects the last hidden state to a single scalar.
@@ -162,7 +161,7 @@ def load_reward_model(
 
 
 # ── Evaluation metrics ───────────────────────────────────────
-def compute_reward_metrics(eval_pred) -> Dict[str, float]:
+def compute_reward_metrics(eval_pred: Any) -> dict[str, float]:
     """Compute accuracy: how often the model assigns higher reward to chosen."""
     predictions = eval_pred.predictions
     # RewardTrainer outputs [chosen_rewards, rejected_rewards]
@@ -190,7 +189,9 @@ def compute_reward_metrics(eval_pred) -> Dict[str, float]:
 @click.command()
 @click.option("--base-model", required=True, type=str, help="Path to SFT model as base.")
 @click.option("--dataset", required=True, type=str, help="Path to preference pairs dataset.")
-@click.option("--output-dir", default="./models/ailin-1b-reward", type=str, help="Output directory.")
+@click.option(
+    "--output-dir", default="./models/ailin-1b-reward", type=str, help="Output directory."
+)
 @click.option("--epochs", default=1, type=int, help="Number of training epochs.")
 @click.option("--lr", default=1.5e-5, type=float, help="Learning rate.")
 @click.option("--batch-size", default=4, type=int, help="Per-device batch size.")
@@ -212,8 +213,8 @@ def main(
     eval_split: float,
     wandb_project: str,
     seed: int,
-    resume_from: Optional[str],
-):
+    resume_from: str | None,
+) -> None:
     """Train a reward model on preference pairs."""
     torch.manual_seed(seed)
 
@@ -223,7 +224,11 @@ def main(
     # Load dataset
     logger.info("Loading preference dataset from %s", dataset)
     data_splits = load_preference_dataset(
-        dataset, tokenizer, max_length=max_length, eval_split=eval_split, seed=seed,
+        dataset,
+        tokenizer,
+        max_length=max_length,
+        eval_split=eval_split,
+        seed=seed,
     )
 
     # W&B

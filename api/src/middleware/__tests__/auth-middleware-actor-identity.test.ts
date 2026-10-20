@@ -193,4 +193,117 @@ describe('authenticate() forwarded actor identity', () => {
 
     expect((request as unknown as { userId?: string }).userId).toBe(SERVICE_ACCOUNT_USER_ID);
   });
+
+  // REGRESSION: in production the GLOBAL apiKeyAuthMiddleware (index.ts)
+  // authenticates the key and populates userId/organizationId BEFORE
+  // authenticate() runs, so getExistingAuthIds() short-circuited and the
+  // actor swap below never executed — attribution silently stayed on the
+  // key's service-account user for ALL key-authed traffic.
+  it('overrides userId even when a prior middleware already populated the identity', async () => {
+    verifyServiceTokenMock.mockResolvedValue({
+      clientId: 'ailin-chat-server',
+      tokenType: 'service',
+      scopes: ['chat:forward-identity'],
+    });
+
+    const request = makeRequest({
+      ...API_KEY_HEADERS,
+      'x-ailin-actor-token': 'signed.actor.token',
+      'x-acting-user': REAL_END_USER_ID,
+    }) as unknown as {
+      userId?: string;
+      organizationId?: string;
+      headers: Record<string, string>;
+    };
+    // Exactly the state the global apiKeyAuthMiddleware leaves behind:
+    request.userId = SERVICE_ACCOUNT_USER_ID;
+    request.organizationId = ORG_ID;
+    const reply = makeReply();
+
+    await authenticate(request, reply as unknown as Parameters<typeof authenticate>[1]);
+
+    expect(request.userId).toBe(REAL_END_USER_ID);
+    // Authorization boundary still untouched: the KEY's organization.
+    expect(request.organizationId).toBe(ORG_ID);
+  });
+
+  // ── JIT-provisioning hints (x-acting-user-email / x-acting-user-tenant) ──
+  // Captured ONLY inside the actor-token-verified branch so downstream
+  // provisioning (auto-preset-billing) can trust them.
+  const HINT_EMAIL = 'invited.user@ailin.one';
+  const HINT_TENANT = 'cccccccc-2222-2222-2222-222222222222';
+
+  it('captures well-formed provisioning hints in the verified branch', async () => {
+    verifyServiceTokenMock.mockResolvedValue({
+      clientId: 'ailin-chat-server',
+      tokenType: 'service',
+      scopes: ['chat:forward-identity'],
+    });
+
+    const request = makeRequest({
+      ...API_KEY_HEADERS,
+      'x-ailin-actor-token': 'signed.actor.token',
+      'x-acting-user': REAL_END_USER_ID,
+      'x-acting-user-email': '  Invited.User@Ailin.One  ',
+      'x-acting-user-tenant': HINT_TENANT,
+    });
+    const reply = makeReply();
+
+    await authenticate(request, reply as unknown as Parameters<typeof authenticate>[1]);
+
+    const extended = request as unknown as {
+      actingUserEmail?: string;
+      actingUserTenant?: string;
+    };
+    expect(extended.actingUserEmail).toBe(HINT_EMAIL); // trimmed + lowercased
+    expect(extended.actingUserTenant).toBe(HINT_TENANT);
+  });
+
+  it('drops malformed hint values (never lands garbage on the request)', async () => {
+    verifyServiceTokenMock.mockResolvedValue({
+      clientId: 'ailin-chat-server',
+      tokenType: 'service',
+      scopes: ['chat:forward-identity'],
+    });
+
+    const request = makeRequest({
+      ...API_KEY_HEADERS,
+      'x-ailin-actor-token': 'signed.actor.token',
+      'x-acting-user': REAL_END_USER_ID,
+      'x-acting-user-email': 'not-an-email',
+      'x-acting-user-tenant': 'not-a-uuid',
+    });
+    const reply = makeReply();
+
+    await authenticate(request, reply as unknown as Parameters<typeof authenticate>[1]);
+
+    const extended = request as unknown as {
+      actingUserEmail?: string;
+      actingUserTenant?: string;
+    };
+    expect(extended.actingUserEmail).toBeUndefined();
+    expect(extended.actingUserTenant).toBeUndefined();
+  });
+
+  it('never captures hints without a valid actor token (anti-spoof)', async () => {
+    // No actor token at all: even perfectly-shaped hint headers must NOT be
+    // captured — an outside client must never be able to drive JIT
+    // provisioning by setting headers on someone else's API key request.
+    const request = makeRequest({
+      ...API_KEY_HEADERS,
+      'x-acting-user': REAL_END_USER_ID,
+      'x-acting-user-email': HINT_EMAIL,
+      'x-acting-user-tenant': HINT_TENANT,
+    });
+    const reply = makeReply();
+
+    await authenticate(request, reply as unknown as Parameters<typeof authenticate>[1]);
+
+    const extended = request as unknown as {
+      actingUserEmail?: string;
+      actingUserTenant?: string;
+    };
+    expect(extended.actingUserEmail).toBeUndefined();
+    expect(extended.actingUserTenant).toBeUndefined();
+  });
 });

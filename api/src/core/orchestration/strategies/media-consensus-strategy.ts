@@ -165,12 +165,20 @@ export interface MediaConsensusResult {
   /** Full audit trail — every candidate generated, gated, and judged. Feeds
    *  the persisted plan artifact described in the architecture's §3.3. */
   readonly candidates: readonly MediaCandidateRecord[];
-  /** Billable judge-call cost across all critics and all candidates.
-   *  Generation cost is not tracked here — every media-generation result in
-   *  this codebase reports `cost_usd=0` uniformly today (see
-   *  `AilinArtifact.cost_usd` doc comment); this is a pre-existing gap, not
-   *  one introduced by this strategy. */
+  /** Billable judge-call cost across all critics and all candidates. */
   readonly totalJudgeCostUsd: number;
+  /**
+   * Billable generation cost across all N candidates (every candidate is a
+   * real, paid provider call, not just the winner) — sourced from each
+   * candidate artifact's `cost_usd` via `computeModalityCost`
+   * (`video`/`images-orchestration-service.ts`, wired 2026-09-27). Most
+   * candidates resolve to an absent/`null` `cost_usd` today (provider
+   * responses rarely carry a raw cost or token count for image/video
+   * generation) — this sum is honest about what's actually known, never a
+   * fabricated estimate; it undercounts real spend until per-unit provider
+   * pricing exists in the model catalog.
+   */
+  readonly totalGenerationCostUsd: number;
   readonly totalDurationMs: number;
   /** True when every candidate was an outlier (gate failure, generation
    *  failure, or a `fail` verdict) and the "best" pick is a degraded
@@ -248,6 +256,10 @@ export class MediaConsensusStrategy {
       (sum, c) => sum + c.criticResults.reduce((s, cr) => s + (cr.result.judgeCostUsd ?? 0), 0),
       0
     );
+    const totalGenerationCostUsd = candidates.reduce(
+      (sum, c) => sum + (c.artifact.cost_usd ?? 0),
+      0
+    );
 
     const nonOutliers = candidates.filter((c) => !c.outlierDetection.outlier);
     const pool = nonOutliers.length > 0 ? nonOutliers : candidates;
@@ -262,6 +274,7 @@ export class MediaConsensusStrategy {
         bestCandidateIndex: best?.index,
         degraded,
         totalJudgeCostUsd,
+        totalGenerationCostUsd,
       },
       'MediaConsensusStrategy completed'
     );
@@ -271,6 +284,7 @@ export class MediaConsensusStrategy {
       bestArtifact: best?.artifact,
       candidates,
       totalJudgeCostUsd,
+      totalGenerationCostUsd,
       totalDurationMs: Date.now() - startTime,
       degraded,
       degradedReason: degraded ? 'all_candidates_outliers' : undefined,
@@ -563,6 +577,7 @@ function videoResultToArtifact(
     provider: result.provider,
     model: result.modelUsed,
     duration_ms: durationMs,
+    ...(typeof result.cost === 'number' ? { cost_usd: result.cost } : {}),
   };
 }
 
@@ -593,5 +608,6 @@ function imageResultToArtifact(
     provider: result.provider,
     model: result.modelUsed,
     duration_ms: durationMs,
+    ...(typeof result.cost === 'number' ? { cost_usd: result.cost } : {}),
   };
 }

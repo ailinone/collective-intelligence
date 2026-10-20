@@ -17,13 +17,11 @@ contaminated samples for removal.
 
 from __future__ import annotations
 
-import hashlib
 import json
 import logging
 import time
-from collections import defaultdict
 from pathlib import Path
-from typing import Any, Iterator
+from typing import Any
 
 import click
 import jsonlines
@@ -36,6 +34,7 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # N-gram extraction with hashing for memory efficiency
 # ---------------------------------------------------------------------------
+
 
 def extract_ngrams_hashed(text: str, n: int = 13) -> set[int]:
     """Extract word-level n-grams and return their xxhash64 digests."""
@@ -60,6 +59,7 @@ def extract_ngrams_text(text: str, n: int = 13) -> list[str]:
 # ---------------------------------------------------------------------------
 # Benchmark loaders
 # ---------------------------------------------------------------------------
+
 
 class BenchmarkLoader:
     """Load benchmark datasets for contamination checking."""
@@ -117,7 +117,10 @@ class BenchmarkLoader:
                 f"Available: {list(cls.KNOWN_BENCHMARKS.keys())}"
             )
 
-        from datasets import load_dataset
+        # 2026-10-18 mypy resolves the repo's own datasets/ data directory
+        # (an empty namespace package) instead of the HF library, so it cannot
+        # see load_dataset; verified the symbol exists in site-packages.
+        from datasets import load_dataset  # type: ignore[attr-defined]
 
         texts: list[str] = []
         hf_config = spec.get("hf_config")
@@ -125,7 +128,9 @@ class BenchmarkLoader:
         for split in spec["splits"]:
             try:
                 if hf_config:
-                    ds = load_dataset(spec["hf_name"], hf_config, split=split, trust_remote_code=True)
+                    ds = load_dataset(
+                        spec["hf_name"], hf_config, split=split, trust_remote_code=True
+                    )
                 else:
                     ds = load_dataset(spec["hf_name"], split=split, trust_remote_code=True)
             except Exception as e:
@@ -174,6 +179,7 @@ class BenchmarkLoader:
 # Contamination detection
 # ---------------------------------------------------------------------------
 
+
 def build_training_ngram_index(
     training_path: Path,
     ngram_size: int = 13,
@@ -199,7 +205,12 @@ def build_training_ngram_index(
             if max_docs is not None and num_docs >= max_docs:
                 break
 
-    logger.info("Training index: %d unique %d-grams from %d documents", len(ngram_index), ngram_size, num_docs)
+    logger.info(
+        "Training index: %d unique %d-grams from %d documents",
+        len(ngram_index),
+        ngram_size,
+        num_docs,
+    )
     return ngram_index, num_docs
 
 
@@ -218,25 +229,29 @@ def check_contamination(
     for idx, text in enumerate(benchmark_texts):
         sample_ngrams = extract_ngrams_hashed(text, n=ngram_size)
         if not sample_ngrams:
-            results.append({
-                "index": idx,
-                "contaminated": False,
-                "overlap_ratio": 0.0,
-                "num_ngrams": 0,
-                "num_overlapping": 0,
-            })
+            results.append(
+                {
+                    "index": idx,
+                    "contaminated": False,
+                    "overlap_ratio": 0.0,
+                    "num_ngrams": 0,
+                    "num_overlapping": 0,
+                }
+            )
             continue
 
         overlapping = sample_ngrams & training_ngrams
         overlap_ratio = len(overlapping) / len(sample_ngrams)
 
-        results.append({
-            "index": idx,
-            "contaminated": overlap_ratio > 0.0,
-            "overlap_ratio": round(overlap_ratio, 6),
-            "num_ngrams": len(sample_ngrams),
-            "num_overlapping": len(overlapping),
-        })
+        results.append(
+            {
+                "index": idx,
+                "contaminated": overlap_ratio > 0.0,
+                "overlap_ratio": round(overlap_ratio, 6),
+                "num_ngrams": len(sample_ngrams),
+                "num_overlapping": len(overlapping),
+            }
+        )
 
     return results
 
@@ -244,6 +259,7 @@ def check_contamination(
 # ---------------------------------------------------------------------------
 # Main pipeline
 # ---------------------------------------------------------------------------
+
 
 def run_contamination_detection(
     training_path: Path,
@@ -309,12 +325,8 @@ def run_contamination_detection(
             "contamination_rate_percent": round(
                 100.0 * len(contaminated_samples) / len(bench_texts), 2
             ),
-            "any_overlap_rate_percent": round(
-                100.0 * len(any_overlap) / len(bench_texts), 2
-            ),
-            "mean_overlap_ratio": round(
-                sum(overlap_ratios) / max(len(overlap_ratios), 1), 6
-            ),
+            "any_overlap_rate_percent": round(100.0 * len(any_overlap) / len(bench_texts), 2),
+            "mean_overlap_ratio": round(sum(overlap_ratios) / max(len(overlap_ratios), 1), 6),
             "flagged_indices": [r["index"] for r in contaminated_samples],
         }
         overall_report["benchmarks"][bench_name] = bench_report
@@ -349,6 +361,7 @@ def run_contamination_detection(
 # Training data cleaner
 # ---------------------------------------------------------------------------
 
+
 def remove_contaminated_samples(
     training_path: Path,
     output_path: Path,
@@ -361,9 +374,10 @@ def remove_contaminated_samples(
     kept = 0
     removed = 0
 
-    with jsonlines.open(training_path, mode="r") as reader, \
-         jsonlines.open(output_path, mode="w") as writer:
-
+    with (
+        jsonlines.open(training_path, mode="r") as reader,
+        jsonlines.open(output_path, mode="w") as writer,
+    ):
         for record in tqdm(reader, desc="Cleaning training data", unit=" docs"):
             text = record.get(text_field, "")
             sample_ngrams = extract_ngrams_hashed(text, n=ngram_size)
@@ -386,20 +400,41 @@ def remove_contaminated_samples(
 # CLI
 # ---------------------------------------------------------------------------
 
+
 @click.command("contamination-detect")
-@click.option("--training-data", required=True, type=click.Path(exists=True), help="Training data JSONL file")
+@click.option(
+    "--training-data",
+    required=True,
+    type=click.Path(exists=True),
+    help="Training data JSONL file",
+)
 @click.option(
     "--benchmarks",
     required=True,
-    help="Comma-separated benchmark names (mmlu, humaneval, gsm8k, hellaswag, arc_challenge, winogrande, truthfulqa)",
+    help="Comma-separated benchmark names "
+    "(mmlu, humaneval, gsm8k, hellaswag, arc_challenge, winogrande, truthfulqa)",
 )
 @click.option("--output-dir", required=True, type=click.Path(), help="Output directory for reports")
 @click.option("--ngram-size", default=13, type=int, help="N-gram size for overlap detection")
-@click.option("--threshold", default=0.5, type=float, help="Overlap ratio threshold to flag as contaminated")
+@click.option(
+    "--threshold",
+    default=0.5,
+    type=float,
+    help="Overlap ratio threshold to flag as contaminated",
+)
 @click.option("--text-field", default="text", help="Field name containing document text")
 @click.option("--max-training-docs", default=None, type=int, help="Max training docs to index")
-@click.option("--clean-output", default=None, type=click.Path(), help="Output cleaned training data JSONL (optional)")
-@click.option("--log-level", default="INFO", type=click.Choice(["DEBUG", "INFO", "WARNING", "ERROR"]))
+@click.option(
+    "--clean-output",
+    default=None,
+    type=click.Path(),
+    help="Output cleaned training data JSONL (optional)",
+)
+@click.option(
+    "--log-level",
+    default="INFO",
+    type=click.Choice(["DEBUG", "INFO", "WARNING", "ERROR"]),
+)
 def cli(
     training_data: str,
     benchmarks: str,
@@ -430,11 +465,11 @@ def cli(
         max_training_docs=max_training_docs,
     )
 
-    click.echo(f"\n--- Contamination Detection Report ---")
+    click.echo("\n--- Contamination Detection Report ---")
     click.echo(f"Training docs indexed: {report['training_docs']:>10,}")
     click.echo(f"Unique {ngram_size}-grams:     {report['training_unique_ngrams']:>10,}")
     click.echo(f"Threshold:             {threshold:>10.2f}")
-    click.echo(f"\nPer-benchmark results:")
+    click.echo("\nPer-benchmark results:")
 
     for bench_name, bench_data in report["benchmarks"].items():
         if "error" in bench_data:

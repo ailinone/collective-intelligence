@@ -9,30 +9,37 @@
 
 /**
  * The prepaid wallet gate is deliberately EXCLUDED from the shared
- * orchestration gate, and this test is the mechanical enforcement of that.
+ * orchestration gate, and the first describe block below is the mechanical
+ * enforcement of that.
  *
  * Why it matters: `PREPAID_WALLET_GATE_ENABLED` is a known landmine on exactly
  * the routes the shared gate is wired into. `normalizeChatRequest` rewrites
  * every `ailin-*` alias to the literal model `'auto'`, and `resolveTier` reads
  * `req.model` FIRST (`prepaid-wallet-gate.ts:56-58`), so `'auto'` resolves to a
- * real chargeable pricing cell. Org wallets are $0 with no top-up path
- * (the payments service is not deployed). The alias-pricing fix merged
- * separately (#266); spreading the wallet gate to more routes is still its own
- * decision, not a side effect of this one. Doing it here would multiply the
- * blast radius from one route to four.
+ * real chargeable pricing cell. The alias-pricing fix merged separately (#266).
+ *
+ * NOTE (2026-09-30): the older rationale here — "org wallets are $0 with no
+ * top-up path (the payments service is not deployed), so spreading the wallet
+ * to more routes multiplies the blast radius" — is OBSOLETE. The top-up loop
+ * closed end-to-end (billing checkout/credits → Stripe webhook →
+ * topup_ci_wallet) and PREPAID_WALLET_GATE_ENABLED went ON in production, which
+ * INVERTED the hazard: these routes execute the same tiered cells as
+ * /v1/chat/completions, so running them WITHOUT a hold/debit became the
+ * revenue hole. The route-level block below now enforces the pairing contract
+ * (gate+debit together) instead of absence.
  *
  * The primary barrier is structural: `OrchestrationGateInput` carries no
  * `messages`, no `max_tokens`, no `ailin_alias` and no `ChatRequest`, so
  * `gateChatRequest` and `gateTierRequest` cannot be called from inside the
- * helper without a type error. This test is the second barrier — it fails
+ * helper without a type error. That test is the second barrier — it fails
  * loudly if a future change "helpfully" widens the input type and adds the
  * import.
  *
  * There is a third, independent blocker worth knowing about: 429 (quota) and
  * 403 (governance) are already declared on these routes in `openapi-spec.json`,
  * but 402 — which `prepaid-wallet-gate.ts:122-134` returns — is declared on
- * none of them, so adding the wallet here would also trip the OpenAPI contract
- * workflow.
+ * none of them (the runtime returns match the pre-existing chat-routes
+ * pattern; declaring them in the extracted spec is a separate follow-up).
  */
 
 import { describe, it, expect } from 'vitest';
@@ -69,11 +76,16 @@ describe('orchestration gate — wallet exclusion', () => {
     expect(GATE_CODE).not.toContain('debitChatRequest');
   });
 
-  it('imports exactly the two intended gate services', () => {
+  it('imports exactly the intended gate services', () => {
     const gateImports = [...GATE_CODE.matchAll(/from '(@\/services\/[^']+)'/g)].map((m) => m[1]);
+    // plan-quota-gate joined deliberately (2026-10-01): the PLAN's daily
+    // api_requests ceiling is org-scoped admission state, exactly what this
+    // shared gate exists to enforce — same reasoning that put checkQuota
+    // here. It is NOT a wallet/pricing-tier import (asserted above).
     expect(gateImports.sort()).toEqual([
       '@/services/org-governance-service',
       '@/services/org-governance-service',
+      '@/services/plan-quota-gate',
       '@/services/quota-service',
       '@/services/security-audit-service',
     ]);
@@ -87,6 +99,10 @@ describe('orchestration gate — wallet exclusion', () => {
     // Recording stays at the single `trackChatUsage` chokepoint. If the gate
     // recorded too, the routes that already call trackChatUsage would
     // double-debit and double-increment the quota counter.
+    // (plan-quota-gate's Redis INCR is NOT usage recording: it is a windowed
+    // admission counter per (org, UTC-day), consumed exactly once per
+    // admitted request — the same class as a rate limiter, not the
+    // usage_quotas/wallet stores this assertion protects.)
     expect(GATE_CODE).not.toContain('trackChatUsage');
     expect(GATE_CODE).not.toContain('recordQuotaUsage');
     expect(GATE_CODE).not.toContain('recordUsageEvents');
@@ -130,24 +146,64 @@ const GATED_ROUTE_FILES: ReadonlyArray<{ file: string; endpoint: string }> = [
   },
 ];
 
-describe('gated routes — wallet exposure', () => {
+describe('gated routes — wallet coverage', () => {
   it.each(GATED_ROUTE_FILES)('$file is really the gated file it claims to be', ({ file, endpoint }) => {
     const code = loadCode(file);
     // POSITIVE ANCHORS FIRST. If the file moved, was renamed, or failed to load,
-    // these fail — so the negative assertions below can never pass vacuously.
+    // these fail — so the assertions below can never pass vacuously.
     expect(code.length).toBeGreaterThan(1000);
     expect(code).toContain('evaluateOrchestrationGate');
     expect(code).toContain(endpoint);
   });
 
-  it.each(GATED_ROUTE_FILES)('$file adds no wallet or pricing-tier call', ({ file }) => {
+  /**
+   * GATE AND DEBIT SHIP TOGETHER (contract changed 2026-09-30, PR #694).
+   *
+   * A debit without a pre-execution hold can drive a wallet negative
+   * (uncollectable debt); a hold without a debit leaks reservations. Each
+   * admission path a route exposes (streaming, non-streaming/idempotent) must
+   * reserve exactly what it later settles, hence the COUNT EQUALITY below.
+   * Both positive anchors guard against the vacuous "0 == 0" pass.
+   */
+  it.each(GATED_ROUTE_FILES)('$file gates every path it debits', ({ file }) => {
     const code = loadCode(file);
-    // The gate is check-only and carries no ChatRequest, so it cannot reach the
-    // wallet itself. This asserts the ROUTE did not acquire one alongside it.
-    expect(code).not.toContain('gateChatRequest');
+    const gates = [...code.matchAll(/\bgateChatRequest\(/g)].length;
+    const debits = [...code.matchAll(/\btrackChatUsage\(\{/g)].length;
+    expect(gates).toBeGreaterThan(0);
+    expect(debits).toBeGreaterThan(0);
+    expect(gates).toBe(debits);
+  });
+
+  /**
+   * A tracker call site without `tokenUsageOverride` books a 0/0-token debit
+   * (these routes have no per-model breakdown to aggregate), and one without
+   * the `resolveTierCarrier` spread resolves no tier — a silent no-debit.
+   * Either alone resurrects the hole this coverage exists to close.
+   */
+  it.each(GATED_ROUTE_FILES)('$file debits real tokens on a real carrier', ({ file }) => {
+    const code = loadCode(file);
+    const debits = [...code.matchAll(/\btrackChatUsage\(\{/g)].length;
+    const overrides = [...code.matchAll(/tokenUsageOverride:\s*\{/g)].length;
+    // Gates also spread a carrier into the hold-estimate shape, so this is a
+    // floor, not an equality.
+    const carriers = [...code.matchAll(/\.\.\.resolveTierCarrier\(/g)].length;
+    expect(debits).toBe(overrides);
+    expect(carriers).toBeGreaterThanOrEqual(debits);
+    // The carrier must key on the REQUESTED cell. `response.model` is the
+    // executor's pick — typically a raw provider id, which resolves NO tier —
+    // so a carrier derived from it silently turns the debit into a no-op
+    // while the gate (correctly keyed on the request model) still holds and
+    // self-expires. Found live 2026-09-30: /extended-thinking executed
+    // consensus:medium and debited nothing.
+    expect(code).not.toMatch(/resolveTierCarrier\(response\.model\)/);
+  });
+
+  it.each(GATED_ROUTE_FILES)('$file keeps the debit behind the tracker chokepoint', ({ file }) => {
+    const code = loadCode(file);
+    // The shared gate stays check-only (no ChatRequest to key a debit on); the
+    // route reaches the wallet ONLY through gateChatRequest + trackChatUsage.
     expect(code).not.toContain('gateTierRequest');
     expect(code).not.toContain('debitChatRequest');
-    expect(code).not.toContain('prepaid-wallet-gate');
     expect(code).not.toContain('pricing-tier-billing');
   });
 });

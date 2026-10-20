@@ -55,7 +55,13 @@ import {
 } from '@/services/billing-plan-service';
 import { toInputJson } from '@/utils/json';
 import { aggregateUsageCosts } from '@/services/billing-usage-aggregation';
-import { ApplicationError, AuthorizationError, ResourceNotFoundError } from '@/utils/custom-errors';
+import {
+  ApplicationError,
+  AuthorizationError,
+  InvoicePeriodOverlapError,
+  ResourceNotFoundError,
+} from '@/utils/custom-errors';
+import { isPrismaKnownRequestError, getErrorMessage } from '@/utils/prisma-error-helpers';
 
 const log = logger.child({ component: 'billing-service' });
 type InvoiceWithItems = Prisma.InvoiceGetPayload<{ include: { items: true } }>;
@@ -206,6 +212,39 @@ export async function getBillingConfig(organizationId: string): Promise<BillingC
   };
 }
 
+/**
+ * Name of the GiST exclusion constraint added by
+ * prisma/migrations/20260927000000_invoice_period_no_overlap_exclusion. Kept
+ * as a named constant because it doubles as the error-detection anchor below
+ * (Postgres always echoes the constraint name back in the violation
+ * message), so a rename of the constraint and of this constant must stay in
+ * lockstep or invoice creation will start leaking the raw DB error as a 500.
+ */
+const INVOICE_PERIOD_EXCLUSION_CONSTRAINT = 'no_overlapping_invoice_period';
+
+/**
+ * Was this error a violation of no_overlapping_invoice_period?
+ *
+ * Prisma has a first-class code (P2002) only for unique constraints it knows
+ * about from the schema. A GiST EXCLUDE constraint isn't expressible in the
+ * Prisma schema (see the comment on the `Invoice` model), so Prisma can't
+ * recognise it structurally and instead reports it through the generic
+ * "constraint failed on the database" bucket (P2004), embedding Postgres's
+ * own error text — which always names the violated constraint — in the
+ * message. This checks both P2002 and P2004 defensively and anchors on the
+ * constraint name itself so detection keeps working even if a Prisma/engine
+ * version changes which bucket it uses.
+ */
+function isInvoicePeriodOverlapConstraintError(error: unknown): boolean {
+  if (!isPrismaKnownRequestError(error)) {
+    return false;
+  }
+  if (error.code !== 'P2002' && error.code !== 'P2004') {
+    return false;
+  }
+  return getErrorMessage(error).includes(INVOICE_PERIOD_EXCLUSION_CONSTRAINT);
+}
+
 export async function createInvoice(request: CreateInvoiceRequest): Promise<Invoice> {
   const periodStart = new Date(request.periodStart);
   const periodEnd = new Date(request.periodEnd);
@@ -227,47 +266,65 @@ export async function createInvoice(request: CreateInvoiceRequest): Promise<Invo
   const total = subtotal + tax;
   const currency = request.currency ?? profile?.currency ?? 'USD';
 
-  const invoice = await prisma.$transaction(async (tx) => {
-    const invoiceMetadata = toInputJson(request.metadata) ?? Prisma.JsonNull;
-    const createdInvoice = await tx.invoice.create({
-      data: {
-        organizationId: request.organizationId,
-        periodStart,
-        periodEnd,
-        subtotal: new Prisma.Decimal(subtotal),
-        tax: new Prisma.Decimal(tax),
-        total: new Prisma.Decimal(total),
-        currency,
-        status: 'pending_stripe_sync', // I1 fix: saga pattern — starts as pending, transitions on Stripe result
-        dueDate: new Date(periodEnd.getTime() + 30 * 24 * 60 * 60 * 1000),
-        metadata: invoiceMetadata,
-      },
-    });
-
-    if (items.length > 0) {
-      await tx.invoiceItem.createMany({
-        data: items.map((item) => ({
-          id: item.id ?? randomUUID(),
-          invoiceId: createdInvoice.id,
-          description: item.description,
-          quantity: item.quantity,
-          unitPrice: new Prisma.Decimal(item.unitPrice),
-          total: new Prisma.Decimal(item.total),
-          metadata: toInputJson(item.metadata) ?? Prisma.JsonNull,
-          billingPriceId:
-            item.metadata && typeof item.metadata.billingPriceId === 'string'
-              ? item.metadata.billingPriceId
-              : null,
-          stripePriceId:
-            item.metadata && typeof item.metadata.stripePriceId === 'string'
-              ? item.metadata.stripePriceId
-              : undefined,
-        })),
+  let invoice: Awaited<ReturnType<typeof prisma.invoice.create>>;
+  try {
+    invoice = await prisma.$transaction(async (tx) => {
+      const invoiceMetadata = toInputJson(request.metadata) ?? Prisma.JsonNull;
+      const createdInvoice = await tx.invoice.create({
+        data: {
+          organizationId: request.organizationId,
+          periodStart,
+          periodEnd,
+          subtotal: new Prisma.Decimal(subtotal),
+          tax: new Prisma.Decimal(tax),
+          total: new Prisma.Decimal(total),
+          currency,
+          status: 'pending_stripe_sync', // I1 fix: saga pattern — starts as pending, transitions on Stripe result
+          dueDate: new Date(periodEnd.getTime() + 30 * 24 * 60 * 60 * 1000),
+          metadata: invoiceMetadata,
+        },
       });
-    }
 
-    return createdInvoice;
-  });
+      if (items.length > 0) {
+        await tx.invoiceItem.createMany({
+          data: items.map((item) => ({
+            id: item.id ?? randomUUID(),
+            invoiceId: createdInvoice.id,
+            description: item.description,
+            quantity: item.quantity,
+            unitPrice: new Prisma.Decimal(item.unitPrice),
+            total: new Prisma.Decimal(item.total),
+            metadata: toInputJson(item.metadata) ?? Prisma.JsonNull,
+            billingPriceId:
+              item.metadata && typeof item.metadata.billingPriceId === 'string'
+                ? item.metadata.billingPriceId
+                : null,
+            stripePriceId:
+              item.metadata && typeof item.metadata.stripePriceId === 'string'
+                ? item.metadata.stripePriceId
+                : undefined,
+          })),
+        });
+      }
+
+      return createdInvoice;
+    });
+  } catch (error: unknown) {
+    if (isInvoicePeriodOverlapConstraintError(error)) {
+      // The application-level check (findOverlappingInvoice /
+      // createUsageInvoiceFromUsage's exact-match findFirst) already ran and
+      // saw no conflict, but lost a race with a concurrent INSERT for the
+      // same organization + an overlapping period. The DB exclusion
+      // constraint (no_overlapping_invoice_period) is the source of truth;
+      // translate its failure into the same conflict callers already handle.
+      log.warn(
+        { organizationId: request.organizationId, periodStart, periodEnd, error: getErrorMessage(error) },
+        'Invoice creation lost a race to a concurrent overlapping invoice — rejected by DB constraint'
+      );
+      throw new InvoicePeriodOverlapError();
+    }
+    throw error;
+  }
 
   let stripeCustomerId = profile?.stripeCustomerId ?? undefined;
 

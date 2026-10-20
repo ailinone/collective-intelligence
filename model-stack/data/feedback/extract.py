@@ -14,7 +14,9 @@ Reads the extraction manifest, verifies SHA-256 checksums, and parses
 JSONL records into validated Pydantic models.
 
 Usage:
-  python data/feedback/extract.py --manifest ./export/extraction-manifest-2026-04-01.json --output ./data/feedback/validated
+  python data/feedback/extract.py \
+    --manifest ./export/extraction-manifest-2026-04-01.json \
+    --output ./data/feedback/validated
 """
 
 from __future__ import annotations
@@ -22,7 +24,6 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
-from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -35,8 +36,10 @@ logger = logging.getLogger(__name__)
 
 # ─── Record Models ────────────────────────────────────────────────────────────
 
+
 class OutcomeRecord(BaseModel):
     """A single execution outcome from the CI API."""
+
     trace_id_hash: str
     strategy: str
     task_type: str = "general"
@@ -56,6 +59,7 @@ class OutcomeRecord(BaseModel):
 
 class ShadowRecord(BaseModel):
     """A shadow evaluation comparison from the CI API."""
+
     trace_id_hash: str
     task_type: str
     complexity: str
@@ -70,6 +74,7 @@ class ShadowRecord(BaseModel):
 
 class ExtractionManifest(BaseModel):
     """Manifest produced by the API extraction job."""
+
     extraction_id: str
     extracted_at: str
     outcomes: dict[str, Any]
@@ -78,6 +83,7 @@ class ExtractionManifest(BaseModel):
 
 
 # ─── Validation ───────────────────────────────────────────────────────────────
+
 
 def verify_sha256(file_path: Path, expected_sha256: str) -> bool:
     """Verify file integrity via SHA-256 checksum."""
@@ -126,9 +132,20 @@ def parse_shadow(file_path: Path) -> list[ShadowRecord]:
 
 # ─── CLI ──────────────────────────────────────────────────────────────────────
 
+
 @click.command()
-@click.option("--manifest", required=True, type=click.Path(exists=True), help="Path to extraction manifest JSON")
-@click.option("--output", required=True, type=click.Path(), help="Output directory for validated records")
+@click.option(
+    "--manifest",
+    required=True,
+    type=click.Path(exists=True),
+    help="Path to extraction manifest JSON",
+)
+@click.option(
+    "--output",
+    required=True,
+    type=click.Path(),
+    help="Output directory for validated records",
+)
 def main(manifest: str, output: str) -> None:
     """Validate and parse extracted JSONL from the CI API."""
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
@@ -165,8 +182,8 @@ def main(manifest: str, output: str) -> None:
             raise click.ClickException(f"Checksum failed for {shadow_file}")
         shadow = parse_shadow(shadow_file)
         with jsonlines.open(output_dir / "shadow.jsonl", mode="w") as w:
-            for r in shadow:
-                w.write(r.model_dump())
+            for rec in shadow:
+                w.write(rec.model_dump())
         logger.info(f"Wrote {len(shadow)} validated shadow evals to {output_dir / 'shadow.jsonl'}")
     else:
         logger.warning(f"Shadow file not found: {shadow_file}")

@@ -27,10 +27,13 @@
  *   5. A model with no reasoning signal at all behaves exactly as before
  *      this change.
  *   6. The response side (non-streaming and streaming) surfaces the
- *      `thinking` content block as a `<think>...</think>`-wrapped prefix,
- *      the same convention DeepSeek-R1/QwQ's own native inline tags
- *      already use, so it flows through the existing reasoning-extraction
- *      pipeline unchanged.
+ *      `thinking` content block on the DEDICATED `reasoning_content` channel
+ *      (`message.reasoning_content` / `delta.reasoning_content`, the
+ *      DeepSeek-style convention every ci adapter speaks — ci#750 owner
+ *      decision 2026-10-04). `content` must NEVER contain the reasoning or
+ *      any synthetic `<think>` tags: on direct streaming/non-streaming paths
+ *      nothing strips those tags, so inline tags leak the whole chain of
+ *      thought as visible answer text.
  */
 import { describe, it, expect } from 'vitest';
 import { AnthropicAdapter } from '@/providers/anthropic/anthropic-adapter';
@@ -214,7 +217,7 @@ describe('AnthropicAdapter — native extended thinking (request side)', () => {
 });
 
 describe('AnthropicAdapter — native extended thinking (non-streaming response side)', () => {
-  it('wraps a returned `thinking` content block in <think> tags ahead of the answer', async () => {
+  it('surfaces a returned `thinking` content block on message.reasoning_content, keeping content clean', async () => {
     const { adapter } = buildAdapter(() => ({
       id: 'msg_2',
       type: 'message',
@@ -230,9 +233,8 @@ describe('AnthropicAdapter — native extended thinking (non-streaming response 
 
     const response = await adapter.chatCompletion(chatRequest({ reasoning_effort: 'high' }));
 
-    expect(response.choices[0]?.message.content).toBe(
-      '<think>step one, step two</think>\n\nfinal answer'
-    );
+    expect(response.choices[0]?.message.content).toBe('final answer');
+    expect(response.choices[0]?.message.reasoning_content).toBe('step one, step two');
   });
 
   it('leaves content untouched when the response has no thinking block', async () => {
@@ -259,6 +261,7 @@ describe('AnthropicAdapter — native extended thinking (non-streaming response 
     const response = await adapter.chatCompletion(chatRequest({ reasoning_effort: 'high' }));
 
     expect(response.choices[0]?.message.content).toBe('final answer');
+    expect(response.choices[0]?.message.reasoning_content).toBeUndefined();
   });
 });
 
@@ -294,7 +297,7 @@ describe('AnthropicAdapter — native extended thinking (streaming response side
     messages: [{ role: 'user', content: 'hi' }],
   } as ChatRequest;
 
-  it('wraps thinking_delta fragments in <think>...</think> ahead of the text answer', async () => {
+  it('streams thinking_delta fragments on delta.reasoning_content and keeps delta.content free of reasoning and <think> tags', async () => {
     const events: FakeEvent[] = [
       { type: 'message_start' },
       { type: 'content_block_start', index: 0, content_block: { type: 'thinking' } },
@@ -311,13 +314,19 @@ describe('AnthropicAdapter — native extended thinking (streaming response side
     const adapter = buildStreamingAdapter(events);
 
     let text = '';
+    let reasoning = '';
     for await (const chunk of adapter.chatCompletionStream(REQUEST)) {
-      if (typeof chunk.choices[0]?.delta?.content === 'string') {
-        text += chunk.choices[0].delta.content;
+      const delta = chunk.choices[0]?.delta;
+      if (typeof delta?.content === 'string') {
+        text += delta.content;
+      }
+      if (typeof delta?.reasoning_content === 'string') {
+        reasoning += delta.reasoning_content;
       }
     }
 
-    expect(text).toBe('<think>reasoning here</think>\n\nthe answer');
+    expect(text).toBe('the answer');
+    expect(reasoning).toBe('reasoning here');
   });
 
   it('does not open/close a <think> tag for a redacted_thinking block', async () => {
@@ -334,12 +343,18 @@ describe('AnthropicAdapter — native extended thinking (streaming response side
     const adapter = buildStreamingAdapter(events);
 
     let text = '';
+    let reasoning = '';
     for await (const chunk of adapter.chatCompletionStream(REQUEST)) {
-      if (typeof chunk.choices[0]?.delta?.content === 'string') {
-        text += chunk.choices[0].delta.content;
+      const delta = chunk.choices[0]?.delta;
+      if (typeof delta?.content === 'string') {
+        text += delta.content;
+      }
+      if (typeof delta?.reasoning_content === 'string') {
+        reasoning += delta.reasoning_content;
       }
     }
 
     expect(text).toBe('answer only');
+    expect(reasoning).toBe('');
   });
 });

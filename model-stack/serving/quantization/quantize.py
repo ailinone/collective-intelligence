@@ -8,7 +8,16 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 # Source: https://github.com/ailinone/collective-intelligence
 
-"""Model quantization supporting GPTQ, AWQ, and bitsandbytes methods.
+"""Model quantization: FP8 (llmcompressor), GPTQ, and bitsandbytes.
+
+2026-10-19 — SOTA refresh of the producer paths:
+  - FP8 via ``llmcompressor`` (one-shot) — PRIMARY path. Produces a
+    compressed-tensors checkpoint that vLLM serves natively on Ada/Hopper+.
+    This replaces the AWQ path: ``autoawq`` is unmaintained/dead and its
+    checkpoints need per-kernel support that modern vLLM no longer ships.
+  - GPTQ via transformers-native ``GPTQConfig`` — replaces ``auto_gptq``
+    (also dead); the maintained quantization backend is ``gptqmodel``.
+  - bitsandbytes (QLoRA-style) — unchanged, still alive and standard.
 
 Loads a full-precision model, applies the selected quantization scheme,
 validates output quality on a calibration set (perplexity check), and
@@ -20,14 +29,17 @@ from __future__ import annotations
 import json
 import logging
 import math
-import os
 import time
 from pathlib import Path
-from typing import Optional
+from typing import Any
 
 import click
 import torch
-from datasets import load_dataset
+
+# 2026-10-18 — import from datasets.load: the re-export in datasets/__init__
+# is not visible to its py.typed metadata (attr-defined false positive);
+# this is the exact same function the top-level name is bound to.
+from datasets.load import load_dataset
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
 logger = logging.getLogger("quantize")
@@ -37,13 +49,14 @@ logger = logging.getLogger("quantize")
 # Calibration helpers
 # ---------------------------------------------------------------------------
 
+
 def load_calibration_data(
     dataset_name: str = "wikitext",
     dataset_config: str = "wikitext-2-raw-v1",
     split: str = "test",
     num_samples: int = 128,
     seq_length: int = 2048,
-    tokenizer=None,
+    tokenizer: Any = None,
 ) -> list[torch.Tensor]:
     """Load and tokenize calibration samples from a HuggingFace dataset."""
     ds = load_dataset(dataset_name, dataset_config, split=split)
@@ -60,8 +73,8 @@ def load_calibration_data(
 
 
 def compute_perplexity(
-    model,
-    tokenizer,
+    model: Any,
+    tokenizer: Any,
     samples: list[torch.Tensor],
     device: str = "cuda",
 ) -> float:
@@ -83,8 +96,92 @@ def compute_perplexity(
 
 
 # ---------------------------------------------------------------------------
-# GPTQ quantization
+# Tokenized calibration set (shared by fp8 / gptq paths)
 # ---------------------------------------------------------------------------
+
+
+def _tokenized_calibration(
+    tokenizer: Any,
+    num_samples: int = 128,
+    seq_length: int = 2048,
+) -> list[dict[str, Any]]:
+    """Build a tokenized calibration corpus for llmcompressor / GPTQConfig."""
+    ds = load_dataset("wikitext", "wikitext-2-raw-v1", split="train")
+    texts = [t for t in ds["text"] if len(t.strip()) > 100][:num_samples]
+    calibration: list[dict[str, Any]] = []
+    for t in texts:
+        enc = tokenizer(t, return_tensors="pt", max_length=seq_length, truncation=True)
+        calibration.append(
+            {
+                "input_ids": enc.input_ids,
+                "attention_mask": enc.attention_mask,
+            }
+        )
+    return calibration
+
+
+# ---------------------------------------------------------------------------
+# FP8 quantization (llmcompressor — primary path)
+# ---------------------------------------------------------------------------
+
+
+def quantize_fp8(
+    model_path: str,
+    output_path: str,
+    num_calibration_samples: int = 128,
+    calibration_seq_length: int = 2048,
+    ignore_lm_head: bool = True,
+) -> Path:
+    """Quantize a model to FP8 (dynamic weight+activation) via llmcompressor.
+
+    Produces a compressed-tensors checkpoint served natively by vLLM
+    (``--quantization`` auto-detected from the checkpoint config). Requires
+    the ``llmcompressor`` package (``pip install -e ".[gpu]"``) and an
+    FP8-capable GPU (Ada/Hopper or newer) for the calibration forward passes.
+    lm_head is kept in higher precision by default — standard practice to
+    avoid measurable quality loss at small vocab-head scale.
+    """
+    try:
+        from llmcompressor import oneshot
+        from llmcompressor.modifiers.quantization import QuantizationModifier
+    except ImportError as exc:  # pragma: no cover - env-dependent
+        raise ImportError(
+            "FP8 quantization requires the llmcompressor package: "
+            "pip install -e '.[gpu]' (2026-10: llmcompressor>=0.14)"
+        ) from exc
+
+    tokenizer = AutoTokenizer.from_pretrained(model_path, trust_remote_code=True)
+    calibration = _tokenized_calibration(
+        tokenizer, num_samples=num_calibration_samples, seq_length=calibration_seq_length
+    )
+
+    logger.info("Loading model %s for FP8 quantization ...", model_path)
+    model = AutoModelForCausalLM.from_pretrained(
+        model_path, device_map="auto", trust_remote_code=True
+    )
+
+    ignore = ["lm_head"] if ignore_lm_head else []
+    recipe = QuantizationModifier(
+        targets="Linear",
+        scheme="FP8_DYNAMIC",
+        ignore=ignore,
+    )
+
+    logger.info("Running FP8 one-shot quantization (ignore=%s) ...", ignore)
+    oneshot(model=model, dataset=calibration, recipe=recipe)
+
+    out = Path(output_path)
+    out.mkdir(parents=True, exist_ok=True)
+    model.save_pretrained(str(out))
+    tokenizer.save_pretrained(str(out))
+    logger.info("FP8 quantized model saved to %s", out)
+    return out
+
+
+# ---------------------------------------------------------------------------
+# GPTQ quantization (transformers-native, gptqmodel backend)
+# ---------------------------------------------------------------------------
+
 
 def quantize_gptq(
     model_path: str,
@@ -95,85 +192,57 @@ def quantize_gptq(
     num_calibration_samples: int = 128,
     calibration_seq_length: int = 2048,
 ) -> Path:
-    """Quantize a model using GPTQ via the auto-gptq library."""
-    from auto_gptq import AutoGPTQForCausalLM, BaseQuantizeConfig
+    """Quantize a model using GPTQ via transformers-native GPTQConfig.
+
+    2026-10-19 — replaces the dead ``auto_gptq`` producer (unmaintained since
+    2024; the maintained GPTQ backend is ``gptqmodel``). Calibration is a
+    list of tokenized examples passed straight to ``GPTQConfig(dataset=...)``.
+    Requires GPU (``pip install -e ".[gpu]"``).
+    """
+    try:
+        from transformers import GPTQConfig
+    except ImportError as exc:  # pragma: no cover - env-dependent
+        raise ImportError(
+            "GPTQ quantization requires transformers>=5 with GPTQConfig and "
+            "the gptqmodel backend (pip install -e '.[gpu]')"
+        ) from exc
 
     tokenizer = AutoTokenizer.from_pretrained(model_path, trust_remote_code=True)
+    calibration = _tokenized_calibration(
+        tokenizer, num_samples=num_calibration_samples, seq_length=calibration_seq_length
+    )
 
-    quantize_config = BaseQuantizeConfig(
+    quantize_config = GPTQConfig(
         bits=bits,
         group_size=group_size,
         desc_act=desc_act,
+        dataset=calibration,
     )
 
-    logger.info("Loading model %s for GPTQ quantization ...", model_path)
-    model = AutoGPTQForCausalLM.from_pretrained(
+    logger.info(
+        "Loading model %s for GPTQ quantization (bits=%d, group_size=%d) ...",
         model_path,
-        quantize_config=quantize_config,
+        bits,
+        group_size,
+    )
+    model = AutoModelForCausalLM.from_pretrained(
+        model_path,
+        quantization_config=quantize_config,
         trust_remote_code=True,
     )
 
-    # Prepare calibration data
-    logger.info("Loading calibration data ...")
-    ds = load_dataset("wikitext", "wikitext-2-raw-v1", split="train")
-    calibration_texts = [t for t in ds["text"] if len(t.strip()) > 100][:num_calibration_samples]
-    examples = [
-        tokenizer(t, return_tensors="pt", max_length=calibration_seq_length, truncation=True)
-        for t in calibration_texts
-    ]
-
-    logger.info("Running GPTQ quantization (bits=%d, group_size=%d) ...", bits, group_size)
-    model.quantize(examples)
-
     out = Path(output_path)
     out.mkdir(parents=True, exist_ok=True)
-    model.save_quantized(str(out))
+    model.save_pretrained(str(out))
     tokenizer.save_pretrained(str(out))
     logger.info("GPTQ quantized model saved to %s", out)
     return out
 
 
 # ---------------------------------------------------------------------------
-# AWQ quantization
-# ---------------------------------------------------------------------------
-
-def quantize_awq(
-    model_path: str,
-    output_path: str,
-    bits: int = 4,
-    group_size: int = 128,
-    zero_point: bool = True,
-    num_calibration_samples: int = 128,
-    calibration_seq_length: int = 2048,
-) -> Path:
-    """Quantize a model using AWQ via the awq library."""
-    from awq import AutoAWQForCausalLM
-
-    logger.info("Loading model %s for AWQ quantization ...", model_path)
-    model = AutoAWQForCausalLM.from_pretrained(model_path, trust_remote_code=True)
-    tokenizer = AutoTokenizer.from_pretrained(model_path, trust_remote_code=True)
-
-    quant_config = {
-        "w_bit": bits,
-        "q_group_size": group_size,
-        "zero_point": zero_point,
-        "version": "GEMM",
-    }
-
-    logger.info("Running AWQ quantization (bits=%d, group_size=%d) ...", bits, group_size)
-    model.quantize(tokenizer, quant_config=quant_config)
-
-    out = Path(output_path)
-    out.mkdir(parents=True, exist_ok=True)
-    model.save_quantized(str(out))
-    tokenizer.save_pretrained(str(out))
-    logger.info("AWQ quantized model saved to %s", out)
-    return out
-
-
-# ---------------------------------------------------------------------------
 # bitsandbytes quantization
 # ---------------------------------------------------------------------------
+
 
 def quantize_bitsandbytes(
     model_path: str,
@@ -215,13 +284,14 @@ def quantize_bitsandbytes(
 # Validation
 # ---------------------------------------------------------------------------
 
+
 def validate_quantized_model(
     original_model_path: str,
     quantized_model_path: str,
     max_perplexity_ratio: float = 1.05,
     num_samples: int = 64,
     seq_length: int = 2048,
-) -> dict:
+) -> dict[str, Any]:
     """Compare perplexity of the original vs. quantized model.
 
     Returns a dict with both perplexities and a pass/fail verdict.
@@ -276,8 +346,9 @@ def validate_quantized_model(
 # CLI
 # ---------------------------------------------------------------------------
 
+
 @click.group()
-def cli():
+def cli() -> None:
     """Model quantization toolkit."""
     logging.basicConfig(
         level=logging.INFO,
@@ -288,7 +359,7 @@ def cli():
 @cli.command()
 @click.option("--model-path", required=True, help="Path or HF id of the source model")
 @click.option("--output-path", required=True, help="Directory for the quantized model")
-@click.option("--method", type=click.Choice(["gptq", "awq", "bitsandbytes"]), required=True)
+@click.option("--method", type=click.Choice(["fp8", "gptq", "bitsandbytes"]), required=True)
 @click.option("--bits", type=int, default=4, help="Quantization bit-width")
 @click.option("--group-size", type=int, default=128, help="GPTQ / AWQ group size")
 @click.option("--validate/--no-validate", default=True, help="Run perplexity validation")
@@ -301,14 +372,14 @@ def quantize(
     group_size: int,
     validate: bool,
     max_ppl_ratio: float,
-):
+) -> None:
     """Quantize a model using the selected method."""
     start = time.time()
 
-    if method == "gptq":
+    if method == "fp8":
+        quantize_fp8(model_path, output_path)
+    elif method == "gptq":
         quantize_gptq(model_path, output_path, bits=bits, group_size=group_size)
-    elif method == "awq":
-        quantize_awq(model_path, output_path, bits=bits, group_size=group_size)
     elif method == "bitsandbytes":
         quantize_bitsandbytes(model_path, output_path)
     else:
@@ -319,7 +390,9 @@ def quantize(
 
     if validate:
         logger.info("Running perplexity validation ...")
-        result = validate_quantized_model(model_path, output_path, max_perplexity_ratio=max_ppl_ratio)
+        result = validate_quantized_model(
+            model_path, output_path, max_perplexity_ratio=max_ppl_ratio
+        )
         report_path = Path(output_path) / "quantization_report.json"
         report_path.write_text(json.dumps(result, indent=2))
         logger.info("Validation report saved to %s", report_path)
@@ -336,7 +409,7 @@ def quantize(
 @click.option("--quantized", required=True, help="Quantized model path")
 @click.option("--max-ppl-ratio", type=float, default=1.05)
 @click.option("--num-samples", type=int, default=64)
-def validate_cmd(original: str, quantized: str, max_ppl_ratio: float, num_samples: int):
+def validate_cmd(original: str, quantized: str, max_ppl_ratio: float, num_samples: int) -> None:
     """Stand-alone perplexity validation."""
     result = validate_quantized_model(
         original, quantized, max_perplexity_ratio=max_ppl_ratio, num_samples=num_samples

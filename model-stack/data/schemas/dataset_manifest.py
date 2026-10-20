@@ -108,7 +108,7 @@ class DatasetManifest(BaseModel):
         return v
 
     @model_validator(mode="after")
-    def validate_splits_row_count(self) -> "DatasetManifest":
+    def validate_splits_row_count(self) -> DatasetManifest:
         if self.splits:
             split_total = sum(s.num_rows for s in self.splits)
             if split_total != self.row_count:
@@ -168,13 +168,21 @@ class DatasetRegistry:
 
         logger.info("Registry loaded %d manifests from %s", len(self._manifests), self.registry_dir)
 
-    def load(self, path: Path) -> DatasetManifest:
+    # 2026-10-18 — staticmethod by design: the Model Stack CI "Data Pipeline
+    # Contracts" gate calls this class-level (DatasetRegistry.load(f)) while
+    # in-repo callers use the instance form (self.load(x)/registry.load(x));
+    # both work on a staticmethod. It was an implicit instance method since
+    # the class was written, which made the gate's class-level call raise
+    # "missing 1 required positional argument" — hidden since 2026-04
+    # because the gate never got past Lint & Typecheck until PR #784.
+    @staticmethod
+    def load(path: Path) -> DatasetManifest:
         """Load a single manifest from a YAML file."""
         path = Path(path)
         if not path.exists():
             raise FileNotFoundError(f"Manifest file not found: {path}")
 
-        with open(path, "r", encoding="utf-8") as f:
+        with open(path, encoding="utf-8") as f:
             raw = yaml.safe_load(f)
 
         if raw is None:
@@ -207,9 +215,7 @@ class DatasetRegistry:
             return self._manifests.get(f"{name}@{version}")
 
         # Return latest version if no version specified
-        candidates = [
-            (k, v) for k, v in self._manifests.items() if k.startswith(f"{name}@")
-        ]
+        candidates = [(k, v) for k, v in self._manifests.items() if k.startswith(f"{name}@")]
         if not candidates:
             return None
 

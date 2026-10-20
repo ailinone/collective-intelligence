@@ -28,6 +28,7 @@
 
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { authenticate, requireRole } from '@/middleware/auth-middleware';
+import { requirePermission } from '@/middleware/require-permission-middleware';
 import { rejectAnonymousGuestKeyPreHandler } from '@/services/anonymous-quota-gate';
 import { rejectChatFreeTierKeyPreHandler } from '@/services/free-tier-quota-gate';
 import { createRouteRateLimit } from '@/api/middleware/route-rate-limit';
@@ -90,11 +91,23 @@ export async function registerOrgGovernanceRoutes(server: FastifyInstance): Prom
     createRouteRateLimit('org-governance', { capacity: 30, refillRate: 0.5 }),
   ];
 
+  // SEC-01: budget/policy writes are an organization-privilege boundary, not just
+  // an "authenticated admin" one — gate them with the fine-grained RBAC model
+  // (Role -> Permission -> RolePermission) on top of the existing coarse role
+  // check, exactly like the enterprise billing/quotas routes already do.
+  const adminMutatePreHandler = [...adminPreHandler, requirePermission('org:update')];
+  // GET /v1/admin/audit exposes the security audit trail — the catalog
+  // already has a dedicated read permission for exactly this ('audit:read',
+  // granted by default only to owner/admin/auditor, unlike the broad
+  // 'org:read'), so gate it with that instead of piggy-backing on the
+  // read-only adminPreHandler.
+  const auditReadPreHandler = [...adminPreHandler, requirePermission('audit:read')];
+
   // ─── PUT /v1/admin/organizations/:id/budget ──────────────────────────────
   server.put(
     '/v1/admin/organizations/:id/budget',
     {
-      preHandler: adminPreHandler,
+      preHandler: adminMutatePreHandler,
       schema: {
         tags: ['Admin', 'Governance'],
         summary: 'Set organization monthly budget cap',
@@ -181,7 +194,7 @@ export async function registerOrgGovernanceRoutes(server: FastifyInstance): Prom
   server.post(
     '/v1/admin/organizations/:id/policy',
     {
-      preHandler: adminPreHandler,
+      preHandler: adminMutatePreHandler,
       schema: {
         tags: ['Admin', 'Governance'],
         summary: 'Set organization access policy (allowed/blocked strategies & models)',
@@ -242,7 +255,7 @@ export async function registerOrgGovernanceRoutes(server: FastifyInstance): Prom
   server.get(
     '/v1/admin/audit',
     {
-      preHandler: adminPreHandler,
+      preHandler: auditReadPreHandler,
       schema: {
         tags: ['Admin', 'Governance'],
         summary: 'Query the organization audit trail (paginated, filtered)',

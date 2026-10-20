@@ -23,12 +23,14 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-import statistics
 import time
-from dataclasses import dataclass, field
-from typing import Any
+from dataclasses import dataclass
+from typing import TYPE_CHECKING, Any
 
 import httpx
+
+if TYPE_CHECKING:
+    from evals.runner import ModelClient
 
 logger = logging.getLogger("throughput_bench")
 
@@ -53,13 +55,14 @@ TEST_PROMPTS: list[dict[str, Any]] = [
 # Single request measurement
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class RequestResult:
     prompt_index: int
-    ttft_ms: float = 0.0         # time to first token
+    ttft_ms: float = 0.0  # time to first token
     total_latency_ms: float = 0.0
     tokens_generated: int = 0
-    tps: float = 0.0             # tokens per second
+    tps: float = 0.0  # tokens per second
     status_code: int = 0
     error: str = ""
 
@@ -169,6 +172,7 @@ async def measure_non_streaming_request(
 # Benchmark driver
 # ---------------------------------------------------------------------------
 
+
 def _percentiles(values: list[float], ps: list[int]) -> dict[str, float]:
     if not values:
         return {f"p{p}": 0.0 for p in ps}
@@ -187,21 +191,27 @@ async def run_benchmark(
     concurrency_levels: list[int],
     requests_per_level: int = 20,
     use_streaming: bool = True,
-) -> tuple[dict[str, float], list[dict]]:
+) -> tuple[dict[str, float], list[dict[str, Any]]]:
     """Run the benchmark at each concurrency level."""
     all_results: list[RequestResult] = []
-    level_metrics: list[dict] = []
+    level_metrics: list[dict[str, Any]] = []
 
     async with httpx.AsyncClient() as client:
         for concurrency in concurrency_levels:
-            logger.info("Running at concurrency=%d (%d requests) ...", concurrency, requests_per_level)
+            logger.info(
+                "Running at concurrency=%d (%d requests) ...", concurrency, requests_per_level
+            )
             tasks = []
             for i in range(requests_per_level):
                 p = TEST_PROMPTS[i % len(TEST_PROMPTS)]
                 if use_streaming:
-                    coro = measure_streaming_request(client, endpoint, p["prompt"], p["max_tokens"], i)
+                    coro = measure_streaming_request(
+                        client, endpoint, p["prompt"], p["max_tokens"], i
+                    )
                 else:
-                    coro = measure_non_streaming_request(client, endpoint, p["prompt"], p["max_tokens"], i)
+                    coro = measure_non_streaming_request(
+                        client, endpoint, p["prompt"], p["max_tokens"], i
+                    )
                 tasks.append(coro)
 
             # Run in batches of *concurrency*
@@ -212,7 +222,10 @@ async def run_benchmark(
                 batch = tasks[batch_start : batch_start + concurrency]
                 batch_results = await asyncio.gather(*batch, return_exceptions=True)
                 for r in batch_results:
-                    if isinstance(r, Exception):
+                    # 2026-10-18: gather(..., return_exceptions=True) is typed
+                    # list[RequestResult | BaseException]; checking BaseException
+                    # (not Exception) narrows the else-branch to RequestResult.
+                    if isinstance(r, BaseException):
                         level_results.append(RequestResult(prompt_index=-1, error=str(r)))
                     else:
                         level_results.append(r)
@@ -228,7 +241,7 @@ async def run_benchmark(
             tps_values = [r.tps for r in ok_results if r.tps > 0]
             total_tokens = sum(r.tokens_generated for r in ok_results)
 
-            level_meta = {
+            level_meta: dict[str, Any] = {
                 "concurrency": concurrency,
                 "total_requests": requests_per_level,
                 "successful": len(ok_results),
@@ -271,11 +284,12 @@ async def run_benchmark(
 # Entry point for eval runner
 # ---------------------------------------------------------------------------
 
+
 def run(
-    client,
+    client: ModelClient,
     num_samples: int | None = None,
     concurrency_levels: list[int] | None = None,
-    **_kwargs,
+    **_kwargs: Any,
 ) -> tuple[dict[str, float], Any]:
     """Called by the central eval runner.
 

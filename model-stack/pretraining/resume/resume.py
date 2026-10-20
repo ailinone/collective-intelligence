@@ -19,16 +19,16 @@ Usage
     python resume.py --config ../configs/pretrain_1b.yaml --checkpoint-dir ./checkpoints/ailin-1b
     python resume.py --config ../configs/pretrain_1b.yaml --step 50000  # resume from specific step
 """
+
 from __future__ import annotations
 
 import hashlib
 import json
 import logging
-import os
 import subprocess
 import sys
 from pathlib import Path
-from typing import Optional
+from typing import Any
 
 import click
 import yaml
@@ -44,21 +44,25 @@ def compute_config_hash(config_path: str) -> str:
 
     model = raw.get("model", {})
     keys = [
-        "hidden_size", "num_attention_heads", "num_key_value_heads",
-        "num_hidden_layers", "intermediate_size", "vocab_size",
+        "hidden_size",
+        "num_attention_heads",
+        "num_key_value_heads",
+        "num_hidden_layers",
+        "intermediate_size",
+        "vocab_size",
         "max_position_embeddings",
     ]
     payload = {k: model.get(k) for k in keys}
     return hashlib.sha256(json.dumps(payload, sort_keys=True).encode()).hexdigest()[:16]
 
 
-def find_checkpoints(checkpoint_dir: str):
+def find_checkpoints(checkpoint_dir: str) -> list[dict[str, Any]]:
     """Find all valid checkpoints in directory, sorted by step."""
     ckpt_dir = Path(checkpoint_dir)
     if not ckpt_dir.exists():
         return []
 
-    checkpoints = []
+    checkpoints: list[dict[str, Any]] = []
     for d in ckpt_dir.iterdir():
         if d.is_dir() and d.name.startswith("step-"):
             try:
@@ -68,11 +72,13 @@ def find_checkpoints(checkpoint_dir: str):
                 if meta_file.exists():
                     with open(meta_file) as f:
                         meta = json.load(f)
-                checkpoints.append({
-                    "path": d,
-                    "step": step,
-                    "meta": meta,
-                })
+                checkpoints.append(
+                    {
+                        "path": d,
+                        "step": step,
+                        "meta": meta,
+                    }
+                )
             except (ValueError, json.JSONDecodeError) as e:
                 logger.warning("Skipping invalid checkpoint %s: %s", d, e)
 
@@ -82,7 +88,7 @@ def find_checkpoints(checkpoint_dir: str):
 
 def validate_checkpoint(
     ckpt_path: Path,
-    expected_config_hash: Optional[str] = None,
+    expected_config_hash: str | None = None,
 ) -> tuple[bool, list[str]]:
     """
     Validate checkpoint integrity:
@@ -143,13 +149,17 @@ def validate_checkpoint(
         issues.append("No model state files found")
 
     # Check for zero-byte files (corruption indicator)
-    for f in ckpt_path.rglob("*"):
-        if f.is_file() and f.suffix in (".bin", ".safetensors", ".pt") and f.stat().st_size == 0:
-            issues.append(f"Zero-byte file detected: {f.name}")
+    # 2026-10-18 renamed loop var: shadowed the `open(...) as f` file handle above
+    for state_file in ckpt_path.rglob("*"):
+        if (
+            state_file.is_file()
+            and state_file.suffix in (".bin", ".safetensors", ".pt")
+            and state_file.stat().st_size == 0
+        ):
+            issues.append(f"Zero-byte file detected: {state_file.name}")
 
     critical_issues = [
-        i for i in issues
-        if "Missing metadata" not in i and "optimizer" not in i.lower()
+        i for i in issues if "Missing metadata" not in i and "optimizer" not in i.lower()
     ]
     is_valid = len(critical_issues) == 0
 
@@ -157,7 +167,9 @@ def validate_checkpoint(
 
 
 @click.command()
-@click.option("--config", required=True, type=click.Path(exists=True), help="Path to YAML training config.")
+@click.option(
+    "--config", required=True, type=click.Path(exists=True), help="Path to YAML training config."
+)
 @click.option("--checkpoint-dir", default=None, type=str, help="Override checkpoint directory.")
 @click.option("--step", default=None, type=int, help="Resume from specific step (default: latest).")
 @click.option("--validate-only", is_flag=True, help="Only validate, don't launch training.")
@@ -165,19 +177,21 @@ def validate_checkpoint(
 @click.option("--num-processes", default=None, type=int, help="Number of processes for accelerate.")
 def main(
     config: str,
-    checkpoint_dir: Optional[str],
-    step: Optional[int],
+    checkpoint_dir: str | None,
+    step: int | None,
     validate_only: bool,
-    accelerate_config: Optional[str],
-    num_processes: Optional[int],
-):
+    accelerate_config: str | None,
+    num_processes: int | None,
+) -> None:
     """Resume training from a checkpoint."""
     # Load config to find checkpoint dir
     with open(config) as f:
         raw_config = yaml.safe_load(f)
 
     if checkpoint_dir is None:
-        checkpoint_dir = raw_config.get("checkpointing", {}).get("save_dir", "./checkpoints/ailin-1b")
+        checkpoint_dir = raw_config.get("checkpointing", {}).get(
+            "save_dir", "./checkpoints/ailin-1b"
+        )
 
     logger.info("Looking for checkpoints in: %s", checkpoint_dir)
 
@@ -245,11 +259,14 @@ def main(
     if num_processes:
         cmd.extend(["--num_processes", str(num_processes)])
 
-    cmd.extend([
-        train_script,
-        "--config", config,
-        "--resume",
-    ])
+    cmd.extend(
+        [
+            train_script,
+            "--config",
+            config,
+            "--resume",
+        ]
+    )
 
     logger.info("Launching training: %s", " ".join(cmd))
     logger.info("Resuming from step %d", selected["step"])
@@ -262,10 +279,7 @@ def main(
         logger.error("Training process exited with code %d", e.returncode)
         sys.exit(e.returncode)
     except FileNotFoundError:
-        logger.error(
-            "Could not find 'accelerate'. "
-            "Install with: pip install accelerate"
-        )
+        logger.error("Could not find 'accelerate'. Install with: pip install accelerate")
         sys.exit(1)
 
 

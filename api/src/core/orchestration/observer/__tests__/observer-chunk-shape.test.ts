@@ -18,7 +18,11 @@
  *    instead of the ~30-52s silence before the collective's synthesis.
  */
 import { describe, it, expect } from 'vitest';
-import { buildObserverChunk, buildInlineNarrationChunk } from '../observer-service';
+import {
+  buildObserverChunk,
+  buildInlineNarrationChunk,
+  toPublicNarration,
+} from '../observer-service';
 import type { ObserverNarration } from '@/types';
 
 function narr(text: string): ObserverNarration {
@@ -52,5 +56,31 @@ describe('observer chunk wire shapes', () => {
     // Marked distinctly so the ailin client recognizes it and does NOT also render it
     // in the side narration panel (no double display).
     expect(c.ailin_metadata.type).toBe('observer_inline');
+  });
+});
+
+describe('observer public narration safety (CI-CHAT-0005)', () => {
+  // The narrator model's own reasoning is an internal artifact. It must never
+  // reach a client-facing surface — neither the off-channel chunk metadata nor
+  // the non-streaming `metadata.observer_narrations` projection.
+  function reasoningNarr(): ObserverNarration {
+    return {
+      ...narr('Uma posição foi apresentada.'),
+      reasoning: 'internal scratchpad of the narrator model',
+    };
+  }
+
+  it('off-channel chunk omits the narrator reasoning field', () => {
+    const c = buildObserverChunk(reasoningNarr()) as unknown as MetaChunk & {
+      ailin_metadata: Record<string, unknown>;
+    };
+    expect('reasoning' in c.ailin_metadata).toBe(false);
+  });
+
+  it('public narration projection (non-streaming metadata) omits reasoning', () => {
+    const pub = toPublicNarration(reasoningNarr()) as Record<string, unknown>;
+    expect('reasoning' in pub).toBe(false);
+    expect(pub.event).toBe('phase_start');
+    expect(pub.narration).toBe('Uma posição foi apresentada.');
   });
 });

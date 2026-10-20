@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -29,7 +30,7 @@ import pytest
 
 
 @pytest.fixture
-def well_formed_trace():
+def well_formed_trace() -> dict[str, Any]:
     return {
         "trace_id": "abc123",
         "timestamp_iso": "2026-05-05T12:00:00+00:00",
@@ -49,7 +50,7 @@ def well_formed_trace():
 
 
 @pytest.fixture
-def fallback_trace():
+def fallback_trace() -> dict[str, Any]:
     return {
         "trace_id": "fall1",
         "timestamp_iso": "2026-05-05T12:00:00+00:00",
@@ -70,7 +71,9 @@ def fallback_trace():
 
 
 class TestTransformTrace:
-    def test_well_formed_trace_yields_messages_record(self, well_formed_trace):
+    def test_well_formed_trace_yields_messages_record(
+        self, well_formed_trace: dict[str, Any]
+    ) -> None:
         from data.feedback.synthesize_sft import SynthesisStats, transform_trace
 
         stats = SynthesisStats()
@@ -98,7 +101,7 @@ class TestTransformTrace:
         assert stats.by_strategy["debate"] == 1
         assert stats.by_decision_type["moderator-selection"] == 1
 
-    def test_fallback_record_dropped(self, fallback_trace):
+    def test_fallback_record_dropped(self, fallback_trace: dict[str, Any]) -> None:
         from data.feedback.synthesize_sft import SynthesisStats, transform_trace
 
         stats = SynthesisStats()
@@ -108,7 +111,7 @@ class TestTransformTrace:
         assert stats.records_kept == 0
         assert stats.records_dropped_fallback == 1
 
-    def test_low_confidence_dropped(self, well_formed_trace):
+    def test_low_confidence_dropped(self, well_formed_trace: dict[str, Any]) -> None:
         from data.feedback.synthesize_sft import SynthesisStats, transform_trace
 
         well_formed_trace["teacher_confidence"] = 0.3
@@ -118,7 +121,7 @@ class TestTransformTrace:
         assert record is None
         assert stats.records_dropped_low_confidence == 1
 
-    def test_malformed_record_dropped(self):
+    def test_malformed_record_dropped(self) -> None:
         from data.feedback.synthesize_sft import SynthesisStats, transform_trace
 
         stats = SynthesisStats()
@@ -127,7 +130,7 @@ class TestTransformTrace:
         assert record is None
         assert stats.records_dropped_malformed == 1
 
-    def test_user_content_carries_request_context(self, well_formed_trace):
+    def test_user_content_carries_request_context(self, well_formed_trace: dict[str, Any]) -> None:
         from data.feedback.synthesize_sft import SynthesisStats, transform_trace
 
         stats = SynthesisStats()
@@ -150,8 +153,11 @@ class TestTransformTrace:
 
 class TestSynthesizeDriver:
     def test_synthesize_writes_per_input_file(
-        self, tmp_path: Path, well_formed_trace, fallback_trace
-    ):
+        self,
+        tmp_path: Path,
+        well_formed_trace: dict[str, Any],
+        fallback_trace: dict[str, Any],
+    ) -> None:
         from data.feedback.synthesize_sft import synthesize
 
         input_dir = tmp_path / "input"
@@ -187,7 +193,7 @@ class TestSynthesizeDriver:
         assert stats.records_kept == 3
         assert stats.records_dropped_fallback == 1
 
-    def test_empty_input_dir_is_noop(self, tmp_path: Path):
+    def test_empty_input_dir_is_noop(self, tmp_path: Path) -> None:
         from data.feedback.synthesize_sft import synthesize
 
         input_dir = tmp_path / "input"
@@ -200,7 +206,9 @@ class TestSynthesizeDriver:
         assert stats.records_seen == 0
         assert stats.records_kept == 0
 
-    def test_malformed_jsonl_lines_skipped_not_fatal(self, tmp_path: Path, well_formed_trace):
+    def test_malformed_jsonl_lines_skipped_not_fatal(
+        self, tmp_path: Path, well_formed_trace: dict[str, Any]
+    ) -> None:
         from data.feedback.synthesize_sft import synthesize
 
         input_dir = tmp_path / "input"
@@ -229,7 +237,7 @@ class TestSynthesizeDriver:
 
 
 class TestCli:
-    def test_cli_runs_end_to_end(self, tmp_path: Path, well_formed_trace):
+    def test_cli_runs_end_to_end(self, tmp_path: Path, well_formed_trace: dict[str, Any]) -> None:
         from click.testing import CliRunner
 
         from data.feedback.synthesize_sft import cli

@@ -39,6 +39,7 @@
  * and pass it in — no change needed here, by construction.
  */
 import { nanoid } from 'nanoid';
+import { ensureArtifactDeliveryUrl } from '../artifact-delivery';
 import type {
   AilinArtifact,
   ChatMessage,
@@ -89,14 +90,20 @@ const log = logger.child({ component: 'media-planner-strategy' });
 /**
  * Dispatch one non-generation capability through the UNMODIFIED
  * `executeCapabilityByPlan` (capabilities-routes.ts). The route layer binds
- * `envelope` / the live `FastifyRequest` / `requestId` / the constructed
- * services object via closure — this strategy never sees any of those, it
- * only supplies `plan` + `body` per action, exactly like the HTTP dispatch
- * loop already does for each entry in `plan.executionPath`.
+ * `envelope` / the live `FastifyRequest` (when it has one) / `requestId` /
+ * the constructed services object via closure — this strategy only ever
+ * supplies `plan` + `body` + the request-scoped `context` per action.
+ * `context` is always the SAME `OrchestrationContext` this strategy's own
+ * `execute()` already received (chat/triage safety-net callers have no
+ * live `FastifyRequest` to derive one from, so it must travel as a normal
+ * call-time argument, not be re-derived from a request each mode function
+ * used to do internally — see capabilities-routes.ts's `executeCapabilityByPlan`
+ * doc comment for the full rationale).
  */
 export type CapabilityDispatcher = (
   plan: CapabilityExecutionPlan,
-  body: CapabilityRequestBody
+  body: CapabilityRequestBody,
+  context: OrchestrationContext
 ) => Promise<{ result: CapabilityModeResult; fallbackUsed: boolean }>;
 
 /**
@@ -493,7 +500,7 @@ export class MediaPlannerStrategy extends BaseStrategy {
       }
 
       if (action.kind === 'edit') {
-        const outcome = await this.runImageEdit(action, state);
+        const outcome = await this.runImageEdit(action, state, context);
         state.turns.push({
           turnIndex,
           action,
@@ -541,7 +548,8 @@ export class MediaPlannerStrategy extends BaseStrategy {
       try {
         const { result, fallbackUsed } = await this.deps.capabilityDispatcher(
           plan,
-          (action.body ?? {}) as CapabilityRequestBody
+          (action.body ?? {}) as CapabilityRequestBody,
+          context
         );
 
         // pdf_understanding gets routed through the critic fan-out instead
@@ -766,12 +774,21 @@ export class MediaPlannerStrategy extends BaseStrategy {
         });
         const video = result.videos[0];
         if (video && (video.url || video.b64_json)) {
+          // URL-delivery normalization (artifact-delivery.ts) — same rules as
+          // the engine's triage-plan media stages: real URL passes through,
+          // inline b64 is uploaded and delivered by signed URL with a
+          // graceful inline fallback.
+          const delivery = await ensureArtifactDeliveryUrl('video', video, {
+            invoker: context.invoker,
+            log,
+            requestId: context.requestId,
+          });
           state.artifacts.push({
             modality: 'video',
             stage_name: `media-plan-turn-${turnIndex}`,
             stage_index: turnIndex,
-            url: video.url,
-            b64_json: video.b64_json,
+            url: delivery.url ?? video.url,
+            b64_json: delivery.b64Json ?? video.b64_json,
             provider: result.provider,
             model: result.model,
           } satisfies AilinArtifact);
@@ -795,12 +812,19 @@ export class MediaPlannerStrategy extends BaseStrategy {
       const result = await invoker.generateImage({ prompt: action.prompt, model: modelId });
       const image = result.images[0];
       if (image && (image.url || image.b64_json)) {
+        // URL-delivery normalization (artifact-delivery.ts) — see the video
+        // branch above.
+        const delivery = await ensureArtifactDeliveryUrl('image', image, {
+          invoker: context.invoker,
+          log,
+          requestId: context.requestId,
+        });
         state.artifacts.push({
           modality: 'image',
           stage_name: `media-plan-turn-${turnIndex}`,
           stage_index: turnIndex,
-          url: image.url,
-          b64_json: image.b64_json,
+          url: delivery.url ?? image.url,
+          b64_json: delivery.b64Json ?? image.b64_json,
           revised_prompt: image.revised_prompt,
           provider: result.provider,
           model: result.model,
@@ -852,7 +876,8 @@ export class MediaPlannerStrategy extends BaseStrategy {
    */
   private async runImageEdit(
     action: Extract<PlannerAction, { kind: 'edit' }>,
-    state: PlannerState
+    state: PlannerState,
+    context: OrchestrationContext
   ): Promise<PlannerTurnOutcome> {
     const sourceIndex = action.sourceArtifactIndex ?? state.artifacts.length - 1;
     const source = state.artifacts[sourceIndex];
@@ -894,12 +919,28 @@ export class MediaPlannerStrategy extends BaseStrategy {
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
       let edited: AilinArtifact;
       try {
-        const { result } = await this.deps.capabilityDispatcher(plan, {
-          image_base64: source.b64_json,
-          prompt: action.prompt,
-          response_format: 'b64_json',
-        });
+        const { result } = await this.deps.capabilityDispatcher(
+          plan,
+          {
+            image_base64: source.b64_json,
+            prompt: action.prompt,
+            response_format: 'b64_json',
+          },
+          context
+        );
         edited = extractEditedArtifact(result, action);
+        // URL-delivery normalization (see artifact-delivery.ts): an edit
+        // result is b64-only by construction (response_format above), so
+        // without this its multi-MB payload ships inline — stripped to an
+        // omission marker on streaming — instead of a fetchable signed URL.
+        edited = {
+          ...edited,
+          ...(await ensureArtifactDeliveryUrl('image', edited, {
+            invoker: context.invoker,
+            log,
+            requestId: context.requestId,
+          })),
+        };
       } catch (err) {
         lastFailureReason = `edit call failed: ${getErrorMessage(err)}`;
         continue;

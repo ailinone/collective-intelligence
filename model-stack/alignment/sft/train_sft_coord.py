@@ -54,10 +54,10 @@ import logging
 import shlex
 import subprocess
 import sys
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import click
 import yaml
@@ -287,8 +287,8 @@ def invoke_trainer(
     *,
     python: str = sys.executable,
     extra_args: Iterable[str] = (),
-    runner: callable = subprocess.run,  # injectable for tests
-) -> subprocess.CompletedProcess:
+    runner: Callable[..., Any] = subprocess.run,  # injectable for tests
+) -> subprocess.CompletedProcess[str]:
     """Spawn `train_sft.py --config <config_path>`.
 
     `runner` is overridable so tests can inject a fake without actually
@@ -303,7 +303,9 @@ def invoke_trainer(
         *extra_args,
     ]
     logger.info("invoking trainer: %s", " ".join(shlex.quote(c) for c in cmd))
-    return runner(cmd, check=False, text=True)
+    # 2026-10-18 runner is an injected Any (tests pass duck-typed fakes); the
+    # real default (subprocess.run with text=True) yields CompletedProcess[str].
+    return cast(subprocess.CompletedProcess[str], runner(cmd, check=False, text=True))
 
 
 # ---------------------------------------------------------------------------
@@ -438,6 +440,9 @@ def cli(
         )
         if dry_run:
             continue
+        # 2026-10-18 plan_run(write_config=True) always sets config_path; this
+        # narrows Path | None for the type checker without a runtime change.
+        assert plan.config_path is not None
         result = invoke_trainer(plan.config_path)
         plan.return_code = result.returncode
         if result.returncode != 0:

@@ -11,6 +11,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import {
   getAilinVirtualModelProfiles,
   resolveAilinVirtualModelAlias,
+  resolveTierCarrier,
 } from '@/services/ailin-virtual-model-service';
 
 const ORIGINAL_VIRTUAL_PROFILES = process.env.AILIN_VIRTUAL_MODEL_PROFILES;
@@ -54,5 +55,75 @@ describe('ailin-virtual-model-service', () => {
     expect(resolved).not.toBeNull();
     expect(resolved?.model).toBe('auto');
     expect(resolved?.strategy).toBe('auto');
+  });
+});
+
+describe('billed presets (profile.tier carrier)', () => {
+  it('resolves ailin-consensus with the tier billing carrier (medium)', () => {
+    const resolved = resolveAilinVirtualModelAlias('ailin-consensus');
+    expect(resolved).not.toBeNull();
+    expect(resolved?.strategy).toBe('consensus');
+    expect(resolved?.qualityTarget).toBe(0.9); // profile semantics unchanged
+    expect(resolved?.tier).toBe('medium');
+    expect(resolved?.tierRate?.inputPer1MUsd).toBeGreaterThan(0);
+    expect(resolved?.tierRate?.outputPer1MUsd).toBeGreaterThan(0);
+  });
+
+  it('resolves ailin-best with the tier billing carrier (medium)', () => {
+    const resolved = resolveAilinVirtualModelAlias('ailin-best');
+    expect(resolved).not.toBeNull();
+    expect(resolved?.strategy).toBe('quality-multipass');
+    expect(resolved?.qualityTarget).toBe(0.95);
+    expect(resolved?.tier).toBe('medium');
+    expect(resolved?.tierRate).toBeDefined();
+  });
+
+  it('leaves unbilled presets (ailin-auto) without the carrier', () => {
+    const resolved = resolveAilinVirtualModelAlias('ailin-auto');
+    expect(resolved).not.toBeNull();
+    expect(resolved?.tier).toBeUndefined();
+    expect(resolved?.tierRate).toBeUndefined();
+  });
+
+  it('accepts a valid tier on env profiles and ignores invalid ones', () => {
+    process.env.AILIN_VIRTUAL_MODEL_PROFILES = JSON.stringify([
+      { id: 'custom-billed', strategy: 'consensus', tier: 'large' },
+      { id: 'custom-invalid-tier', strategy: 'consensus', tier: 'gargantuan' },
+    ]);
+    try {
+      const billed = resolveAilinVirtualModelAlias('custom-billed');
+      expect(billed?.tier).toBe('large');
+      expect(billed?.tierRate).toBeDefined();
+
+      const invalid = resolveAilinVirtualModelAlias('custom-invalid-tier');
+      expect(invalid).not.toBeNull();
+      expect(invalid?.tier).toBeUndefined();
+    } finally {
+      delete process.env.AILIN_VIRTUAL_MODEL_PROFILES;
+    }
+  });
+});
+
+describe('resolveTierCarrier (wallet coverage for non-chat routes)', () => {
+  it('returns the carrier for a tiered composite cell', () => {
+    const carrier = resolveTierCarrier('consensus:medium');
+    expect(carrier).toEqual({
+      ailin_tier: 'medium',
+      ailin_tier_rate: { inputPer1MUsd: 2, outputPer1MUsd: 8 },
+    });
+  });
+
+  it('returns the carrier for a billed preset (ailin-consensus, tier medium)', () => {
+    const carrier = resolveTierCarrier('ailin-consensus');
+    expect(carrier).toEqual({
+      ailin_tier: 'medium',
+      ailin_tier_rate: { inputPer1MUsd: 2, outputPer1MUsd: 8 },
+    });
+  });
+
+  it('returns an empty object for unbilled presets, auto and raw provider ids', () => {
+    expect(resolveTierCarrier('ailin-auto')).toEqual({});
+    expect(resolveTierCarrier('auto')).toEqual({});
+    expect(resolveTierCarrier('openai/gpt-4o')).toEqual({});
   });
 });

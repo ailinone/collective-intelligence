@@ -20,6 +20,7 @@ import json
 import logging
 import time
 from collections import defaultdict
+from contextlib import suppress
 from pathlib import Path
 from typing import Any
 
@@ -34,6 +35,7 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # N-gram extraction
 # ---------------------------------------------------------------------------
+
 
 def extract_ngrams(text: str, n: int = 5) -> set[str]:
     """Extract character-level n-grams from text."""
@@ -55,6 +57,7 @@ def extract_word_ngrams(text: str, n: int = 3) -> set[str]:
 # MinHash computation
 # ---------------------------------------------------------------------------
 
+
 def compute_minhash(
     ngrams: set[str],
     num_perm: int = 128,
@@ -69,6 +72,7 @@ def compute_minhash(
 # ---------------------------------------------------------------------------
 # Core dedup logic
 # ---------------------------------------------------------------------------
+
 
 def run_lexical_dedup(
     input_path: Path,
@@ -120,11 +124,9 @@ def run_lexical_dedup(
             lean_mh = LeanMinHash(mh)
             signatures[idx] = lean_mh
 
-            try:
+            # Duplicate key — already inserted (exact duplicate)
+            with suppress(ValueError):
                 lsh.insert(str(idx), mh)
-            except ValueError:
-                # Duplicate key — already inserted (exact duplicate)
-                pass
 
     total_docs = len(records)
     logger.info("Computed %d signatures from %d documents", len(signatures), total_docs)
@@ -198,7 +200,12 @@ def run_lexical_dedup(
     with open(report_path, "w", encoding="utf-8") as f:
         json.dump(report, f, indent=2)
 
-    logger.info("Dedup complete: kept=%d removed=%d (%.1f%% reduction)", kept, removed, report["reduction_percent"])
+    logger.info(
+        "Dedup complete: kept=%d removed=%d (%.1f%% reduction)",
+        kept,
+        removed,
+        report["reduction_percent"],
+    )
     return report
 
 
@@ -206,16 +213,42 @@ def run_lexical_dedup(
 # CLI
 # ---------------------------------------------------------------------------
 
+
 @click.command("lexical-dedup")
-@click.option("--input", "input_path", required=True, type=click.Path(exists=True), help="Input JSONL file")
-@click.option("--output", "output_path", required=True, type=click.Path(), help="Output deduplicated JSONL file")
-@click.option("--report", "report_path", default=None, type=click.Path(), help="Output report JSON path")
-@click.option("--threshold", default=0.8, type=float, help="Jaccard similarity threshold for dedup (0.0-1.0)")
+@click.option(
+    "--input",
+    "input_path",
+    required=True,
+    type=click.Path(exists=True),
+    help="Input JSONL file",
+)
+@click.option(
+    "--output",
+    "output_path",
+    required=True,
+    type=click.Path(),
+    help="Output deduplicated JSONL file",
+)
+@click.option(
+    "--report", "report_path", default=None, type=click.Path(), help="Output report JSON path"
+)
+@click.option(
+    "--threshold",
+    default=0.8,
+    type=float,
+    help="Jaccard similarity threshold for dedup (0.0-1.0)",
+)
 @click.option("--num-perm", default=128, type=int, help="Number of MinHash permutations")
 @click.option("--ngram-size", default=5, type=int, help="N-gram size for shingling")
-@click.option("--ngram-type", default="char", type=click.Choice(["char", "word"]), help="N-gram type")
+@click.option(
+    "--ngram-type", default="char", type=click.Choice(["char", "word"]), help="N-gram type"
+)
 @click.option("--text-field", default="text", help="Field name containing document text")
-@click.option("--log-level", default="INFO", type=click.Choice(["DEBUG", "INFO", "WARNING", "ERROR"]))
+@click.option(
+    "--log-level",
+    default="INFO",
+    type=click.Choice(["DEBUG", "INFO", "WARNING", "ERROR"]),
+)
 def cli(
     input_path: str,
     output_path: str,
@@ -253,7 +286,7 @@ def cli(
         text_field=text_field,
     )
 
-    click.echo(f"\n--- Lexical Dedup Report ---")
+    click.echo("\n--- Lexical Dedup Report ---")
     click.echo(f"Total documents:   {report['total_documents']:>10,}")
     click.echo(f"Documents kept:    {report['documents_kept']:>10,}")
     click.echo(f"Documents removed: {report['documents_removed']:>10,}")

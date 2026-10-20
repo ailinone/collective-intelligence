@@ -125,6 +125,10 @@
  */
 
 import { checkQuota } from '@/services/quota-service';
+import {
+  checkAndConsumePlanDailyQuota,
+  planQuotaExceededBody,
+} from '@/services/plan-quota-gate';
 import { evaluateGovernance } from '@/services/org-governance-service';
 import { recordSecurityEvent } from '@/services/security-audit-service';
 import { logger } from '@/utils/logger';
@@ -583,6 +587,22 @@ export async function evaluateOrchestrationGate(
         });
       }
     );
+  }
+
+  // ── 3. Plan daily quota (`PLAN_QUOTA_ENFORCEMENT_ENABLED`) ────────────────
+  // The PLAN's api_requests_daily ceiling (billing /v1/plans/resolve),
+  // counted per (org, UTC-day) in Redis. LAST admission step on purpose:
+  // requests denied above must not burn the org's plan allowance. Flag-off
+  // (the shipped default) is a structural no-op inside the gate, so this
+  // lands dark and is lit per-org by a deploy-time flag after canary —
+  // the same rollout shape PREPAID_WALLET_GATE used.
+  const planQuota = await checkAndConsumePlanDailyQuota(organizationId, userId);
+  if (planQuota.enforced && !planQuota.allowed) {
+    return finalize(mode, input, {
+      code: 'plan_quota_exceeded',
+      status: 429,
+      body: planQuotaExceededBody(planQuota.resetAt ?? '', planQuota.limit ?? 0),
+    });
   }
 
   return ALLOW;

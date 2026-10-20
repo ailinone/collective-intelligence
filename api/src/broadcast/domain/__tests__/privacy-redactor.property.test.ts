@@ -330,6 +330,16 @@ describe('Invariant 3 — COMPLETENESS (no T1/T2 cleartext when redaction ON)', 
     fc.assert(
       fc.property(envelopeArb(), (envelope) => {
         fc.pre(envelope.routing.reason.length >= 10);
+        // Skip coincidental duplicates: the generator can independently emit
+        // the same string in T3 passthrough fields (e.g. providerId), which
+        // the whole-envelope search would flag even with reason properly
+        // redacted (seed 1807990904: reason "constructo" vs providerId
+        // "constructo ").
+        const withoutReason = JSON.stringify({
+          ...envelope,
+          routing: { ...envelope.routing, reason: '' },
+        });
+        fc.pre(!withoutReason.includes(envelope.routing.reason));
 
         const policy: PrivacyPolicy = {
           ...PRIVACY_POLICY_SOTA,

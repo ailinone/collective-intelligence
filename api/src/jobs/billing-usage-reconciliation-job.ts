@@ -13,6 +13,7 @@ import { logger } from '@/utils/logger';
 import { prisma } from '@/database/client';
 import { narrowAs } from '@/utils/type-guards';
 import { createUsageInvoiceFromUsage } from '@/services/billing-service';
+import { InvoicePeriodOverlapError } from '@/utils/custom-errors';
 
 let reconciliationTask: ScheduledTask | null = null;
 
@@ -106,6 +107,23 @@ export async function runUsageReconciliationCycle(referenceDate = new Date()): P
         );
       }
     } catch (error) {
+      if (error instanceof InvoicePeriodOverlapError) {
+        // Benign race, not a job failure: this org's exact-match findFirst
+        // pre-check (createUsageInvoiceFromUsage) ran clean, but a concurrent
+        // insert for an overlapping period — another reconciliation run, or a
+        // self-service invoice — won the DB's no_overlapping_invoice_period
+        // exclusion constraint first. The period is covered either way, so
+        // there is nothing to retry.
+        logger.info(
+          {
+            organizationId,
+            periodStart: start.toISOString(),
+            periodEnd: end.toISOString(),
+          },
+          'Usage invoice skipped: period already covered by a concurrent invoice'
+        );
+        continue;
+      }
       logger.error(
         {
           error,

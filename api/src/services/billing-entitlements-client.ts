@@ -72,6 +72,7 @@
 
 import { getGlobalRedisClient } from '@/cache/redis-client';
 import { logger } from '@/utils/logger';
+import { noteFailOpen } from '@/utils/metrics';
 import {
   getBillingActorHeaders,
   __resetBillingActorTokenForTests,
@@ -95,6 +96,17 @@ export interface BillingEntitlements {
 }
 
 const CACHE_KEY_PREFIX = 'billing:entitlements:';
+/**
+ * Secondary STALE cache key prefix (A3, strategy-target-policy.ts): every
+ * successful resolve is ALSO written here with a much longer TTL, so the
+ * target-policy gate can decide on the last-known planId during a billing
+ * outage instead of falling to the availability defaults. See
+ * `readStaleFromCache`/`resolveTenantEntitlements` below — the primary
+ * `getTenantEntitlements` path and its existing caller
+ * (multi-tenancy-config.ts::resolveEffectiveTierConfig) keep their EXACT
+ * current behavior (they never read this key).
+ */
+const STALE_CACHE_KEY_PREFIX = 'billing:entitlements:stale:';
 
 function envInt(name: string, fallback: number): number {
   const raw = process.env[name];
@@ -104,10 +116,16 @@ function envInt(name: string, fallback: number): number {
 }
 
 const CACHE_TTL_SECONDS = envInt('BILLING_ENTITLEMENTS_CACHE_TTL_SECONDS', 300);
+/** Stale-read window (A3 §5): `BILLING_ENTITLEMENTS_STALE_TTL_SECONDS`, default 24 h. */
+const STALE_TTL_SECONDS = envInt('BILLING_ENTITLEMENTS_STALE_TTL_SECONDS', 86_400);
 const FETCH_TIMEOUT_MS = envInt('BILLING_ENTITLEMENTS_TIMEOUT_MS', 3000);
 
 function cacheKey(organizationId: string): string {
   return `${CACHE_KEY_PREFIX}${organizationId}`;
+}
+
+function staleCacheKey(organizationId: string): string {
+  return `${STALE_CACHE_KEY_PREFIX}${organizationId}`;
 }
 
 async function readFromCache(organizationId: string): Promise<BillingEntitlements | null> {
@@ -126,9 +144,38 @@ async function writeToCache(organizationId: string, entitlements: BillingEntitle
   try {
     const redis = getGlobalRedisClient();
     await redis.setex(cacheKey(organizationId), CACHE_TTL_SECONDS, JSON.stringify(entitlements));
+    // ONE write, two keys: also refresh the long-TTL stale copy (A3 §5). A
+    // failure of the stale write alone must not fail the primary write path —
+    // it only means the next outage decides on an older snapshot or on the
+    // availability defaults.
+    try {
+      await redis.setex(staleCacheKey(organizationId), STALE_TTL_SECONDS, JSON.stringify(entitlements));
+    } catch (staleError) {
+      log.warn(
+        { error: staleError, organizationId },
+        'billing entitlements STALE Redis write failed (primary cache unaffected)'
+      );
+    }
   } catch (error) {
     // Not fatal — just means the next call re-fetches instead of hitting cache.
     log.warn({ error, organizationId }, 'billing entitlements Redis write failed');
+  }
+}
+
+/** The long-TTL last-known-good copy, read ONLY by `resolveTenantEntitlements`
+ * on a primary miss with billing unreachable — never by the primary path. */
+async function readStaleFromCache(organizationId: string): Promise<BillingEntitlements | null> {
+  try {
+    const redis = getGlobalRedisClient();
+    const cached = await redis.get(staleCacheKey(organizationId));
+    if (!cached) return null;
+    return JSON.parse(cached) as BillingEntitlements;
+  } catch (error) {
+    log.warn(
+      { error, organizationId },
+      'billing entitlements stale Redis read failed -- treating as a stale miss'
+    );
+    return null;
   }
 }
 
@@ -182,6 +229,14 @@ export async function getTenantEntitlements(organizationId: string): Promise<Bil
   if (!billingUrl || !billingSecret) {
     // Network-unavailability category (here: "not configured at all"), not a
     // billing-side data problem — the caller falls back to TIER_CONFIGS.
+    // FIX (A3 census, ENT-001): this was the module's only SILENT degradation
+    // path — every other failure mode here logs; a missing-credentials
+    // permanent fail-open was invisible in production. Same level as the
+    // other fallbacks (warn): it is an availability event, not an error.
+    log.warn(
+      { organizationId },
+      'billing entitlements resolve skipped: BILLING_SERVICE_URL/BILLING_API_SECRET_KEY not configured -- permanently failing open to local tier config'
+    );
     return null;
   }
 
@@ -206,6 +261,7 @@ export async function getTenantEntitlements(organizationId: string): Promise<Bil
         { status: response.status, organizationId },
         'billing entitlements resolve returned a non-2xx status -- falling back to local tier config'
       );
+      noteFailOpen('billing_entitlements_non_2xx', { organizationId, status: response.status });
       return null;
     }
 
@@ -216,6 +272,7 @@ export async function getTenantEntitlements(organizationId: string): Promise<Bil
         { organizationId },
         'billing entitlements resolve returned an unexpected response shape -- falling back to local tier config'
       );
+      noteFailOpen('billing_entitlements_bad_shape', { organizationId });
       return null;
     }
 
@@ -226,8 +283,60 @@ export async function getTenantEntitlements(organizationId: string): Promise<Bil
       { error, organizationId },
       'billing entitlements resolve request failed (network/timeout) -- falling back to local tier config'
     );
+    noteFailOpen('billing_entitlements_network', { organizationId });
     return null;
   }
+}
+
+/**
+ * HOW a decision was reached — `basis` distinguishes the three situations the
+ * A3 failure-mode table (a3-deny-matrix-design.md §4) needs apart:
+ *   - `fresh`: live billing resolve (or a primary-cache hit within its TTL);
+ *   - `stale`: billing unreachable, but a last-known-good snapshot survived in
+ *     the long-TTL stale key — good enough to key a matrix decision on;
+ *   - `unavailable`: billing unreachable AND no stale copy — the caller (the
+ *     target policy) applies its per-risk-class availability default.
+ */
+export type EntitlementsBasis = 'fresh' | 'stale' | 'unavailable';
+
+export interface TenantEntitlementsResolution {
+  entitlements: BillingEntitlements | null;
+  basis: EntitlementsBasis;
+}
+
+/**
+ * Entitlements WITH an availability verdict, for policy callers that must
+ * distinguish "billing said" from "we remembered what billing last said" from
+ * "we have no idea". The primary `getTenantEntitlements` stays unchanged for
+ * its existing caller; this wrapper composes it with the stale read so there
+ * is exactly ONE fetch path (A3 §5: one write, no new fetch path).
+ *
+ * Never throws, like everything else in this module.
+ */
+export async function resolveTenantEntitlements(
+  organizationId: string
+): Promise<TenantEntitlementsResolution> {
+  if (!organizationId) {
+    return { entitlements: null, basis: 'unavailable' };
+  }
+
+  const cached = await readFromCache(organizationId);
+  if (cached) {
+    return { entitlements: cached, basis: 'fresh' };
+  }
+
+  // Re-runs the (cheap, cache-miss) primary path — including its side effects:
+  // on success `writeToCache` has already refreshed BOTH cache keys.
+  const entitlements = await getTenantEntitlements(organizationId);
+  if (entitlements) {
+    return { entitlements, basis: 'fresh' };
+  }
+
+  const stale = await readStaleFromCache(organizationId);
+  if (stale) {
+    return { entitlements: stale, basis: 'stale' };
+  }
+  return { entitlements: null, basis: 'unavailable' };
 }
 
 /** Test-only: clears the shared actor-token provider's module-level

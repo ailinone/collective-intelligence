@@ -28,6 +28,7 @@ import type {
   ToolCall,
 } from '@/types';
 import type { ObserverFeed } from './observer/observer-types';
+import { buildProviderFailureFromString } from './failures/provider-failure';
 import type { ProviderAdapter } from '@/providers/base/provider-adapter';
 import type { ObserverNarration } from '@/types';
 import type { ModelResponse } from '@/core/aggregation/response-aggregator';
@@ -612,6 +613,17 @@ export abstract class BaseStrategy {
        * this streaming helper.
        */
       skipSynthesisCap?: boolean;
+      /**
+       * Observability (ci#765 defect 1): optional request correlation + pin
+       * context stamped onto EVERY per-candidate failure log below, so a
+       * failing attempt in the streaming fallback chain always leaves a
+       * structured line (attempt/provider/model/errorCode/durationMs/
+       * pinnedRequest) BEFORE the next candidate starts. Optional because the
+       * collective strategies that share this helper have no requestId in
+       * scope — only the single-model pin path passes it today.
+       */
+      requestId?: string;
+      pinnedRequest?: boolean;
     }
   ): AsyncGenerator<ChatResponse, void, unknown> {
     request = opts?.skipSynthesisCap ? request : this.capSynthesisRequest(request);
@@ -754,15 +766,35 @@ export abstract class BaseStrategy {
         } catch {
           /* ignore */
         }
+        // Structured per-candidate failure line (ci#765 defect 1): a failed
+        // attempt in the streaming fallback chain MUST leave a log with
+        // request correlation, attempt index, provider/model identity, the
+        // provider error code, its duration, and whether the request had an
+        // explicit model pin — BEFORE the next candidate is tried. This was
+        // exactly the blind spot in prod (pin `@cf/deepseek-ai/...` on
+        // cloudflare-workers-ai, requestId n-y74gcR8b9UHlPOTTCOe, died with
+        // no error/warn anywhere explaining why).
+        const failureFields = {
+          requestId: opts?.requestId,
+          attempt: candidateIndex,
+          provider: cand.adapter.getName(),
+          model: cand.model.id,
+          modelName: cand.model.name,
+          errorCode: extractErrorCodeFromObject(err),
+          statusCode: extractStatusCode(err),
+          error: msg,
+          durationMs: Date.now() - attemptStartedAt,
+          pinnedRequest: opts?.pinnedRequest,
+        };
         if (started) {
           this.log.warn(
-            { provider: cand.adapter.getName(), model: cand.model.id, error: msg },
+            failureFields,
             'Synthesis stream failed AFTER first chunk — keeping partial output'
           );
           return;
         }
         this.log.warn(
-          { provider: cand.adapter.getName(), model: cand.model.id, error: msg },
+          failureFields,
           'Synthesis stream failed/timed out before first chunk — falling back to next synthesizer'
         );
       }
@@ -2498,6 +2530,49 @@ export abstract class BaseStrategy {
   }
 
   /**
+   * ci#752: emit a `model_failed` observer event for one failed fan-out
+   * participant. Non-blocking; no-op when the observer is inactive.
+   *
+   * Until this existed, a per-model failure was only visible in the debug
+   * log ("Model execution failed" / "Provider returned empty assistant
+   * response") and in the aggregate succeeded/failed counts — the observer
+   * (and the user watching the narration) never learned that an analyst
+   * dropped out, or why. The narrator builds the actual sentence
+   * deterministically (see `buildModelFailedNarration`); this helper only
+   * carries the structured facts.
+   *
+   * Deliberately does NOT touch retry/failover behavior — it is narration
+   * only (log-side failover observability is ci#765's scope).
+   */
+  protected emitModelFailedEvent(
+    context: OrchestrationContext,
+    failure: {
+      modelId: string;
+      modelName?: string;
+      provider?: string;
+      role?: string;
+      /** Raw error message (already sanitized by the caller's logger paths). */
+      errorMessage?: string;
+      attempt?: number;
+      /** Healthy participants still continuing (N-1), for the narration. */
+      remaining?: number;
+    }
+  ): void {
+    const shortError = (failure.errorMessage ?? '').slice(0, 200);
+    this.emitObserverEvent(context, {
+      type: 'model_failed',
+      modelId: failure.modelId,
+      modelName: failure.modelName,
+      provider: failure.provider,
+      role: failure.role,
+      errorCode: buildProviderFailureFromString({ raw: failure.errorMessage }).code,
+      attempt: failure.attempt,
+      summary: `A participant failed: ${shortError || 'unknown error'}.`,
+      metadata: { remaining: failure.remaining, error: failure.errorMessage },
+    });
+  }
+
+  /**
    * Build an SSE chunk for an observer narration.
    * Same structure as progressChunk() but with type: 'observer'.
    * Client distinguishes by checking ailin_metadata.type.
@@ -2772,15 +2847,27 @@ export abstract class BaseStrategy {
     const execution = await this.executeModel(adapter, model, reqForExecution, role, signal);
 
     if (this.isReasoningEnabled(request) && execution.success) {
-      const content = safeResponseContent(execution.response);
-      if (content) {
-        const { reasoning, cleanContent } = this.extractReasoning(content);
-        if (reasoning) {
-          execution.reasoning = reasoning;
-          execution.reasoningTokens = Math.ceil(reasoning.split(/\s+/).length * 1.3); // Approximate token count
-          // Replace response content with clean version (no reasoning tags)
-          if (execution.response?.choices?.[0]?.message) {
-            execution.response.choices[0].message.content = cleanContent;
+      // Dedicated reasoning channel first (ci#750, owner decision
+      // 2026-10-04): adapters now surface native reasoning on
+      // `message.reasoning_content` with `content` already clean, so no tag
+      // parsing is needed — the content must be left untouched.
+      const dedicatedReasoning = execution.response?.choices?.[0]?.message?.reasoning_content;
+      if (typeof dedicatedReasoning === 'string' && dedicatedReasoning.trim().length > 0) {
+        execution.reasoning = dedicatedReasoning;
+        execution.reasoningTokens = Math.ceil(dedicatedReasoning.split(/\s+/).length * 1.3); // Approximate token count
+      } else {
+        // Legacy inline-tag fallback: models (or callers' own protocols) that
+        // still inline `<reasoning>`/`<think>` tags in the content.
+        const content = safeResponseContent(execution.response);
+        if (content) {
+          const { reasoning, cleanContent } = this.extractReasoning(content);
+          if (reasoning) {
+            execution.reasoning = reasoning;
+            execution.reasoningTokens = Math.ceil(reasoning.split(/\s+/).length * 1.3); // Approximate token count
+            // Replace response content with clean version (no reasoning tags)
+            if (execution.response?.choices?.[0]?.message) {
+              execution.response.choices[0].message.content = cleanContent;
+            }
           }
         }
       }
@@ -2961,8 +3048,9 @@ export abstract class BaseStrategy {
       const { executeToolForStrategy, executeQuorumApprovedToolForStrategy } = await import(
         '@/services/strategy-tool-executor'
       );
-      const toolResults: Array<{ message: ChatMessage; artifact?: ArtifactRef }> = await Promise.all(
-        toolCalls.map(async (toolCall): Promise<{ message: ChatMessage; artifact?: ArtifactRef }> => {
+      const toolResults: Array<{ message: ChatMessage; artifact?: ArtifactRef; cost?: number }> =
+        await Promise.all(
+        toolCalls.map(async (toolCall): Promise<{ message: ChatMessage; artifact?: ArtifactRef; cost?: number }> => {
           try {
             const result =
               executionMode.get(toolCall) === 'quorum'
@@ -2977,6 +3065,7 @@ export abstract class BaseStrategy {
               artifact: result.artifact
                 ? { ...result.artifact, sourceToolCallId: toolCall.id, role }
                 : undefined,
+              cost: result.cost,
             };
           } catch (err) {
             return {
@@ -2991,6 +3080,7 @@ export abstract class BaseStrategy {
       );
       for (const r of toolResults) {
         if (r.artifact) collectedArtifacts.push(r.artifact);
+        if (typeof r.cost === 'number') totalCost += r.cost;
       }
 
       // Re-send with tool results appended to conversation

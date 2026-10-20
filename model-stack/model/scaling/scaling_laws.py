@@ -21,9 +21,7 @@ from __future__ import annotations
 
 import json
 import logging
-import math
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Any
 
 import click
@@ -42,21 +40,18 @@ logger = logging.getLogger(__name__)
 
 CHINCHILLA = {
     # Loss model parameters
-    "E": 1.69,          # Irreducible loss (entropy of natural language)
-    "A": 406.4,         # Parameter scaling coefficient
-    "alpha": 0.34,      # Parameter scaling exponent
-    "B": 410.7,         # Data scaling coefficient
-    "beta": 0.28,       # Data scaling exponent
-
+    "E": 1.69,  # Irreducible loss (entropy of natural language)
+    "A": 406.4,  # Parameter scaling coefficient
+    "alpha": 0.34,  # Parameter scaling exponent
+    "B": 410.7,  # Data scaling coefficient
+    "beta": 0.28,  # Data scaling exponent
     # Optimal allocation (from parametric fits)
     # N_opt = a_N * C^p_N
-    "a_N": 0.7057,      # Coefficient for optimal N
-    "p_N": 0.4988,      # Exponent for optimal N (close to 0.5)
-
+    "a_N": 0.7057,  # Coefficient for optimal N
+    "p_N": 0.4988,  # Exponent for optimal N (close to 0.5)
     # D_opt = a_D * C^p_D
-    "a_D": 0.2360,      # Coefficient for optimal D
-    "p_D": 0.5012,      # Exponent for optimal D (close to 0.5)
-
+    "a_D": 0.2360,  # Coefficient for optimal D
+    "p_D": 0.5012,  # Exponent for optimal D (close to 0.5)
     # Ratio: Chinchilla recommends ~20 tokens per parameter
     "tokens_per_param": 20.0,
 }
@@ -74,6 +69,7 @@ KAPLAN = {
 # ---------------------------------------------------------------------------
 # Compute estimation
 # ---------------------------------------------------------------------------
+
 
 def estimate_flops_per_token(num_params: int) -> float:
     """
@@ -98,7 +94,7 @@ def estimate_training_flops(num_params: int, num_tokens: int) -> float:
 def estimate_gpu_hours(
     total_flops: float,
     gpu_flops: float = 312e12,  # A100 BF16 peak: 312 TFLOPS
-    mfu: float = 0.40,          # Model FLOP utilization (typical: 30-50%)
+    mfu: float = 0.40,  # Model FLOP utilization (typical: 30-50%)
 ) -> float:
     """Estimate GPU hours needed for training."""
     effective_flops = gpu_flops * mfu
@@ -109,6 +105,7 @@ def estimate_gpu_hours(
 # ---------------------------------------------------------------------------
 # Chinchilla-optimal estimation
 # ---------------------------------------------------------------------------
+
 
 @dataclass
 class ScalingEstimate:
@@ -177,7 +174,8 @@ def predict_loss(num_params: int, num_tokens: int) -> float:
     """
     c = CHINCHILLA
     loss = c["E"] + c["A"] / (num_params ** c["alpha"]) + c["B"] / (num_tokens ** c["beta"])
-    return loss
+    # 2026-10-18 int ** float types as Any; float() is a no-op boundary conversion
+    return float(loss)
 
 
 def _round_to_multiple(value: int, multiple: int) -> int:
@@ -285,7 +283,9 @@ def estimate_from_compute(compute_budget_flops: float) -> ScalingEstimate:
     )
 
 
-def estimate_from_params(target_params: int, tokens_per_param: float | None = None) -> ScalingEstimate:
+def estimate_from_params(
+    target_params: int, tokens_per_param: float | None = None
+) -> ScalingEstimate:
     """
     Given a target model size, estimate training tokens needed.
 
@@ -360,9 +360,15 @@ def compare_scaling(
     """
     if param_sizes is None:
         param_sizes = [
-            int(70e6), int(160e6), int(410e6),
-            int(1e9), int(3e9), int(7e9),
-            int(13e9), int(30e9), int(70e9),
+            int(70e6),
+            int(160e6),
+            int(410e6),
+            int(1e9),
+            int(3e9),
+            int(7e9),
+            int(13e9),
+            int(30e9),
+            int(70e9),
         ]
 
     results: list[dict[str, Any]] = []
@@ -377,14 +383,23 @@ def compare_scaling(
 # CLI
 # ---------------------------------------------------------------------------
 
+
 @click.command("scaling-laws")
 @click.option("--compute", default=None, type=float, help="Compute budget in FLOPs (e.g., 1e21)")
-@click.option("--params", default=None, type=float, help="Target parameter count (e.g., 1e9 for 1B)")
-@click.option("--tokens", default=None, type=float, help="Training token budget (e.g., 3e11 for 300B)")
-@click.option("--tokens-per-param", default=None, type=float, help="Override tokens-per-param ratio")
+@click.option(
+    "--params", default=None, type=float, help="Target parameter count (e.g., 1e9 for 1B)"
+)
+@click.option(
+    "--tokens", default=None, type=float, help="Training token budget (e.g., 3e11 for 300B)"
+)
+@click.option(
+    "--tokens-per-param", default=None, type=float, help="Override tokens-per-param ratio"
+)
 @click.option("--compare", is_flag=True, help="Compare estimates across standard model sizes")
 @click.option("--output", default=None, type=click.Path(), help="Save report to JSON file")
-@click.option("--log-level", default="INFO", type=click.Choice(["DEBUG", "INFO", "WARNING", "ERROR"]))
+@click.option(
+    "--log-level", default="INFO", type=click.Choice(["DEBUG", "INFO", "WARNING", "ERROR"])
+)
 def cli(
     compute: float | None,
     params: float | None,
@@ -403,7 +418,10 @@ def cli(
     if compare:
         results = compare_scaling()
         click.echo("\n--- Scaling Law Comparison (Chinchilla-Optimal) ---")
-        click.echo(f"{'Params':>12s} {'Tokens':>12s} {'FLOPs':>12s} {'Loss':>8s} {'A100 hrs':>10s} {'H100 hrs':>10s}")
+        click.echo(
+            f"{'Params':>12s} {'Tokens':>12s} {'FLOPs':>12s} "
+            f"{'Loss':>8s} {'A100 hrs':>10s} {'H100 hrs':>10s}"
+        )
         click.echo("-" * 70)
         for r in results:
             o = r["optimal"]
@@ -449,14 +467,14 @@ def cli(
     click.echo(f"Predicted loss:      {report['predicted_loss']:.4f}")
 
     res = report["resource_estimates"]
-    click.echo(f"\nResource estimates (40% MFU):")
+    click.echo("\nResource estimates (40% MFU):")
     click.echo(f"  A100 GPU-hours:    {res['gpu_hours_a100_40pct_mfu']:,.0f}")
     click.echo(f"  A100 8-GPU days:   {res['gpu_days_a100_8gpu']:,.1f}")
     click.echo(f"  H100 GPU-hours:    {res['gpu_hours_h100_40pct_mfu']:,.0f}")
     click.echo(f"  H100 8-GPU days:   {res['gpu_days_h100_8gpu']:,.1f}")
 
     arch = report["suggested_architecture"]
-    click.echo(f"\nSuggested architecture:")
+    click.echo("\nSuggested architecture:")
     click.echo(f"  hidden_size:       {arch['hidden_size']}")
     click.echo(f"  num_layers:        {arch['num_layers']}")
     click.echo(f"  num_heads:         {arch['num_heads']}")

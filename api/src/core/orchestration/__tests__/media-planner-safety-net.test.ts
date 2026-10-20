@@ -73,23 +73,23 @@ function makeEngine(): OrchestrationEngine {
   });
 }
 
-function getStrategy(engine: OrchestrationEngine): MediaPlannerStrategy {
+function getStrategy(engine: OrchestrationEngine): Promise<MediaPlannerStrategy> {
   return (
-    engine as unknown as { getMediaPlannerStrategy: () => MediaPlannerStrategy }
+    engine as unknown as { getMediaPlannerStrategy: () => Promise<MediaPlannerStrategy> }
   ).getMediaPlannerStrategy();
 }
 
 describe('OrchestrationEngine.getMediaPlannerStrategy', () => {
-  it('lazily constructs a MediaPlannerStrategy instance', () => {
+  it('lazily constructs a MediaPlannerStrategy instance', async () => {
     const engine = makeEngine();
-    const strategy = getStrategy(engine);
+    const strategy = await getStrategy(engine);
     expect(strategy).toBeInstanceOf(MediaPlannerStrategy);
   });
 
-  it('memoizes the instance across calls', () => {
+  it('memoizes the instance across calls', async () => {
     const engine = makeEngine();
-    const first = getStrategy(engine);
-    const second = getStrategy(engine);
+    const first = await getStrategy(engine);
+    const second = await getStrategy(engine);
     expect(first).toBe(second);
   });
 });
@@ -143,7 +143,7 @@ describe('OrchestrationEngine.maybeRouteToMediaPlannerSafetyNet', () => {
       messages: [{ role: 'user', content: 'generate a 30s 4k video AND a matching poster image' }],
     };
 
-    const strategy = getStrategy(engine);
+    const strategy = await getStrategy(engine);
     const mockResult: OrchestrationResult = {
       strategyUsed: 'single',
       modelsUsed: [],
@@ -173,7 +173,7 @@ describe('OrchestrationEngine.maybeRouteToMediaPlannerSafetyNet', () => {
     const request: ChatRequest = {
       messages: [{ role: 'user', content: 'generate an image of a cat' }],
     };
-    const strategy = getStrategy(engine);
+    const strategy = await getStrategy(engine);
     const executeSpy = vi.spyOn(strategy, 'execute');
 
     const result = await callMaybeRoute(engine, request, context);

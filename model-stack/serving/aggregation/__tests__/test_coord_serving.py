@@ -19,10 +19,11 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 
-def _reset_state(serving_mode_value: str, *, auth_token: str = ""):
+def _reset_state(serving_mode_value: str, *, auth_token: str = "") -> FastAPI:
     """Reset module-global state for a clean test slot.
 
     Both teacher_traces._writer_singleton and coord_serving.STATE are
@@ -45,7 +46,7 @@ def _reset_state(serving_mode_value: str, *, auth_token: str = ""):
 
 
 @pytest.fixture
-def mock_app(monkeypatch, tmp_path: Path):
+def mock_app(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> FastAPI:
     """Spin up the FastAPI app in MOCK_DETERMINISTIC mode (auth disabled)."""
     monkeypatch.setenv("COORD_SERVING_MODE", "MOCK_DETERMINISTIC")
     monkeypatch.setenv("COORD_TEACHER_TRACES_DIR", str(tmp_path))
@@ -53,7 +54,7 @@ def mock_app(monkeypatch, tmp_path: Path):
 
 
 @pytest.fixture
-def auth_app(monkeypatch, tmp_path: Path):
+def auth_app(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> FastAPI:
     """Spin up the FastAPI app with bearer auth enabled (token=secret-token).
 
     The COORD_SERVING_AUTH_TOKEN env var is set so the lifespan handler
@@ -68,7 +69,7 @@ def auth_app(monkeypatch, tmp_path: Path):
 
 
 @pytest.fixture
-def cascade_app(monkeypatch, tmp_path: Path):
+def cascade_app(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> FastAPI:
     """Spin up the FastAPI app in MOCK_CASCADE mode."""
     monkeypatch.setenv("COORD_SERVING_MODE", "MOCK_CASCADE")
     monkeypatch.setenv("COORD_TEACHER_TRACES_DIR", str(tmp_path))
@@ -81,7 +82,7 @@ def cascade_app(monkeypatch, tmp_path: Path):
 
 
 class TestHealthEndpoints:
-    def test_health_returns_ok(self, mock_app):
+    def test_health_returns_ok(self, mock_app: FastAPI) -> None:
         with TestClient(mock_app) as client:
             r = client.get("/health")
             assert r.status_code == 200
@@ -89,7 +90,7 @@ class TestHealthEndpoints:
             assert body["status"] == "ok"
             assert body["mode"] == "MOCK_DETERMINISTIC"
 
-    def test_ready_in_mock_mode_returns_true(self, mock_app):
+    def test_ready_in_mock_mode_returns_true(self, mock_app: FastAPI) -> None:
         with TestClient(mock_app) as client:
             r = client.get("/ready")
             assert r.status_code == 200
@@ -97,7 +98,7 @@ class TestHealthEndpoints:
             assert body["ready"] is True
             assert body["mode"] == "MOCK_DETERMINISTIC"
 
-    def test_metrics_endpoint_exposes_prometheus_format(self, mock_app):
+    def test_metrics_endpoint_exposes_prometheus_format(self, mock_app: FastAPI) -> None:
         with TestClient(mock_app) as client:
             r = client.get("/metrics")
             assert r.status_code == 200
@@ -110,7 +111,7 @@ class TestHealthEndpoints:
 
 
 class TestDecideEndpointMock:
-    def test_tri_role_role_for_turn_returns_auditor(self, mock_app):
+    def test_tri_role_role_for_turn_returns_auditor(self, mock_app: FastAPI) -> None:
         with TestClient(mock_app) as client:
             r = client.post(
                 "/v1/ensemble/decide",
@@ -131,7 +132,7 @@ class TestDecideEndpointMock:
             assert decision["shortCircuited"] is True
             assert decision["tiersActivated"] == [1]
 
-    def test_debate_moderator_selection_returns_moderator(self, mock_app):
+    def test_debate_moderator_selection_returns_moderator(self, mock_app: FastAPI) -> None:
         with TestClient(mock_app) as client:
             r = client.post(
                 "/v1/ensemble/decide",
@@ -144,7 +145,7 @@ class TestDecideEndpointMock:
             assert r.status_code == 200
             assert r.json()["decision"]["role"] == "moderator"
 
-    def test_expert_panel_panel_composition(self, mock_app):
+    def test_expert_panel_panel_composition(self, mock_app: FastAPI) -> None:
         with TestClient(mock_app) as client:
             r = client.post(
                 "/v1/ensemble/decide",
@@ -157,7 +158,7 @@ class TestDecideEndpointMock:
             assert r.status_code == 200
             assert r.json()["decision"]["role"] == "coordinator"
 
-    def test_response_carries_request_id(self, mock_app):
+    def test_response_carries_request_id(self, mock_app: FastAPI) -> None:
         with TestClient(mock_app) as client:
             r = client.post(
                 "/v1/ensemble/decide",
@@ -171,7 +172,7 @@ class TestDecideEndpointMock:
             assert r.status_code == 200
             assert r.json()["requestId"] == "req-abc-123"
 
-    def test_response_generates_request_id_when_missing(self, mock_app):
+    def test_response_generates_request_id_when_missing(self, mock_app: FastAPI) -> None:
         with TestClient(mock_app) as client:
             r = client.post(
                 "/v1/ensemble/decide",
@@ -193,7 +194,7 @@ class TestDecideEndpointMock:
 
 
 class TestRequestValidation:
-    def test_missing_strategy_returns_422(self, mock_app):
+    def test_missing_strategy_returns_422(self, mock_app: FastAPI) -> None:
         with TestClient(mock_app) as client:
             r = client.post(
                 "/v1/ensemble/decide",
@@ -201,7 +202,7 @@ class TestRequestValidation:
             )
             assert r.status_code == 422
 
-    def test_invalid_strategy_returns_422(self, mock_app):
+    def test_invalid_strategy_returns_422(self, mock_app: FastAPI) -> None:
         with TestClient(mock_app) as client:
             r = client.post(
                 "/v1/ensemble/decide",
@@ -213,7 +214,7 @@ class TestRequestValidation:
             )
             assert r.status_code == 422
 
-    def test_invalid_decision_type_returns_422(self, mock_app):
+    def test_invalid_decision_type_returns_422(self, mock_app: FastAPI) -> None:
         with TestClient(mock_app) as client:
             r = client.post(
                 "/v1/ensemble/decide",
@@ -232,7 +233,7 @@ class TestRequestValidation:
 
 
 class TestDecideEndpointCascade:
-    def test_default_request_short_circuits_via_cascade(self, cascade_app):
+    def test_default_request_short_circuits_via_cascade(self, cascade_app: FastAPI) -> None:
         with TestClient(cascade_app) as client:
             r = client.post(
                 "/v1/ensemble/decide",
@@ -254,7 +255,7 @@ class TestDecideEndpointCascade:
             assert decision["finalTier"] <= 4
             assert decision["totalVotes"] >= 4
 
-    def test_dissent_at_tier_1_escalates_past_tier_1(self, cascade_app):
+    def test_dissent_at_tier_1_escalates_past_tier_1(self, cascade_app: FastAPI) -> None:
         with TestClient(cascade_app) as client:
             r = client.post(
                 "/v1/ensemble/decide",
@@ -269,7 +270,7 @@ class TestDecideEndpointCascade:
             # T1 alone insufficient — cascade must have run T2 too
             assert decision["finalTier"] >= 2
 
-    def test_full_cascade_exhaustion(self, cascade_app):
+    def test_full_cascade_exhaustion(self, cascade_app: FastAPI) -> None:
         with TestClient(cascade_app) as client:
             r = client.post(
                 "/v1/ensemble/decide",
@@ -285,7 +286,7 @@ class TestDecideEndpointCascade:
             assert decision["shortCircuited"] is False
             assert decision["tiersActivated"] == [1, 2, 3, 4, 5, 6]
 
-    def test_tier_failure_records_failed_models(self, cascade_app):
+    def test_tier_failure_records_failed_models(self, cascade_app: FastAPI) -> None:
         with TestClient(cascade_app) as client:
             r = client.post(
                 "/v1/ensemble/decide",
@@ -306,7 +307,7 @@ class TestDecideEndpointCascade:
             # verifies cascade kept moving.
             assert decision["role"] == "moderator"
 
-    def test_canonical_role_per_strategy_via_cascade(self, cascade_app):
+    def test_canonical_role_per_strategy_via_cascade(self, cascade_app: FastAPI) -> None:
         # Sanity for all 5 strategies — same as MOCK_DETERMINISTIC, but
         # routed through the real cascade aggregator.
         cases = [
@@ -329,13 +330,13 @@ class TestDecideEndpointCascade:
                 assert r.status_code == 200, (strategy, r.text)
                 assert r.json()["decision"]["role"] == expected_role, strategy
 
-    def test_health_reports_cascade_mode(self, cascade_app):
+    def test_health_reports_cascade_mode(self, cascade_app: FastAPI) -> None:
         with TestClient(cascade_app) as client:
             r = client.get("/health")
             assert r.status_code == 200
             assert r.json()["mode"] == "MOCK_CASCADE"
 
-    def test_ready_in_cascade_mode_returns_true(self, cascade_app):
+    def test_ready_in_cascade_mode_returns_true(self, cascade_app: FastAPI) -> None:
         with TestClient(cascade_app) as client:
             r = client.get("/ready")
             assert r.status_code == 200
@@ -356,13 +357,13 @@ class TestBearerAuth:
         "context": {},
     }
 
-    def test_decide_without_token_returns_401(self, auth_app):
+    def test_decide_without_token_returns_401(self, auth_app: FastAPI) -> None:
         with TestClient(auth_app) as client:
             r = client.post("/v1/ensemble/decide", json=self.DECIDE_PAYLOAD)
             assert r.status_code == 401
             assert "missing" in r.json()["detail"].lower()
 
-    def test_decide_with_malformed_header_returns_401(self, auth_app):
+    def test_decide_with_malformed_header_returns_401(self, auth_app: FastAPI) -> None:
         with TestClient(auth_app) as client:
             r = client.post(
                 "/v1/ensemble/decide",
@@ -372,7 +373,7 @@ class TestBearerAuth:
             assert r.status_code == 401
             assert "malformed" in r.json()["detail"].lower()
 
-    def test_decide_with_wrong_token_returns_401(self, auth_app):
+    def test_decide_with_wrong_token_returns_401(self, auth_app: FastAPI) -> None:
         with TestClient(auth_app) as client:
             r = client.post(
                 "/v1/ensemble/decide",
@@ -382,7 +383,7 @@ class TestBearerAuth:
             assert r.status_code == 401
             assert "invalid" in r.json()["detail"].lower()
 
-    def test_decide_with_correct_token_returns_200(self, auth_app):
+    def test_decide_with_correct_token_returns_200(self, auth_app: FastAPI) -> None:
         with TestClient(auth_app) as client:
             r = client.post(
                 "/v1/ensemble/decide",
@@ -392,25 +393,25 @@ class TestBearerAuth:
             assert r.status_code == 200
             assert r.json()["decision"]["role"] == "moderator"
 
-    def test_health_open_when_auth_enabled(self, auth_app):
+    def test_health_open_when_auth_enabled(self, auth_app: FastAPI) -> None:
         # /health is k8s liveness probe — must work without auth.
         with TestClient(auth_app) as client:
             r = client.get("/health")
             assert r.status_code == 200
 
-    def test_ready_open_when_auth_enabled(self, auth_app):
+    def test_ready_open_when_auth_enabled(self, auth_app: FastAPI) -> None:
         # /ready is k8s readiness probe — must work without auth.
         with TestClient(auth_app) as client:
             r = client.get("/ready")
             assert r.status_code == 200
 
-    def test_metrics_open_when_auth_enabled(self, auth_app):
+    def test_metrics_open_when_auth_enabled(self, auth_app: FastAPI) -> None:
         # /metrics is the prometheus scrape — must work without auth.
         with TestClient(auth_app) as client:
             r = client.get("/metrics")
             assert r.status_code == 200
 
-    def test_decide_open_when_auth_disabled(self, mock_app):
+    def test_decide_open_when_auth_disabled(self, mock_app: FastAPI) -> None:
         # mock_app fixture sets auth_token="" — auth disabled.
         with TestClient(mock_app) as client:
             r = client.post("/v1/ensemble/decide", json=self.DECIDE_PAYLOAD)
@@ -423,19 +424,19 @@ class TestBearerAuth:
 
 
 class TestCorsOrigins:
-    def test_default_origins_is_wildcard(self, monkeypatch):
+    def test_default_origins_is_wildcard(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.delenv("COORD_SERVING_ALLOWED_ORIGINS", raising=False)
         from serving.aggregation.coord_serving import _load_allowed_origins
 
         assert _load_allowed_origins() == ["*"]
 
-    def test_empty_string_treated_as_wildcard(self, monkeypatch):
+    def test_empty_string_treated_as_wildcard(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("COORD_SERVING_ALLOWED_ORIGINS", "")
         from serving.aggregation.coord_serving import _load_allowed_origins
 
         assert _load_allowed_origins() == ["*"]
 
-    def test_comma_separated_origins(self, monkeypatch):
+    def test_comma_separated_origins(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv(
             "COORD_SERVING_ALLOWED_ORIGINS",
             "https://api.ailin.one, https://staging.ailin.one ",
@@ -447,7 +448,7 @@ class TestCorsOrigins:
             "https://staging.ailin.one",
         ]
 
-    def test_blank_entries_filtered(self, monkeypatch):
+    def test_blank_entries_filtered(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("COORD_SERVING_ALLOWED_ORIGINS", "https://a, , ,https://b")
         from serving.aggregation.coord_serving import _load_allowed_origins
 
@@ -469,7 +470,9 @@ class TestRetentionOnBoot:
       3. Asserting only the old file is gone
     """
 
-    def test_old_traces_pruned_on_boot(self, monkeypatch, tmp_path):
+    def test_old_traces_pruned_on_boot(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
         import os
         from datetime import datetime, timezone
 
@@ -529,7 +532,9 @@ class TestContextBounds:
         "decisionType": "moderator-selection",
     }
 
-    def test_too_many_keys_returns_422(self, mock_app, monkeypatch):
+    def test_too_many_keys_returns_422(
+        self, mock_app: FastAPI, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         monkeypatch.setenv("COORD_MAX_CONTEXT_KEYS", "10")
         with TestClient(mock_app) as client:
             payload = {
@@ -543,7 +548,9 @@ class TestContextBounds:
             body = r.json()
             assert any("max" in str(err).lower() for err in body.get("detail", []))
 
-    def test_oversized_context_returns_422(self, mock_app, monkeypatch):
+    def test_oversized_context_returns_422(
+        self, mock_app: FastAPI, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         # Set a tiny ceiling so a small payload trips it
         monkeypatch.setenv("COORD_MAX_CONTEXT_BYTES", "100")
         with TestClient(mock_app) as client:
@@ -556,7 +563,7 @@ class TestContextBounds:
             body = r.json()
             assert any("size" in str(err).lower() for err in body.get("detail", []))
 
-    def test_within_bounds_returns_200(self, mock_app):
+    def test_within_bounds_returns_200(self, mock_app: FastAPI) -> None:
         with TestClient(mock_app) as client:
             payload = {
                 **self.DECIDE_PAYLOAD_BASE,
@@ -578,14 +585,16 @@ class TestRateLimit:
         "context": {},
     }
 
-    def test_rate_limit_disabled_by_default(self, mock_app):
+    def test_rate_limit_disabled_by_default(self, mock_app: FastAPI) -> None:
         # COORD_RATE_LIMIT_RPS unset → no throttling
         with TestClient(mock_app) as client:
             for _ in range(10):
                 r = client.post("/v1/ensemble/decide", json=self.DECIDE_PAYLOAD)
                 assert r.status_code == 200
 
-    def test_burst_allows_initial_traffic(self, mock_app, monkeypatch):
+    def test_burst_allows_initial_traffic(
+        self, mock_app: FastAPI, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         # 10 RPS, burst 5 — initial 5 calls go through, then throttling
         # kicks in. Reset the registry to start with a fresh bucket.
         monkeypatch.setenv("COORD_RATE_LIMIT_RPS", "10")
@@ -609,7 +618,9 @@ class TestRateLimit:
         assert successes >= 4, f"too few successes: {statuses}"
         assert throttled >= 1, f"rate limit didn't trigger: {statuses}"
 
-    def test_throttled_response_carries_retry_after(self, mock_app, monkeypatch):
+    def test_throttled_response_carries_retry_after(
+        self, mock_app: FastAPI, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         # 1 RPS, burst 1 → second call immediately throttled
         monkeypatch.setenv("COORD_RATE_LIMIT_RPS", "1")
         monkeypatch.setenv("COORD_RATE_LIMIT_BURST", "1")

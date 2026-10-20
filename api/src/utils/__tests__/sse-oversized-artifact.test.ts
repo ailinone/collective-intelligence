@@ -206,4 +206,35 @@ describe('formatSSE — never inlines an oversized artifact payload into one lin
       expect(byteLength).toBeLessThan(AIOHTTP_LINE_TOO_LONG_THRESHOLD);
     }
   });
+
+  // ── 2026-09-30 incident follow-up: data-URI pseudo-URLs ─────────────────
+  // images-orchestration used to fabricate `data:image/png;base64,...` as
+  // artifact.url when a responseFormat:'url' request was served from raw
+  // bytes; that ~2.2MB pseudo-URL survived this stripper untouched (only
+  // b64_json was treated as inline weight) and, duplicated into
+  // message.content, pushed one SSE line to 4.4MB → whole-chunk degradation
+  // ("Response too large to deliver over a streaming connection"). The
+  // fabrication is gone at the source, but this guard must catch any future
+  // producer of data-URI urls.
+  it('strips a data-URI pseudo-URL from artifact.url instead of shipping it inline', () => {
+    const dataUri = `data:image/png;base64,${'C'.repeat(180_000)}`;
+    const response = baseResponse([
+      {
+        modality: 'image',
+        stage_name: 'image_generation',
+        stage_index: 0,
+        url: dataUri,
+        mime_type: 'image/png',
+      },
+    ]);
+
+    const line = formatSSE(response);
+    const { json, byteLength } = parseSSELine(line);
+    expect(byteLength).toBeLessThan(AIOHTTP_LINE_TOO_LONG_THRESHOLD);
+
+    const outArtifact = ((json as ChatResponse).ailin_metadata as AilinMetadata).artifacts?.[0];
+    expect(outArtifact?.url).toBeUndefined();
+    expect(JSON.stringify(outArtifact)).not.toContain('data:image/png;base64');
+    expect(outArtifact?.error).toBeTruthy();
+  });
 });

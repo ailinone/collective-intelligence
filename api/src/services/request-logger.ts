@@ -13,13 +13,35 @@
  * Enterprise-grade implementation with async writes and error handling
  */
 
+import { createHash } from 'node:crypto';
+
 import { prisma } from '@/database/client';
 import { Prisma } from '@/generated/prisma/index.js';
 import type { ChatRequest, ChatResponse, OrchestrationResult } from '@/types';
 import { logger } from '@/utils/logger';
 import { nanoid } from 'nanoid';
 import { shardingService } from './sharding-service';
+import { pushOperationalRequestBatch } from './systems-push';
+import { buildSystemsTrace, type SystemsTrace } from './systems-trace';
+import { getCorrelationId } from '@/api/middleware/request-context';
 import { extractErrorCodeFromObject, serializeError } from '@/utils/type-guards';
+
+/**
+ * Request identity for attribution (security monitoring / per-key usage).
+ * ipAddress is RAW at the call sites and hashed once (ipPseudonymHash)
+ * before anything persists it — request_logs stores ip_hash, never the IP
+ * (same policy as anonymous_chat_logs.ip_hash).
+ */
+export interface RequestIdentity {
+  apiKeyId?: string;
+  ipAddress?: string;
+}
+
+/** Single hash implementation shared by the DB write and the systems push,
+ *  so the two can never drift. */
+export function ipPseudonymHash(ip: string): string {
+  return createHash('sha256').update(ip).digest('hex');
+}
 
 /**
  * Request log data
@@ -30,6 +52,12 @@ export interface RequestLogData {
   requestId: string;
   endpoint: string;
   method: string;
+
+  // Attribution (see RequestIdentity) + wall-clock of the request itself
+  // (the DB row's created_at is the INSERT time, up to one flush interval later).
+  apiKeyId?: string;
+  ipAddress?: string;
+  completedAt?: string;
 
   // Sharding (for massive scale)
   shardId?: number; // Auto-calculated from organizationId
@@ -86,6 +114,13 @@ export interface RequestLogData {
 
   // Metadata
   metadata?: Record<string, unknown>;
+
+  /**
+   * Processing trace mirrored to Ailin Systems ONLY (correlation id, stages,
+   * opt-in sealed content). Never persisted to request_logs — flush() maps
+   * explicit columns, so this field cannot reach the database.
+   */
+  systemsTrace?: SystemsTrace;
 }
 
 /**
@@ -156,7 +191,8 @@ export class RequestLoggerService {
     userId: string | undefined,
     endpoint: string,
     method: string,
-    request: ChatRequest
+    request: ChatRequest,
+    identity?: RequestIdentity
   ): Promise<void> {
     const logData: RequestLogData = {
       organizationId,
@@ -164,6 +200,10 @@ export class RequestLoggerService {
       requestId: nanoid(),
       endpoint,
       method,
+
+      apiKeyId: identity?.apiKeyId,
+      ipAddress: identity?.ipAddress,
+      completedAt: new Date().toISOString(),
 
       // Sharding (auto-calculated for massive scale)
       shardId: shardingService.getShardId(organizationId),
@@ -197,6 +237,9 @@ export class RequestLoggerService {
 
       // Metadata
       metadata: result.metadata,
+
+      // Systems-only trace (never written to request_logs; see RequestLogData).
+      systemsTrace: buildSystemsTrace(result, request, { correlationId: getCorrelationId() }),
     };
 
     await this.logRequest(logData);
@@ -213,7 +256,8 @@ export class RequestLoggerService {
     method: string,
     error: Error,
     durationMs: number,
-    request?: ChatRequest
+    request?: ChatRequest,
+    identity?: RequestIdentity
   ): Promise<void> {
     // Extract model ID from request so error logs can be attributed to a provider.
     // The model field may be in "provider:model-name" format (database ID) or just a
@@ -230,6 +274,10 @@ export class RequestLoggerService {
       requestId,
       endpoint,
       method,
+
+      apiKeyId: identity?.apiKeyId,
+      ipAddress: identity?.ipAddress,
+      completedAt: new Date().toISOString(),
 
       // Sharding
       shardId: shardingService.getShardId(organizationId),
@@ -269,10 +317,11 @@ export class RequestLoggerService {
 
     this.isFlushActive = true;
 
-    try {
-      const batch = [...this.writeQueue];
-      this.writeQueue = [];
+    // Hoisted so the catch block can re-queue the failed batch.
+    const batch = [...this.writeQueue];
+    this.writeQueue = [];
 
+    try {
       this.log.debug({ batchSize: batch.length }, 'Flushing request logs to database');
 
       // Write to database in batch
@@ -282,6 +331,13 @@ export class RequestLoggerService {
         requestId: log.requestId,
         endpoint: log.endpoint,
         method: log.method,
+
+        // Attribution (previously dropped here — the accepted userId never
+        // reached the row; see internal-usage-routes.ts). IP is stored ONLY
+        // as a sha256 hash — the raw value never persists.
+        userId: log.userId,
+        apiKeyId: log.apiKeyId,
+        ipHash: log.ipAddress ? ipPseudonymHash(log.ipAddress) : undefined,
 
         // Sharding (critical for massive scale)
         shardId: log.shardId,
@@ -317,15 +373,25 @@ export class RequestLoggerService {
         skipDuplicates: true,
       });
 
+      // Mirror the same batch to Ailin Systems (operational metadata only —
+      // systems-push maps explicit fields, never request/response/metadata
+      // blobs). Fire-and-forget by contract: it never throws and never
+      // re-queues; telemetry tolerates gaps, the request path must not.
+      void pushOperationalRequestBatch(batch);
+
       this.log.info({ batchSize: batch.length }, 'Request logs flushed successfully');
     } catch (error) {
       this.log.error({ error, queueSize: this.writeQueue.length }, 'Failed to flush request logs');
 
-      // Re-queue failed logs (but limit to prevent unbounded growth)
-      if (this.writeQueue.length < 1000) {
-        // Will retry on next flush
-      } else {
-        this.log.error('Queue too large, dropping old logs to prevent memory issues');
+      // Re-queue the failed batch in front (oldest first) so the next flush
+      // retries it — the previous code claimed this but dropped the batch.
+      // Capped at 1000 items, keeping the NEWEST when overflowing: under
+      // sustained DB outage the oldest rows are the first to sacrifice so
+      // the queue cannot grow unbounded.
+      this.writeQueue = [...batch, ...this.writeQueue];
+      if (this.writeQueue.length > 1000) {
+        this.writeQueue = this.writeQueue.slice(-1000);
+        this.log.error('Queue overflow, dropping oldest logs to protect memory');
       }
     } finally {
       this.isFlushActive = false;

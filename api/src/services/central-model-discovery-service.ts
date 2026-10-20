@@ -22,7 +22,9 @@
 import { logger } from '@/utils/logger';
 import { getProviderKeyStatus } from '@/config/load-secrets-into-env';
 import { prisma } from '@/database/client';
-import { computeModelUid } from '@/database/model-uid';
+import { computeModelUidCandidate } from '@/database/model-uid';
+import { applyCommunityPricing } from '@/services/pricing-enrichment/apply-community-pricing';
+import { getCommunityPriceIndex } from '@/services/pricing-enrichment/community-price-index';
 import { Prisma, type Provider, type Model as PrismaModel } from '@/generated/prisma/index.js';
 import { getModelSelectionCache } from '@/core/selection/model-selection-cache';
 import { getModelDiscoveryScheduler } from './model-discovery-scheduler';
@@ -185,6 +187,16 @@ export interface DiscoveredModel {
     inputCostPer1M?: number;
     outputCostPer1M?: number;
     currency?: string;
+    // Extra price dimensions (USD per 1M tokens). The models table only has
+    // input/output columns, so these live in the persisted `metadata.pricing`
+    // blob. Populated from the community price index when the provider
+    // publishes no price (services/pricing-enrichment).
+    cacheReadCostPer1M?: number;
+    cacheWriteCostPer1M?: number;
+    batchInputCostPer1M?: number;
+    batchOutputCostPer1M?: number;
+    inputCostPer1MAbove200k?: number;
+    outputCostPer1MAbove200k?: number;
   };
   metadata?: Record<string, unknown>;
 }
@@ -273,6 +285,28 @@ function mapCatalogAuthScheme(scheme: string | undefined): string | undefined {
     default:
       return undefined;
   }
+}
+
+/**
+ * Per-source discovery timeout budget (discoverAllModels).
+ *
+ * 2026-09-28 audit: this used to grant the long budget to `'aggregator'`
+ * sources only, so every `'cloud_hub'` and `'router'` source got the 10s
+ * `native_api` budget regardless of real catalog size — aihubmix, orqai,
+ * edenai, cometapi, nanogpt, requesty, ai302, poe, routeway, aiml (all
+ * `cloud_hub`) and openrouter (`router`, despite its name) each list
+ * hundreds to low thousands of models. A slow response or TLS handshake on
+ * any of them hit the timeout and returned 0/partial models for that cycle
+ * silently (a warn, not a hard failure) — the same failure shape the HF Hub
+ * timeout raise (see AGGREGATOR_DISCOVERY_TIMEOUT_MS's call site) was
+ * written to prevent, just gated on the wrong field. `native_api`
+ * (openai-native, anthropic-native, ...) is the only type that's reliably a
+ * single-vendor, small, fast catalog and genuinely fits the short budget.
+ */
+export function resolveDiscoveryTimeoutMs(sourceType: DiscoverySource['type']): number {
+  return sourceType === 'native_api'
+    ? Number(process.env.NATIVE_DISCOVERY_TIMEOUT_MS || '10000')
+    : Number(process.env.AGGREGATOR_DISCOVERY_TIMEOUT_MS || '300000');
 }
 
 export class CentralModelDiscoveryService {
@@ -754,7 +788,21 @@ export class CentralModelDiscoveryService {
         providers: ['google'],
         fetcher: async () => {
           const { GoogleModelFetcher } = await import('./model-fetchers/google-model-fetcher.js');
-          const fetcher = new GoogleModelFetcher(process.env.GOOGLE_API_KEY || '');
+          // 2026-09-28 audit: GOOGLE_API_KEY maps ONLY to the 'google-key' GCP
+          // secret (load-secrets-into-env.ts), which is documented elsewhere
+          // in this same file as suspended (403 CONSUMER_SUSPENDED) — so this
+          // source has returned zero models every cycle. GEMINI_API_KEY
+          // already resolves through the working fallback chain
+          // (['vertex-key', 'gemini-key', 'google-ai-studio-key',
+          // 'google-key'], vertex-key first because it's the one confirmed
+          // live against generativelanguage.googleapis.com — the exact
+          // surface GoogleModelFetcher calls) that gemini-openai already
+          // relies on. Preferring it here closes the same gap for the native
+          // provider instead of leaving it silently broken behind a key that
+          // only ever resolves to the suspended one.
+          const fetcher = new GoogleModelFetcher(
+            process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || ''
+          );
           return await fetcher.getModels();
         },
       },
@@ -2785,25 +2833,11 @@ export class CentralModelDiscoveryService {
             'Starting discovery from source'
           );
 
-          // Per-source timeout: aggregators paginate large catalogs (HF Hub
-          // emits ~58k cursor pages, Bytez ships ~100k in one shot) and need
-          // a much longer budget than native_api endpoints. Configurable via
-          // env so operators can tighten or extend per environment.
-          //
-          // Raised 120s -> 300s (2026-09-25/26 incident): ~65 pages at HF's
-          // own observed per-page latency left too little margin under any
-          // rate-limiting or network slowness, so this timeout was routinely
-          // cutting the walk short before it reached the end — every run, at
-          // roughly the same page — which is the direct cause of 13k+
-          // huggingface rows never being reconfirmed. This raise reduces how
-          // OFTEN a walk needs to fall back on the new resumable-pagination
-          // cursor (hf-hub-model-fetcher.ts) at all; it does not replace that
-          // fix, since even a generous timeout cannot guarantee completion
-          // under a genuine provider-side slowdown.
-          const timeoutMs =
-            source.type === 'aggregator'
-              ? Number(process.env.AGGREGATOR_DISCOVERY_TIMEOUT_MS || '300000')
-              : Number(process.env.NATIVE_DISCOVERY_TIMEOUT_MS || '10000');
+          // Per-source timeout — see resolveDiscoveryTimeoutMs() above for the
+          // full rationale (2026-09-25/26 HF incident + 2026-09-28 audit:
+          // every non-native_api source now gets the long budget, not just
+          // 'aggregator'). Configurable via env per environment.
+          const timeoutMs = resolveDiscoveryTimeoutMs(source.type);
           const timeoutPromise = new Promise<never>((_, reject) => {
             setTimeout(
               () => reject(new Error(`Discovery timeout after ${timeoutMs}ms for ${sourceName}`)),
@@ -2947,6 +2981,52 @@ export class CentralModelDiscoveryService {
   }
 
   /**
+   * uids for (provider, id) pairs that have no row yet.
+   *
+   * The canonical uid is the hash of (provider, id), but ~800 production rows
+   * hold the canonical uid of a DIFFERENT pair (rows were re-parented across
+   * providers by the old discovery fallback, keeping their uid). Inserting a
+   * new row on an occupied canonical uid would make `ON CONFLICT (uid)` update
+   * the squatting row — another provider's — instead of creating this one, so
+   * occupied candidates are skipped in favour of a salted uid
+   * (computeModelUidCandidate). A no-op (no query) when there are no new ids,
+   * which is nearly every hourly cycle.
+   */
+  private async resolveFreshModelUids(
+    tx: Prisma.TransactionClient,
+    providerId: string,
+    newIds: string[]
+  ): Promise<Map<string, string>> {
+    const resolved = new Map<string, string>();
+    const handedOut = new Set<string>();
+    let pending = Array.from(new Set(newIds));
+
+    for (let attempt = 0; attempt < 4 && pending.length > 0; attempt++) {
+      const candidates = new Map(
+        pending.map((id) => [id, computeModelUidCandidate(providerId, id, attempt)] as const)
+      );
+      const occupied = await tx.model.findMany({
+        where: { uid: { in: Array.from(candidates.values()) } },
+        select: { uid: true },
+      });
+      const occupiedUids = new Set(occupied.map((m) => m.uid));
+
+      const stillPending: string[] = [];
+      for (const [id, uid] of candidates) {
+        if (occupiedUids.has(uid) || handedOut.has(uid)) {
+          stillPending.push(id);
+        } else {
+          resolved.set(id, uid);
+          handedOut.add(uid);
+        }
+      }
+      pending = stillPending;
+    }
+
+    return resolved;
+  }
+
+  /**
    * Bulk upsert models using PostgreSQL native INSERT ... ON CONFLICT
    * This is much more efficient than individual upserts, reducing roundtrips and transaction overhead
    *
@@ -3061,7 +3141,7 @@ export class CentralModelDiscoveryService {
             const [existingById, existingByName] = await Promise.all([
               tx.model.findMany({
                 where: { id: { in: modelIds }, providerId },
-                select: { id: true, status: true },
+                select: { id: true, uid: true, status: true },
               }),
               tx.model.findMany({
                 where: { providerId, name: { in: candidateNames } },
@@ -3070,7 +3150,21 @@ export class CentralModelDiscoveryService {
             ]);
             const existingIds = new Set(existingById.map((m) => m.id));
             const priorStatusById = new Map(existingById.map((m) => [m.id, m.status]));
+            // A row's identity is (provider_id, id); `uid` is just its opaque
+            // primary key. ON CONFLICT (uid) below must therefore target the
+            // uid the row ACTUALLY has, not the canonical hash of
+            // (provider, id): ~800 production rows hold a uid that is the
+            // hash of a different pair (see computeModelUidCandidate), and
+            // writing to the recomputed hash updated the wrong provider's row
+            // (2026-10-02 audit: openai-native's gpt-4o price landed on
+            // cometapi/gpt-4o while openai/gpt-4o stayed at $0).
+            const uidById = new Map(existingById.map((m) => [m.id, m.uid]));
             const nameOwners = new Map(existingByName.map((m) => [m.name, m]));
+            const freshUidById = await this.resolveFreshModelUids(
+              tx,
+              providerId,
+              modelIds.filter((id) => !uidById.has(id))
+            );
             // Tracks which id claims a brand-new name WITHIN this batch, so a
             // second brand-new id sharing that name (no DB owner yet either)
             // doesn't reach the INSERT statement and collide with the first.
@@ -3132,7 +3226,10 @@ export class CentralModelDiscoveryService {
                 isUpdate = true;
                 priorStatus = dbOwner.status;
               } else {
-                uid = computeModelUid(providerId, normalizedModel.id);
+                uid =
+                  uidById.get(normalizedModel.id) ??
+                  freshUidById.get(normalizedModel.id) ??
+                  computeModelUidCandidate(providerId, normalizedModel.id, 0);
                 rowId = normalizedModel.id;
                 rowName = modelName;
                 isUpdate = existingIds.has(normalizedModel.id);
@@ -3252,8 +3349,23 @@ export class CentralModelDiscoveryService {
                 display_name = EXCLUDED.display_name,
                 context_window = EXCLUDED.context_window,
                 max_output_tokens = EXCLUDED.max_output_tokens,
-                input_cost_per_1k = EXCLUDED.input_cost_per_1k,
-                output_cost_per_1k = EXCLUDED.output_cost_per_1k,
+                -- Zero-clobber guard (2026-09-28 audit): a source with no real
+                -- per-model pricing (most hub/aggregator /models listings don't
+                -- return one) collapses to 0 upstream. Confirmed live: ai302-hub
+                -- lists OpenAI-owned models under provider_id='openai' (the
+                -- consolidation this table deliberately does — see
+                -- determineModelProvider/readProviderFromMetadata), has no
+                -- pricing for them, and its concurrent write raced
+                -- openai-native's correctly tier-estimated price and won,
+                -- silently zeroing gpt-4o/gpt-5/o1/etc. across the whole
+                -- catalog. A confirmed non-zero price must never regress to
+                -- "unknown" — only to another observed non-zero value.
+                input_cost_per_1k = CASE
+                  WHEN EXCLUDED.input_cost_per_1k = 0 AND models.input_cost_per_1k <> 0
+                  THEN models.input_cost_per_1k ELSE EXCLUDED.input_cost_per_1k END,
+                output_cost_per_1k = CASE
+                  WHEN EXCLUDED.output_cost_per_1k = 0 AND models.output_cost_per_1k <> 0
+                  THEN models.output_cost_per_1k ELSE EXCLUDED.output_cost_per_1k END,
                 capabilities = EXCLUDED.capabilities,
                 metadata = EXCLUDED.metadata,
                 -- A discovery prior must never overwrite a MEASUREMENT. Every other
@@ -3379,11 +3491,20 @@ export class CentralModelDiscoveryService {
       Array<{ model: DiscoveredModel; provider: string; normalizedModel: DiscoveredModel }>
     >();
 
+    // Fallback price source for models whose provider publishes no price (or
+    // only a fetcher heuristic): see services/pricing-enrichment. Never throws;
+    // undefined (kill switch, tests, fetch failure) leaves pricing untouched.
+    const communityPrices = await getCommunityPriceIndex();
+
     for (const model of models) {
       try {
         // Determine provider and normalize model
         const provider = this.determineModelProvider(model, source);
-        const normalizedModel = this.enrichModelMetadata(model, provider, source);
+        const normalizedModel = applyCommunityPricing(
+          this.enrichModelMetadata(model, provider, source),
+          provider,
+          communityPrices
+        );
 
         if (!modelsByProvider.has(provider)) {
           modelsByProvider.set(provider, []);
@@ -3433,8 +3554,15 @@ export class CentralModelDiscoveryService {
         // Fall back to individual processing for this provider
         for (const { normalizedModel } of providerModels) {
           try {
+            // Scoped to THIS provider. `models.id` is only unique per
+            // provider (the same id exists under a dozen of them — gpt-4o
+            // has 12 rows), so the old provider-less findFirst({ id })
+            // returned an arbitrary provider's row and updateExistingModel
+            // then re-parented it onto this provider, keeping its old uid.
+            // That is how ~800 rows ended up squatting on other pairs' uids
+            // (2026-10-02 audit).
             const existing = await prisma.model.findFirst({
-              where: { id: normalizedModel.id },
+              where: { id: normalizedModel.id, providerId: provider },
             });
             if (!existing) {
               await this.createNewModel(normalizedModel, provider, sourceName, source);
@@ -3652,14 +3780,25 @@ export class CentralModelDiscoveryService {
 
             if (existingById) {
               // Model exists, update it by uid (PK)
+              // Zero-clobber guard (2026-09-28 audit) — see the ON CONFLICT SET
+              // comment in the bulkUpsertModels SQL above for the live incident
+              // this closes (ai302-hub zeroing openai-native's real prices).
+              const safeInput =
+                (pricing.inputCostPer1M ?? 0) === 0 && Number(existingById.inputCostPer1k) !== 0
+                  ? Number(existingById.inputCostPer1k)
+                  : (pricing.inputCostPer1M ?? 0) / 1000;
+              const safeOutput =
+                (pricing.outputCostPer1M ?? 0) === 0 && Number(existingById.outputCostPer1k) !== 0
+                  ? Number(existingById.outputCostPer1k)
+                  : (pricing.outputCostPer1M ?? 0) / 1000;
               await tx.model.update({
                 where: { uid: existingById.uid },
                 data: {
                   displayName: model.displayName || modelName,
                   contextWindow: model.contextWindow || 4096,
                   maxOutputTokens: model.maxOutputTokens || 1024,
-                  inputCostPer1k: new Prisma.Decimal((pricing.inputCostPer1M ?? 0) / 1000),
-                  outputCostPer1k: new Prisma.Decimal((pricing.outputCostPer1M ?? 0) / 1000),
+                  inputCostPer1k: new Prisma.Decimal(safeInput),
+                  outputCostPer1k: new Prisma.Decimal(safeOutput),
                   capabilities,
                   metadata: withNormalizedMetadata(
                     {
@@ -3692,14 +3831,26 @@ export class CentralModelDiscoveryService {
 
             if (existingByProviderAndName) {
               // Update existing model by uid (PK)
+              // Zero-clobber guard (2026-09-28 audit) — see the ON CONFLICT SET
+              // comment in the bulkUpsertModels SQL above.
+              const safeInput =
+                (pricing.inputCostPer1M ?? 0) === 0 &&
+                Number(existingByProviderAndName.inputCostPer1k) !== 0
+                  ? Number(existingByProviderAndName.inputCostPer1k)
+                  : (pricing.inputCostPer1M ?? 0) / 1000;
+              const safeOutput =
+                (pricing.outputCostPer1M ?? 0) === 0 &&
+                Number(existingByProviderAndName.outputCostPer1k) !== 0
+                  ? Number(existingByProviderAndName.outputCostPer1k)
+                  : (pricing.outputCostPer1M ?? 0) / 1000;
               await tx.model.update({
                 where: { uid: existingByProviderAndName.uid },
                 data: {
                   displayName: model.displayName || modelName,
                   contextWindow: model.contextWindow || 4096,
                   maxOutputTokens: model.maxOutputTokens || 1024,
-                  inputCostPer1k: new Prisma.Decimal((pricing.inputCostPer1M ?? 0) / 1000),
-                  outputCostPer1k: new Prisma.Decimal((pricing.outputCostPer1M ?? 0) / 1000),
+                  inputCostPer1k: new Prisma.Decimal(safeInput),
+                  outputCostPer1k: new Prisma.Decimal(safeOutput),
                   capabilities,
                   metadata: withNormalizedMetadata(
                     {
@@ -3721,7 +3872,36 @@ export class CentralModelDiscoveryService {
 
             // Model doesn't exist, use upsert to handle race conditions
             // Uses composite unique (id, providerId) for multi-provider support
-            const uid = computeModelUid(providerRecord.id, model.id);
+            // Zero-clobber guard (2026-09-28 audit): the two existence checks
+            // above found nothing, but a concurrent transaction may have
+            // created this row in the meantime — the `update` branch below
+            // only fires on that race. Read its current price so a
+            // no-pricing-data source can't zero it out; see the ON CONFLICT
+            // SET comment in the bulkUpsertModels SQL above for the incident.
+            // Looked up by (id, providerId) — NOT by a recomputed uid, which
+            // can belong to another provider's row (see resolveFreshModelUids).
+            const raceWinner = await tx.model.findUnique({
+              where: { id_providerId: { id: model.id, providerId: providerRecord.id } },
+              select: { inputCostPer1k: true, outputCostPer1k: true },
+            });
+            // The uid is only consumed by `create` (no row yet): take one that
+            // no other provider's row already squats on.
+            const uid =
+              (
+                await this.resolveFreshModelUids(tx, providerRecord.id, raceWinner ? [] : [model.id])
+              ).get(model.id) ?? computeModelUidCandidate(providerRecord.id, model.id, 0);
+            const safeInput =
+              (pricing.inputCostPer1M ?? 0) === 0 &&
+              raceWinner &&
+              Number(raceWinner.inputCostPer1k) !== 0
+                ? Number(raceWinner.inputCostPer1k)
+                : (pricing.inputCostPer1M ?? 0) / 1000;
+            const safeOutput =
+              (pricing.outputCostPer1M ?? 0) === 0 &&
+              raceWinner &&
+              Number(raceWinner.outputCostPer1k) !== 0
+                ? Number(raceWinner.outputCostPer1k)
+                : (pricing.outputCostPer1M ?? 0) / 1000;
             await tx.model.upsert({
               where: {
                 id_providerId: {
@@ -3734,8 +3914,8 @@ export class CentralModelDiscoveryService {
                 displayName: model.displayName || modelName,
                 contextWindow: model.contextWindow || 4096,
                 maxOutputTokens: model.maxOutputTokens || 1024,
-                inputCostPer1k: new Prisma.Decimal((pricing.inputCostPer1M ?? 0) / 1000),
-                outputCostPer1k: new Prisma.Decimal((pricing.outputCostPer1M ?? 0) / 1000),
+                inputCostPer1k: new Prisma.Decimal(safeInput),
+                outputCostPer1k: new Prisma.Decimal(safeOutput),
                 capabilities,
                 metadata: withNormalizedMetadata(
                   {
@@ -3888,23 +4068,35 @@ export class CentralModelDiscoveryService {
       changed = true;
     }
 
-    if (existing.providerId !== provider) {
-      updates.provider = { connect: { id: provider } };
-      changed = true;
-    }
+    // A row's provider is part of its identity (provider_id, id) — never
+    // re-parent it here. This used to `connect` the row to `provider` whenever
+    // they differed; combined with a provider-less lookup in the caller's
+    // fallback it moved rows between providers (keeping their uid) and
+    // corrupted ~800 of them. A model that now resolves to a different
+    // provider gets its own row under that provider on the normal upsert path;
+    // the old row simply stops being reconfirmed and ages out through the
+    // auto-disable sweep.
 
     // Verifica mudanças de preço (use inputCostPer1M/outputCostPer1M — canonical fields from discovery)
     const inputPer1M = model.pricing?.inputCostPer1M ?? model.pricing?.prompt ?? 0;
     const outputPer1M = model.pricing?.outputCostPer1M ?? model.pricing?.completion ?? 0;
-    const newInputCost = inputPer1M / 1000;
-    const newOutputCost = outputPer1M / 1000;
+    // Zero-clobber guard (2026-09-28 audit) — same rationale as bulkUpsertModels'
+    // ON CONFLICT SET: a source with no real per-model pricing collapses to 0
+    // upstream, and this path must not let that overwrite an already-confirmed
+    // non-zero price. See that comment for the live ai302-hub/openai incident.
+    const existingInputCost = Number(existing.inputCostPer1k);
+    const existingOutputCost = Number(existing.outputCostPer1k);
+    const newInputCost =
+      inputPer1M === 0 && existingInputCost !== 0 ? existingInputCost : inputPer1M / 1000;
+    const newOutputCost =
+      outputPer1M === 0 && existingOutputCost !== 0 ? existingOutputCost : outputPer1M / 1000;
 
-    if (Number(existing.inputCostPer1k) !== newInputCost) {
+    if (existingInputCost !== newInputCost) {
       updates.inputCostPer1k = new Prisma.Decimal(newInputCost);
       changed = true;
     }
 
-    if (Number(existing.outputCostPer1k) !== newOutputCost) {
+    if (existingOutputCost !== newOutputCost) {
       updates.outputCostPer1k = new Prisma.Decimal(newOutputCost);
       changed = true;
     }

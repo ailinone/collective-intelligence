@@ -1153,6 +1153,14 @@ async function bootstrap(): Promise<void> {
 
     // Register legacy/orchestration routes
     await registerModelRoutes(server, providerRegistry);
+    // CAT-001/A1: the versioned collective-strategy catalog
+    // (GET /v1/models/strategies, catalogVersion "v1"). Registered alongside
+    // the model routes; Fastify's router prefers the static
+    // `/v1/models/strategies` over the parametric `/v1/models/:id`.
+    const { registerStrategyCatalogRoutes } = await import(
+      '@/routes/models/models-strategies-routes.js'
+    );
+    await registerStrategyCatalogRoutes(server);
     await registerChatRoutes(server, orchestrationEngine);
     await registerCapabilityRoutes(server); // GET /v1/provider-capabilities (discovery only)
     await registerCapabilitiesRoutes(server); // Universal capability routes (execute/stream/health)
@@ -1414,6 +1422,24 @@ async function bootstrap(): Promise<void> {
         { err },
         'Failed to start TTFT probe poller — rung-1 selection stays cost-ordered until real traffic seeds the tracker'
       );
+    }
+
+    // Wallet grant expiry sweeper — reclaims the unspent remainder of expired
+    // promotional grants (wallet_grants) from org balances. A no-op empty
+    // scan until the billing campaign engine starts granting; disable with
+    // WALLET_GRANT_SWEEP_ENABLED=false.
+    if (process.env.WALLET_GRANT_SWEEP_ENABLED !== 'false') {
+      try {
+        const { startWalletGrantSweeper } = await import(
+          './services/wallet-grant-expiry-sweeper.js'
+        );
+        startWalletGrantSweeper();
+      } catch (err) {
+        logger.warn(
+          { err },
+          'Failed to start wallet grant sweeper — expired promotional credit will stay spendable until the next deploy'
+        );
+      }
     }
 
     // Per-process provider balance refresh (funding gate + balance score in

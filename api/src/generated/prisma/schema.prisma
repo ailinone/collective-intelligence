@@ -22,15 +22,19 @@ datasource db {
 // ============================================
 
 model Organization {
-  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  name         String
-  slug         String?  @unique // URL-friendly identifier for tenant discovery
-  tier         String   @default("free") // free, starter, pro, enterprise (see domain/value-objects/organization-tier.ts's TierLevel)
-  status       String   @default("active") // active, suspended, deleted
-  statusReason String?  @map("status_reason")
-  settings     Json     @default("{}")
-  createdAt    DateTime @default(now()) @map("created_at")
-  updatedAt    DateTime @updatedAt @map("updated_at")
+  id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name            String
+  slug            String?  @unique // URL-friendly identifier for tenant discovery
+  tier            String   @default("free") // free, starter, pro, enterprise (see domain/value-objects/organization-tier.ts's TierLevel)
+  status          String   @default("active") // active, suspended, deleted
+  statusReason    String?  @map("status_reason")
+  settings        Json     @default("{}")
+  // Canonical billing tenant (id namespace) this org maps to, resolved from
+  // id via services/billing-tenant-resolver.ts. Nullable + write-through
+  // cache: NULL = not resolved yet (calls fall back to this org's own id).
+  billingTenantId String?  @map("billing_tenant_id")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
 
   users               User[]
   invites             OrganizationInvite[]
@@ -416,6 +420,15 @@ model RequestLog {
   requestId      String @unique @map("request_id")
   endpoint       String
   method         String
+
+  // Attribution (security monitoring / per-key usage). Populated from the
+  // authenticated request context; nullable — legacy rows and identity-less
+  // traffic have none. Plain TEXT: some callers forward non-UUID subjects.
+  // ipHash: sha256 of the client IP (never the raw value — same policy as
+  // anonymous_chat_logs.ip_hash).
+  userId   String? @map("user_id")
+  apiKeyId String? @map("api_key_id")
+  ipHash   String? @map("ip_hash")
 
   // Orchestration details
   strategyId   String? @map("strategy_id")
@@ -826,6 +839,17 @@ model BillingProfile {
 model Invoice {
   id                    String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   organizationId        String    @map("organization_id") @db.Uuid
+  // Invoice-fraud follow-up (#654) — 2026-09-27: findOverlappingInvoice's
+  // application-level check (SELECT then INSERT, no lock) can lose a race
+  // between the daily usage job and a self-service create, or two racing
+  // self-service creates, double-billing the same period. Periods are not
+  // always exact duplicates when they collide (the daily job always invoices
+  // an exact UTC-day window, but self-service periods are caller-chosen), so
+  // this needs a range EXCLUDE constraint rather than a plain
+  // @@unique([organizationId, periodStart, periodEnd]) — Prisma has no way to
+  // express EXCLUDE, so it is enforced via raw migration instead
+  // (no_overlapping_invoice_period, see
+  // prisma/migrations/20260927000000_invoice_period_no_overlap_exclusion).
   periodStart           DateTime  @map("period_start")
   periodEnd             DateTime  @map("period_end")
   subtotal              Decimal   @db.Decimal(14, 4)

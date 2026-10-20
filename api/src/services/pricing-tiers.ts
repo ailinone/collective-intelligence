@@ -205,6 +205,22 @@ export const STRATEGY_POLICY: Record<string, StrategyPolicy> = {
     fanoutFactor: 6,
     executionReady: true,
   },
+  // media-planner (2026-10-02): the MediaPlannerStrategy agentic loop — a
+  // DISTINCT execution (bounded turn loop over executeCapabilityByPlan /
+  // MediaConsensus / DocumentReview), so executionReady:true. Deliberative
+  // COGS: one invocation fans out into multiple media generations plus judge
+  // review passes (fanout >= expert-panel's). Conservative tier window
+  // (base|medium|large — no tiny/small: the planner's per-turn judge model
+  // alone exceeds a tiny cell's COGS budget) and NO extra tier yet; runtime
+  // execution stays gated by MEDIA_PLANNER_ENABLED / per-org canary inside
+  // the orchestration engine regardless of the cell being sold.
+  'media-planner': {
+    cogsClass: 'deliberative',
+    minTier: 'base',
+    maxTier: 'large',
+    fanoutFactor: 6,
+    executionReady: true,
+  },
   // Shadow-wired (recognised; behaviour maturing — gate before selling)
   debate: {
     cogsClass: 'deliberative',

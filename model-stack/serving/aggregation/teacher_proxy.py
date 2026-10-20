@@ -218,7 +218,9 @@ class TeacherProxy:
         async with httpx.AsyncClient(timeout=self.config.timeout_seconds) as client:
             response = await client.post(url, json=payload, headers=headers)
             response.raise_for_status()
-            return response.json()
+            # 2026-10-18 — boundary conversion: .json() is Any; the triage
+            # contract is a JSON object, so dict() is a no-op copy for it.
+            return dict(response.json())
 
     def _wrap_as_vote(
         self,

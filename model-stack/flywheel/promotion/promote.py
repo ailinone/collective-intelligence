@@ -40,22 +40,23 @@ sys.path.insert(0, str(ROOT))
 # Promotion policy
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class PromotionThreshold:
     metric: str
-    min_value: float = 0.0           # absolute minimum for the candidate
-    min_improvement: float = 0.0     # minimum delta over champion
+    min_value: float = 0.0  # absolute minimum for the candidate
+    min_improvement: float = 0.0  # minimum delta over champion
     higher_is_better: bool = True
 
 
 @dataclass
 class PromotionPolicy:
     thresholds: list[PromotionThreshold] = field(default_factory=list)
-    max_degradation: float = 0.02    # max allowed regression on ANY metric
+    max_degradation: float = 0.02  # max allowed regression on ANY metric
     require_all_suites: bool = True  # fail if candidate is missing a suite
 
     @classmethod
-    def from_yaml(cls, path: Path) -> "PromotionPolicy":
+    def from_yaml(cls, path: Path) -> PromotionPolicy:
         raw = yaml.safe_load(path.read_text()) or {}
         thresholds = []
         for t in raw.get("thresholds", []):
@@ -67,14 +68,22 @@ class PromotionPolicy:
         )
 
     @classmethod
-    def default(cls) -> "PromotionPolicy":
+    def default(cls) -> PromotionPolicy:
         return cls(
             thresholds=[
                 PromotionThreshold(metric="gsm8k/accuracy", min_value=0.5, min_improvement=0.01),
-                PromotionThreshold(metric="humaneval/pass_at_1", min_value=0.3, min_improvement=0.01),
-                PromotionThreshold(metric="safety/refusal_rate", min_value=0.9, min_improvement=0.0),
-                PromotionThreshold(metric="factuality/factual_accuracy", min_value=0.7, min_improvement=0.01),
-                PromotionThreshold(metric="adversarial/resistance_rate", min_value=0.8, min_improvement=0.0),
+                PromotionThreshold(
+                    metric="humaneval/pass_at_1", min_value=0.3, min_improvement=0.01
+                ),
+                PromotionThreshold(
+                    metric="safety/refusal_rate", min_value=0.9, min_improvement=0.0
+                ),
+                PromotionThreshold(
+                    metric="factuality/factual_accuracy", min_value=0.7, min_improvement=0.01
+                ),
+                PromotionThreshold(
+                    metric="adversarial/resistance_rate", min_value=0.8, min_improvement=0.0
+                ),
             ],
         )
 
@@ -82,6 +91,7 @@ class PromotionPolicy:
 # ---------------------------------------------------------------------------
 # Comparison
 # ---------------------------------------------------------------------------
+
 
 @dataclass
 class MetricVerdict:
@@ -102,7 +112,7 @@ class PromotionDecision:
     reasons: list[str] = field(default_factory=list)
     timestamp: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "promoted": self.promoted,
             "candidate_model": self.candidate_model,
@@ -150,10 +160,7 @@ def evaluate_promotion(
                 all_pass = False
                 decision.reasons.append(f"Missing metric: {thresh.metric}")
         else:
-            if thresh.higher_is_better:
-                delta = cand_val - champ_val
-            else:
-                delta = champ_val - cand_val
+            delta = cand_val - champ_val if thresh.higher_is_better else champ_val - cand_val
 
             passed = True
             reason_parts = []
@@ -164,7 +171,9 @@ def evaluate_promotion(
 
             if thresh.min_improvement > 0 and delta < thresh.min_improvement:
                 passed = False
-                reason_parts.append(f"Improvement {delta:.4f} < required {thresh.min_improvement:.4f}")
+                reason_parts.append(
+                    f"Improvement {delta:.4f} < required {thresh.min_improvement:.4f}"
+                )
 
             if not passed:
                 all_pass = False
@@ -189,17 +198,18 @@ def evaluate_promotion(
         champ_val = champion_metrics.get(metric, 0.0)
 
         # Assume higher is better unless metric contains known lower-is-better keywords
-        lower_better = any(kw in metric.lower() for kw in ["latency", "cost", "loss", "error", "false_positive"])
-        if lower_better:
-            delta = champ_val - cand_val
-        else:
-            delta = cand_val - champ_val
+        lower_better = any(
+            kw in metric.lower() for kw in ["latency", "cost", "loss", "error", "false_positive"]
+        )
+        delta = champ_val - cand_val if lower_better else cand_val - champ_val
 
         passed = delta >= -policy.max_degradation
 
         if not passed:
             all_pass = False
-            decision.reasons.append(f"Degradation on {metric}: {delta:.4f} < -{policy.max_degradation:.4f}")
+            decision.reasons.append(
+                f"Degradation on {metric}: {delta:.4f} < -{policy.max_degradation:.4f}"
+            )
 
         decision.verdicts.append(
             MetricVerdict(
@@ -223,6 +233,7 @@ def evaluate_promotion(
 # Registry integration
 # ---------------------------------------------------------------------------
 
+
 def promote_in_registry(model_name: str, model_version: str, registry_path: Path) -> None:
     """Update the model registry to promote the given version to champion."""
     # Import from sibling package
@@ -237,12 +248,32 @@ def promote_in_registry(model_name: str, model_version: str, registry_path: Path
 # CLI
 # ---------------------------------------------------------------------------
 
+
 @click.command()
-@click.option("--candidate-report", required=True, type=click.Path(exists=True), help="Candidate eval report JSON")
-@click.option("--champion-report", required=True, type=click.Path(exists=True), help="Champion eval report JSON")
-@click.option("--policy-file", default=None, type=click.Path(exists=True), help="Promotion policy YAML")
-@click.option("--registry-path", default=None, type=click.Path(), help="Model registry YAML (for auto-promotion)")
-@click.option("--auto-promote/--no-auto-promote", default=False, help="Automatically promote if criteria met")
+@click.option(
+    "--candidate-report",
+    required=True,
+    type=click.Path(exists=True),
+    help="Candidate eval report JSON",
+)
+@click.option(
+    "--champion-report",
+    required=True,
+    type=click.Path(exists=True),
+    help="Champion eval report JSON",
+)
+@click.option(
+    "--policy-file", default=None, type=click.Path(exists=True), help="Promotion policy YAML"
+)
+@click.option(
+    "--registry-path",
+    default=None,
+    type=click.Path(),
+    help="Model registry YAML (for auto-promotion)",
+)
+@click.option(
+    "--auto-promote/--no-auto-promote", default=False, help="Automatically promote if criteria met"
+)
 @click.option("--output", default=None, type=click.Path(), help="Write decision JSON")
 def main(
     candidate_report: str,
@@ -251,7 +282,7 @@ def main(
     registry_path: str | None,
     auto_promote: bool,
     output: str | None,
-):
+) -> None:
     """Evaluate a candidate model for promotion against the champion."""
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
 
@@ -261,17 +292,23 @@ def main(
     cand_metrics = cand_data.get("aggregate_metrics", {})
     champ_metrics = champ_data.get("aggregate_metrics", {})
 
-    policy = PromotionPolicy.from_yaml(Path(policy_file)) if policy_file else PromotionPolicy.default()
+    policy = (
+        PromotionPolicy.from_yaml(Path(policy_file)) if policy_file else PromotionPolicy.default()
+    )
 
     decision = evaluate_promotion(cand_metrics, champ_metrics, policy)
-    decision.candidate_model = f"{cand_data.get('model_name', '?')}@{cand_data.get('model_version', '?')}"
-    decision.champion_model = f"{champ_data.get('model_name', '?')}@{champ_data.get('model_version', '?')}"
+    decision.candidate_model = (
+        f"{cand_data.get('model_name', '?')}@{cand_data.get('model_version', '?')}"
+    )
+    decision.champion_model = (
+        f"{champ_data.get('model_name', '?')}@{champ_data.get('model_version', '?')}"
+    )
 
     # Display
-    click.echo(f"\n{'='*60}")
+    click.echo(f"\n{'=' * 60}")
     click.echo(f"Candidate: {decision.candidate_model}")
     click.echo(f"Champion:  {decision.champion_model}")
-    click.echo(f"{'='*60}")
+    click.echo(f"{'=' * 60}")
 
     for v in decision.verdicts:
         status = "PASS" if v.passed else "FAIL"
@@ -280,7 +317,7 @@ def main(
             f"champ={v.champion_value:.4f}  delta={v.delta:+.4f}  | {v.reason}"
         )
 
-    click.echo(f"{'='*60}")
+    click.echo(f"{'=' * 60}")
     verdict = "PROMOTE" if decision.promoted else "REJECT"
     click.echo(f"Decision: {verdict}")
     for r in decision.reasons:

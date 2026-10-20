@@ -331,6 +331,22 @@ const requestContextMiddleware: FastifyPluginAsync = async (fastify) => {
       return payload;
     }
 
+    const rawErrorForStandardCheck = payload.error;
+    if (
+      isRecord(rawErrorForStandardCheck) &&
+      typeof rawErrorForStandardCheck.code === 'string' &&
+      rawErrorForStandardCheck.code.length > 0 &&
+      typeof rawErrorForStandardCheck.message === 'string' &&
+      rawErrorForStandardCheck.message.length > 0
+    ) {
+      // WHY: Already in the standard envelope shape (code + message present).
+      // Rebuilding it here used to DISCARD every route-specific envelope
+      // extension — the free-tier 429's reset_at and credits_continue offer,
+      // the wallet 402's balance_usd/required_usd — before the route's
+      // response-schema serializer ever saw them. Pass through untouched.
+      return payload;
+    }
+
     const extendedRequest = request as ExtendedFastifyRequest;
     const correlationId = extendedRequest.correlationId || resolveCorrelationId(extendedRequest);
     extendedRequest.correlationId = correlationId;

@@ -18,10 +18,16 @@ from __future__ import annotations
 
 import logging
 import re
-from dataclasses import dataclass, field
-from typing import Any
+from dataclasses import dataclass
+from typing import TYPE_CHECKING, Any
 
-from datasets import load_dataset
+# 2026-10-18: mypy resolves `datasets` to the repo-local namespace package
+# (model-stack/datasets/, no __init__.py) instead of the pip library; at
+# runtime PEP 420 gives precedence to the regular package in site-packages.
+from datasets import load_dataset  # type: ignore[attr-defined]
+
+if TYPE_CHECKING:
+    from evals.runner import ModelClient
 
 logger = logging.getLogger("gsm8k_eval")
 
@@ -46,7 +52,9 @@ def extract_answer(text: str) -> str | None:
     # Fallback: last number in text
     nums = _NUMERIC_RE.findall(text)
     if nums:
-        return nums[-1].replace(",", "")
+        # findall() on Pattern[str] is typed list[Any] — boundary str() keeps
+        # the declared return type honest (elements are always str here).
+        return str(nums[-1].replace(",", ""))
     return None
 
 
@@ -63,6 +71,7 @@ def normalize_answer(answer: str | None) -> float | None:
 # Difficulty heuristic
 # ---------------------------------------------------------------------------
 
+
 def estimate_difficulty(question: str, solution: str) -> str:
     """Assign a rough difficulty bucket based on solution length."""
     steps = solution.count("\n")
@@ -76,6 +85,7 @@ def estimate_difficulty(question: str, solution: str) -> str:
 # ---------------------------------------------------------------------------
 # Evaluation
 # ---------------------------------------------------------------------------
+
 
 @dataclass
 class GSM8KResult:
@@ -97,7 +107,11 @@ def build_prompt(question: str) -> str:
     )
 
 
-def run(client, num_samples: int | None = None, **_kwargs) -> tuple[dict[str, float], list[dict]]:
+def run(
+    client: ModelClient,
+    num_samples: int | None = None,
+    **_kwargs: Any,
+) -> tuple[dict[str, float], list[dict[str, Any]]]:
     """Entry point called by the central eval runner.
 
     Returns (metrics_dict, details_list).
@@ -162,7 +176,11 @@ def run(client, num_samples: int | None = None, **_kwargs) -> tuple[dict[str, fl
     total_correct = sum(1 for r in results if r.correct)
     accuracy = total_correct / max(total, 1)
 
-    metrics: dict[str, float] = {"accuracy": round(accuracy, 4), "total": total, "correct": total_correct}
+    metrics: dict[str, float] = {
+        "accuracy": round(accuracy, 4),
+        "total": total,
+        "correct": total_correct,
+    }
 
     for diff in ("easy", "medium", "hard"):
         cnt = difficulty_counts.get(diff, 0)

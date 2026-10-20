@@ -194,6 +194,22 @@ export class ParallelStrategy extends BaseStrategy {
         successful = executions.filter((e) => e.success);
       }
     }
+    // ci#752: narrate partial fan-out failures. Until now a failed model was
+    // only visible in the debug log and the aggregate succeeded/failed counts
+    // — the observer never learned that an analyst dropped out, or why.
+    // Emitted BEFORE the all-failed throw so a total failure is narrated too,
+    // not just partial ones.
+    for (const failed of executions.filter((e) => !e.success)) {
+      const selected = selectedModels.find((m) => m.model.id === failed.modelId);
+      this.emitModelFailedEvent(context, {
+        modelId: failed.modelId,
+        modelName: failed.modelName,
+        provider: selected?.adapter.getName(),
+        role: failed.role,
+        errorMessage: failed.error,
+        remaining: successful.length,
+      });
+    }
     if (successful.length === 0) {
       throw new Error('All parallel executions failed');
     }

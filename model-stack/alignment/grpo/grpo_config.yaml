@@ -1,0 +1,59 @@
+# Copyright (C) 2026 Ailin One, Inc.
+#
+# This file is part of Collective Intelligence Engine (ci).
+# Licensed under the GNU Affero General Public License v3.0 or later.
+# See LICENSE in the repository root, or <https://www.gnu.org/licenses/>.
+#
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Source: https://github.com/ailinone/collective-intelligence
+
+# GRPO hyperparameters (TRL 1.x GRPOConfig) — 2026-10 recipe
+#
+# Defaults sized for ailin-1b-v2 post-SFT on a single 80GB GPU with
+# transformers-based generation (use_vllm: false). For large prompt
+# throughput flip use_vllm to true and add vllm_gpu_memory_utilization
+# (requires a second GPU or fractional GPU memory).
+
+grpo:
+  # Generation group (G) — the heart of GRPO: each prompt spawns G
+  # completions; advantages are the group-normalized rewards.
+  num_generations: 16
+  # NOTE: no max_prompt_length — GRPOConfig dropped it before trl 1.16;
+  # prompt truncation is handled by the trainer's context budget.
+  max_completion_length: 2048   # headroom for reasoning traces (<think>...)
+  temperature: 1.0              # exploration during RL; drop for final eval
+  top_p: 1.0
+
+  # Optimization — small LR, constant-with-warmup is the RL-standard choice
+  learning_rate: 1.0e-6
+  lr_scheduler_type: "constant_with_warmup"
+  warmup_steps: 10
+  num_train_epochs: 1
+  beta: 0.0                     # KL-to-reference; 0 skips the ref model
+                                # (Dr.GRPO/DAPO-style: avoids KL-choked updates)
+  loss_type: "dapo"             # token-level loss, no length bias
+  scale_rewards: "group"
+
+  # Batch geometry: per_device_batch * grad_accum must be divisible by
+  # num_generations (8 * 4 = 32 = 2 groups of 16 per optimizer step)
+  per_device_train_batch_size: 8
+  gradient_accumulation_steps: 4
+
+  # Precision / memory
+  bf16: true
+  gradient_checkpointing: true
+
+  # Ops
+  seed: 0
+  logging_steps: 1
+  save_steps: 100
+  save_total_limit: 3
+  report_to: "none"             # "wandb" for experiment tracking
+  use_vllm: false
+
+# LoRA (used with --lora)
+lora:
+  r: 16
+  alpha: 32
+  dropout: 0.05
+  target_modules: ["q_proj", "k_proj", "v_proj", "o_proj"]

@@ -23,10 +23,13 @@ from __future__ import annotations
 
 import json
 import logging
-from dataclasses import dataclass, field
-from typing import Any
+from dataclasses import dataclass
+from typing import TYPE_CHECKING, Any
 
 import jsonschema
+
+if TYPE_CHECKING:
+    from evals.runner import ModelClient
 
 logger = logging.getLogger("tool_calling_eval")
 
@@ -35,7 +38,7 @@ logger = logging.getLogger("tool_calling_eval")
 # Built-in test suite
 # ---------------------------------------------------------------------------
 
-TOOL_DEFINITIONS: list[dict] = [
+TOOL_DEFINITIONS: list[dict[str, Any]] = [
     {
         "name": "get_weather",
         "description": "Get the current weather for a location.",
@@ -113,7 +116,9 @@ TEST_CASES: list[dict[str, Any]] = [
         "expected_args": [{"query": "AI regulation"}],
     },
     {
-        "query": "Send an email to alice@example.com with subject 'Meeting' and body 'See you at 3pm'",
+        "query": (
+            "Send an email to alice@example.com with subject 'Meeting' and body 'See you at 3pm'"
+        ),
         "expected_tools": ["send_email"],
         "expected_args": [{"to": "alice@example.com", "subject": "Meeting"}],
     },
@@ -123,7 +128,9 @@ TEST_CASES: list[dict[str, Any]] = [
         "expected_args": [{}],
     },
     {
-        "query": "Create a calendar event titled 'Team Standup' on 2026-04-01 at 09:00 for 30 minutes",
+        "query": (
+            "Create a calendar event titled 'Team Standup' on 2026-04-01 at 09:00 for 30 minutes"
+        ),
         "expected_tools": ["create_calendar_event"],
         "expected_args": [{"title": "Team Standup", "date": "2026-04-01"}],
     },
@@ -145,21 +152,22 @@ TEST_CASES: list[dict[str, Any]] = [
 # Parsing & validation
 # ---------------------------------------------------------------------------
 
-def build_tool_prompt(query: str, tools: list[dict]) -> str:
+
+def build_tool_prompt(query: str, tools: list[dict[str, Any]]) -> str:
     tools_json = json.dumps(tools, indent=2)
     return (
         "You are a helpful assistant with access to the following tools:\n\n"
         f"{tools_json}\n\n"
         "When you need to use a tool, respond with a JSON array of tool calls. "
         "Each tool call should be an object with 'name' and 'arguments' keys. "
-        "Example: [{\"name\": \"tool_name\", \"arguments\": {\"arg1\": \"value1\"}}]\n\n"
+        'Example: [{"name": "tool_name", "arguments": {"arg1": "value1"}}]\n\n'
         "If multiple tools are needed, include them all in the array.\n\n"
         f"User: {query}\n\n"
         "Tool calls:"
     )
 
 
-def parse_tool_calls(text: str) -> list[dict]:
+def parse_tool_calls(text: str) -> list[dict[str, Any]]:
     """Try to extract a JSON array of tool calls from model output."""
     text = text.strip()
     # Find JSON array
@@ -186,7 +194,7 @@ def parse_tool_calls(text: str) -> list[dict]:
         return []
 
 
-def validate_schema(call: dict, tool_defs: list[dict]) -> tuple[bool, str]:
+def validate_schema(call: dict[str, Any], tool_defs: list[dict[str, Any]]) -> tuple[bool, str]:
     """Check that a tool call conforms to its declared JSON schema."""
     name = call.get("name", "")
     args = call.get("arguments", {})
@@ -203,7 +211,7 @@ def validate_schema(call: dict, tool_defs: list[dict]) -> tuple[bool, str]:
         return False, str(exc.message)[:200]
 
 
-def check_args_match(actual: dict, expected: dict) -> bool:
+def check_args_match(actual: dict[str, Any], expected: dict[str, Any]) -> bool:
     """Check that all expected key-value pairs appear in the actual args.
 
     Uses case-insensitive substring matching for string values.
@@ -224,6 +232,7 @@ def check_args_match(actual: dict, expected: dict) -> bool:
 # Evaluation
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class ToolCallResult:
     query: str
@@ -235,7 +244,11 @@ class ToolCallResult:
     raw_output: str
 
 
-def run(client, num_samples: int | None = None, **_kwargs) -> tuple[dict[str, float], list[dict]]:
+def run(
+    client: ModelClient,
+    num_samples: int | None = None,
+    **_kwargs: Any,
+) -> tuple[dict[str, float], list[dict[str, Any]]]:
     """Entry point for the eval runner."""
     cases = TEST_CASES
     if num_samples:
@@ -336,6 +349,9 @@ def run(client, num_samples: int | None = None, **_kwargs) -> tuple[dict[str, fl
 
     logger.info(
         "Tool calling: selection=%.4f  schema=%.4f  args=%.4f  F1=%.4f",
-        tool_select_acc, schema_rate, arg_accuracy, f1,
+        tool_select_acc,
+        schema_rate,
+        arg_accuracy,
+        f1,
     )
     return metrics, details

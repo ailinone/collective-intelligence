@@ -59,9 +59,17 @@ const ALLOWED_EXTS = new Set([
   '.py', '.conf',
 ]);
 
-// Single canonical pattern. Catches `ailin-gateway`, `ailin-gateway-net`,
-// `ailin-gateway_quota-service`, `ailin-gateway-prod-api`, etc.
-const FORBIDDEN = /ailin-gateway/i;
+// Single canonical pattern. Catches `ailin-gateway`, `ailin-gateway_quota-service`,
+// `ailin-gateway-prod-api`, etc.
+//
+// Exception: the exact token `ailin-gateway-net` is NOT a naming residual. It is
+// the LIVE name of the external Swarm overlay network owned by the gateway stack
+// (gateway/docker-compose.production.yml `networks.ailin-network.name`, the
+// systems and pm stacks, and `docker network inspect ailin-gateway-net` in pm's
+// workflows). docker/docker-compose.production.yml must reference it verbatim
+// (`external: true, name: ailin-gateway-net`); renaming it here would make
+// `docker stack deploy` fail with "network not found".
+const FORBIDDEN = /ailin-gateway(?!-net(?![\w-]))/i;
 
 const violations = [];
 

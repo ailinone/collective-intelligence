@@ -33,7 +33,7 @@
 export const DEFAULT_HOLD_TTL_MS = 5 * 60 * 1000;
 
 export interface CreditMemo {
-  kind: 'topup' | 'debit' | 'adjustment' | 'refund';
+  kind: 'topup' | 'debit' | 'adjustment' | 'refund' | 'grant' | 'grant_expiry';
   requestId?: string;
   description?: string;
   /**
@@ -77,6 +77,30 @@ export interface FailedDebitRecord {
   error: string;
 }
 
+/** Result of an idempotent promotional grant (money in + allocation bucket). */
+export interface GrantResult {
+  /** Ledger balance after the grant (or the prior balance-after, on replay). */
+  balanceUsd: number;
+  /** false when the grant id had already been applied — no money moved. */
+  applied: boolean;
+}
+
+/** Aggregate result of one expiry sweep pass. */
+export interface ExpirySweepResult {
+  /** Number of grants flipped active → expired by this pass. */
+  grantsExpired: number;
+  /** Total unspent promotional credit reclaimed from balances. */
+  reclaimedUsd: number;
+}
+
+/** Result of a grant reversal (campaign clawback). */
+export interface GrantReversalResult {
+  /** The grant's status AFTER this call (active grants → 'reversed'). */
+  status: 'active' | 'exhausted' | 'expired' | 'reversed' | 'missing';
+  /** How much was reclaimed from the balance by THIS call (0 on replay). */
+  reversedUsd: number;
+}
+
 /**
  * Persistence port. Implementations MUST provide the documented atomicity — the
  * money-correctness of the wallet depends on the DB, not on app-level check-then-act.
@@ -88,10 +112,25 @@ export interface BalanceStore {
   getAvailableUsd(organizationId: string): Promise<number>;
   /**
    * Atomically add `deltaUsd` (negative = debit) and return the new balance.
-   * NOT idempotent — use for top-ups/adjustments only. Money-moving debits go
-   * through `applyDebit`/`settleHold`, which are idempotent.
+   * NOT idempotent — use for adjustments only (and legacy no-reference top-ups).
+   * Reference-carrying top-ups go through `applyTopup`; money-moving debits go
+   * through `applyDebit`/`settleHold`. Both are idempotent.
    */
   adjustBalanceUsd(organizationId: string, deltaUsd: number, memo: CreditMemo): Promise<number>;
+  /**
+   * Atomically apply a credit top-up EXACTLY ONCE per `idempotencyKey` — the
+   * credit-side twin of `applyDebit`. Concurrent or retried calls with the same
+   * key credit the balance once; later calls return the prior result with
+   * `applied: false`. Enforced by a DB unique constraint on the key, so the key
+   * MUST be namespaced (e.g. `topup:<reference>`) when the dedup table is shared
+   * with debits.
+   */
+  applyTopup(
+    organizationId: string,
+    amountUsd: number,
+    idempotencyKey: string,
+    memo: CreditMemo
+  ): Promise<DebitResult>;
   /**
    * Atomically apply a debit EXACTLY ONCE per `idempotencyKey`. Concurrent or
    * retried calls with the same key move money once; later calls return the prior
@@ -127,6 +166,44 @@ export interface BalanceStore {
   ): Promise<DebitResult>;
   /** Release a hold with NO charge (e.g. the request failed before spending). Idempotent. */
   releaseHold(organizationId: string, holdId: string): Promise<void>;
+  /**
+   * Atomically credit a promotional grant EXACTLY ONCE per `grantId` and open
+   * its allocation bucket: the balance grows by `amountUsd` and a grant row
+   * with `remaining_usd = amountUsd` / `expiresAtMs` is created. Debit-time
+   * allocation (`applyDebit` / `settleHold`) consumes from grants first,
+   * soonest-expiring first — deliberately WITHOUT an expiry filter (#703):
+   * an expired-but-unswept grant still absorbs the debit (remaining_usd is
+   * reduced), and the expiry sweep later reclaims only the unspent remainder.
+   * A retried call with the same id is a
+   * no-op returning the prior result (`applied: false`). An `expiresAtMs`
+   * already in the past MUST be rejected, not silently granted-and-expired.
+   */
+  applyGrant(
+    organizationId: string,
+    grantId: string,
+    amountUsd: number,
+    expiresAtMs: number,
+    memo: CreditMemo
+  ): Promise<GrantResult>;
+  /**
+   * Sweep expired grants: for each org with active grants past `expiresAtMs`,
+   * atomically (under the org lock) reclaim `remaining_usd` from the balance,
+   * append a `grant_expiry` ledger row (idempotent per grant id) and flip the
+   * grant to `expired` (remaining_usd kept as the unspent-at-expiry history).
+   * MUST be safe to run concurrently with debits and with itself.
+   */
+  expireGrants(nowMs?: number): Promise<ExpirySweepResult>;
+  /**
+   * Reverse a grant (campaign clawback): under the org lock, reclaim the
+   * CURRENT unspent `remaining_usd` from the balance, append a
+   * `grant_reversal` ledger row (idempotent per grant id) and flip an active
+   * grant to `reversed`. Already-reversed/expired/exhausted grants are a
+   * no-op reporting their status (idempotent — a retried reversal never
+   * takes money twice). Money already SPENT from the grant is not clawed
+   * back from purchased balance; the campaign ledger (billing) records the
+   * full reversal for accounting.
+   */
+  reverseGrant(grantId: string): Promise<GrantReversalResult>;
   /** Best-effort durable record of a debit that could not be applied (DI-08). MUST NOT throw. */
   recordFailedDebit(record: FailedDebitRecord): Promise<void>;
 }
@@ -259,13 +336,75 @@ export class PrepaidWallet {
     return this.store.releaseHold(organizationId, holdId);
   }
 
+  /**
+   * Credit a top-up. IDEMPOTENT when a `requestId`/reference is supplied: the
+   * dedup key is `topup:<reference>` (namespaced so it can never collide with a
+   * debit key in the shared ledger), and a retried call with the same reference
+   * credits exactly once, returning the current balance on replay. Without a
+   * reference it falls back to a plain adjust (legacy, non-idempotent) so
+   * existing callers keep their exact behaviour.
+   */
   async topUp(organizationId: string, amountUsd: number, requestId?: string): Promise<number> {
     if (!(amountUsd > 0)) throw new Error('top-up amount must be positive');
-    return this.store.adjustBalanceUsd(organizationId, roundUsd(amountUsd), {
+    const amount = roundUsd(amountUsd);
+    if (!requestId) {
+      return this.store.adjustBalanceUsd(organizationId, amount, {
+        kind: 'topup',
+        description: 'credit top-up',
+      });
+    }
+    const res = await this.store.applyTopup(organizationId, amount, `topup:${requestId}`, {
       kind: 'topup',
       requestId,
+      idempotencyKey: `topup:${requestId}`,
       description: 'credit top-up',
     });
+    return res.balanceUsd;
+  }
+
+  /**
+   * Credit a promotional grant (referral campaign engine → wallet) and open its
+   * expiry-bucketed allocation. IDEMPOTENT per `grantId` (the billing campaign
+   * redemption id): a retried call credits exactly once and returns the current
+   * balance. The credit is spendable like any top-up; the difference is that
+   * debit-time allocation consumes the promotional portion first (soonest
+   * expiry first) and an expiry sweep reclaims whatever is still unspent at
+   * `expiresAtMs`. A grant with a past expiry is rejected — granting credit
+   * that is already expired is a caller bug, not a wallet state.
+   */
+  async grant(
+    organizationId: string,
+    grantId: string,
+    amountUsd: number,
+    expiresAtMs: number
+  ): Promise<GrantResult> {
+    if (!(amountUsd > 0)) throw new Error('grant amount must be positive');
+    if (!grantId) throw new Error('grantId is required');
+    if (!Number.isFinite(expiresAtMs) || expiresAtMs <= Date.now()) {
+      throw new Error('grant expiry must be in the future');
+    }
+    return this.store.applyGrant(organizationId, grantId, roundUsd(amountUsd), expiresAtMs, {
+      kind: 'grant',
+      requestId: grantId,
+      idempotencyKey: `grant:${grantId}`,
+      description: 'promotional credit grant (campaign)',
+    });
+  }
+
+  /**
+   * Run one expiry sweep over all organizations (see BalanceStore.expireGrants).
+   * Exposed for the background sweeper; also safe to invoke manually.
+   */
+  async expireGrants(): Promise<ExpirySweepResult> {
+    return this.store.expireGrants(Date.now());
+  }
+
+  /**
+   * Reverse a grant (campaign clawback). Idempotent: money already spent from
+   * the grant is not clawed back; only the unspent remainder is reclaimed.
+   */
+  async reverseGrant(grantId: string): Promise<GrantReversalResult> {
+    return this.store.reverseGrant(grantId);
   }
 
   /**
@@ -312,10 +451,19 @@ interface HoldEntry {
   expiresAtMs: number;
 }
 
+interface GrantEntry {
+  organizationId: string;
+  remainingUsd: number;
+  status: 'active' | 'exhausted' | 'expired' | 'reversed';
+  expiresAtMs: number;
+}
+
 /** In-memory store — for tests and local dev (NOT durable). Mirrors the atomic semantics. */
 export class InMemoryBalanceStore implements BalanceStore {
   private readonly balances = new Map<string, number>();
   private readonly holds = new Map<string, HoldEntry>();
+  /** grantId -> promotional bucket (allocation overlay over the balance). */
+  private readonly grants = new Map<string, GrantEntry>();
   /** idempotencyKey -> balance-after at the time it was first applied. */
   private readonly appliedKeys = new Map<string, number>();
   /** Exposed for tests: durable failed-debit records (DI-08). */
@@ -357,6 +505,84 @@ export class InMemoryBalanceStore implements BalanceStore {
     return next;
   }
 
+  async applyTopup(
+    organizationId: string,
+    amountUsd: number,
+    idempotencyKey: string,
+    _memo: CreditMemo
+  ): Promise<DebitResult> {
+    const prior = this.appliedKeys.get(idempotencyKey);
+    if (prior !== undefined) return { balanceUsd: prior, applied: false };
+    const next = roundUsd(this.bal(organizationId) + amountUsd);
+    this.balances.set(organizationId, next);
+    this.appliedKeys.set(idempotencyKey, next);
+    return { balanceUsd: next, applied: true };
+  }
+
+  /**
+   * Debit-time grant allocation: consume `amountUsd` from this org's grants,
+   * soonest-expiring first. Returns the amount actually taken from grants
+   * (the rest of the debit hits purchased balance). Mirrors the FOR UPDATE
+   * loop in the Prisma store — including the deliberate ABSENCE of an
+   * expiry filter: a debit in the expiry→sweep window must still reduce the
+   * grant, or the sweep double-reclaims money the debit already consumed.
+   */
+  private consumeGrants(organizationId: string, amountUsd: number): number {
+    let remaining = amountUsd;
+    const due = [...this.grants.entries()]
+      .filter(([, g]) => g.organizationId === organizationId && g.status === 'active')
+      .sort((a, b) => a[1].expiresAtMs - b[1].expiresAtMs);
+    for (const [, g] of due) {
+      if (remaining <= 0) break;
+      const take = Math.min(remaining, g.remainingUsd);
+      g.remainingUsd = roundUsd(g.remainingUsd - take);
+      if (g.remainingUsd <= 0) g.status = 'exhausted';
+      remaining = roundUsd(remaining - take);
+    }
+    return roundUsd(amountUsd - remaining);
+  }
+
+  async applyGrant(
+    organizationId: string,
+    grantId: string,
+    amountUsd: number,
+    expiresAtMs: number,
+    memo: CreditMemo
+  ): Promise<GrantResult> {
+    const key = memo.idempotencyKey ?? `grant:${grantId}`;
+    const prior = this.appliedKeys.get(key);
+    if (prior !== undefined) return { balanceUsd: prior, applied: false };
+    if (expiresAtMs <= Date.now()) throw new Error('grant expiry must be in the future');
+    const next = roundUsd(this.bal(organizationId) + amountUsd);
+    this.balances.set(organizationId, next);
+    this.grants.set(grantId, {
+      organizationId,
+      remainingUsd: roundUsd(amountUsd),
+      status: 'active',
+      expiresAtMs,
+    });
+    this.appliedKeys.set(key, next);
+    return { balanceUsd: next, applied: true };
+  }
+
+  async expireGrants(nowMs: number = Date.now()): Promise<ExpirySweepResult> {
+    let grantsExpired = 0;
+    let reclaimedUsd = 0;
+    for (const [id, g] of this.grants.entries()) {
+      if (g.status !== 'active' || g.expiresAtMs > nowMs || g.remainingUsd <= 0) continue;
+      // Idempotent per grant: the reclaim key guards a concurrent/duplicate sweep.
+      const key = `grant_expiry:${id}`;
+      if (this.appliedKeys.has(key)) continue;
+      const next = roundUsd(this.bal(g.organizationId) - g.remainingUsd);
+      this.balances.set(g.organizationId, next);
+      this.appliedKeys.set(key, next);
+      g.status = 'expired'; // remainingUsd kept as the unspent-at-expiry history
+      grantsExpired += 1;
+      reclaimedUsd = roundUsd(reclaimedUsd + g.remainingUsd);
+    }
+    return { grantsExpired, reclaimedUsd };
+  }
+
   async applyDebit(
     organizationId: string,
     amountUsd: number,
@@ -365,10 +591,26 @@ export class InMemoryBalanceStore implements BalanceStore {
   ): Promise<DebitResult> {
     const prior = this.appliedKeys.get(idempotencyKey);
     if (prior !== undefined) return { balanceUsd: prior, applied: false };
+    this.consumeGrants(organizationId, amountUsd);
     const next = roundUsd(this.bal(organizationId) - amountUsd);
     this.balances.set(organizationId, next);
     this.appliedKeys.set(idempotencyKey, next);
     return { balanceUsd: next, applied: true };
+  }
+
+  async reverseGrant(grantId: string): Promise<GrantReversalResult> {
+    const g = this.grants.get(grantId);
+    if (!g) return { status: 'missing', reversedUsd: 0 };
+    if (g.status !== 'active' || g.remainingUsd <= 0) {
+      return { status: g.status, reversedUsd: 0 };
+    }
+    const key = `grant_reversal:${grantId}`;
+    if (this.appliedKeys.has(key)) return { status: 'reversed', reversedUsd: 0 };
+    const next = roundUsd(this.bal(g.organizationId) - g.remainingUsd);
+    this.balances.set(g.organizationId, next);
+    this.appliedKeys.set(key, next);
+    g.status = 'reversed'; // remaining kept as history, same as expiry
+    return { status: 'reversed', reversedUsd: g.remainingUsd };
   }
 
   async reserveHold(
@@ -420,6 +662,7 @@ export class InMemoryBalanceStore implements BalanceStore {
       if (hold && hold.status === 'active') hold.status = 'settled';
       return { balanceUsd: prior, applied: false };
     }
+    this.consumeGrants(organizationId, actualChargeUsd);
     const next = roundUsd(this.bal(organizationId) - actualChargeUsd);
     this.balances.set(organizationId, next);
     this.appliedKeys.set(key, next);

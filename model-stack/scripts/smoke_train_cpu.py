@@ -25,7 +25,6 @@ import hashlib
 import json
 import logging
 import math
-import os
 import sys
 import time
 from datetime import datetime, timezone
@@ -35,7 +34,7 @@ import click
 import torch
 import yaml
 from torch.utils.data import DataLoader, Dataset
-from transformers import LlamaConfig, LlamaForCausalLM, AutoTokenizer
+from transformers import LlamaConfig, LlamaForCausalLM
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger("smoke-train")
@@ -47,6 +46,7 @@ sys.path.insert(0, str(ROOT))
 # ---------------------------------------------------------------------------
 # Synthetic dataset
 # ---------------------------------------------------------------------------
+
 
 class SyntheticDataset(Dataset):
     """Generate random token sequences for smoke testing."""
@@ -67,6 +67,7 @@ class SyntheticDataset(Dataset):
 # ---------------------------------------------------------------------------
 # Training
 # ---------------------------------------------------------------------------
+
 
 def build_model(config_path: Path) -> tuple[LlamaForCausalLM, dict]:
     """Build model from YAML config."""
@@ -121,7 +122,13 @@ def train(
         "total_time_sec": 0.0,
     }
 
-    logger.info("Starting training: %d steps, batch_size=%d, seq_len=%d, lr=%s", steps, batch_size, seq_len, lr)
+    logger.info(
+        "Starting training: %d steps, batch_size=%d, seq_len=%d, lr=%s",
+        steps,
+        batch_size,
+        seq_len,
+        lr,
+    )
     start = time.time()
 
     for step, batch in enumerate(loader):
@@ -150,12 +157,20 @@ def train(
         if (step + 1) % 5 == 0 or step == 0:
             logger.info(
                 "step %d/%d | loss=%.4f | grad_norm=%.4f | tps=%.0f",
-                step + 1, steps, loss.item(), grad_norm, tps,
+                step + 1,
+                steps,
+                loss.item(),
+                grad_norm,
+                tps,
             )
 
     metrics["total_time_sec"] = time.time() - start
     metrics["final_loss"] = metrics["losses"][-1] if metrics["losses"] else float("nan")
-    metrics["mean_tps"] = sum(metrics["throughput_tokens_per_sec"]) / len(metrics["throughput_tokens_per_sec"]) if metrics["throughput_tokens_per_sec"] else 0
+    metrics["mean_tps"] = (
+        sum(metrics["throughput_tokens_per_sec"]) / len(metrics["throughput_tokens_per_sec"])
+        if metrics["throughput_tokens_per_sec"]
+        else 0
+    )
 
     # Save checkpoint
     ckpt_dir = output_dir / "checkpoint"
@@ -173,6 +188,7 @@ def train(
 # ---------------------------------------------------------------------------
 # Evaluation
 # ---------------------------------------------------------------------------
+
 
 def evaluate(model: LlamaForCausalLM, cfg: dict) -> dict:
     """Run minimal evaluation on the trained model."""
@@ -217,13 +233,24 @@ def evaluate(model: LlamaForCausalLM, cfg: dict) -> dict:
     # 4. Weight statistics
     weight_norms = []
     for name, param in model.named_parameters():
-        weight_norms.append({"name": name, "norm": round(param.data.norm().item(), 4), "shape": list(param.shape)})
+        weight_norms.append(
+            {
+                "name": name,
+                "norm": round(param.data.norm().item(), 4),
+                "shape": list(param.shape),
+            }
+        )
     results["weight_stats"] = {
         "num_params": len(weight_norms),
         "mean_norm": round(sum(w["norm"] for w in weight_norms) / len(weight_norms), 4),
     }
 
-    logger.info("Eval results: perplexity=%.2f, loss=%.4f, gen_ok=%s", perplexity, avg_loss, results["generation_success"])
+    logger.info(
+        "Eval results: perplexity=%.2f, loss=%.4f, gen_ok=%s",
+        perplexity,
+        avg_loss,
+        results["generation_success"],
+    )
     return results
 
 
@@ -231,7 +258,13 @@ def evaluate(model: LlamaForCausalLM, cfg: dict) -> dict:
 # Registry
 # ---------------------------------------------------------------------------
 
-def register_checkpoint(output_dir: Path, cfg: dict, train_metrics: dict, eval_results: dict) -> dict:
+
+def register_checkpoint(
+    output_dir: Path,
+    cfg: dict,
+    train_metrics: dict,
+    eval_results: dict,
+) -> dict:
     """Register checkpoint in the model registry."""
     config_hash = hashlib.sha256(json.dumps(cfg, sort_keys=True).encode()).hexdigest()[:16]
     timestamp = datetime.now(timezone.utc).isoformat()
@@ -273,6 +306,7 @@ def register_checkpoint(output_dir: Path, cfg: dict, train_metrics: dict, eval_r
 # ---------------------------------------------------------------------------
 # Report
 # ---------------------------------------------------------------------------
+
 
 def generate_report(
     output_dir: Path,
@@ -330,7 +364,10 @@ def generate_report(
                 else False
             ),
             "model_generates_tokens": eval_results["generation_success"],
-            "note": "Smoke test on CPU with synthetic data. Proves pipeline works end-to-end. NOT a production model.",
+            "note": (
+                "Smoke test on CPU with synthetic data. Proves pipeline works "
+                "end-to-end. NOT a production model."
+            ),
         },
     }
 
@@ -346,8 +383,13 @@ def generate_report(
 # CLI
 # ---------------------------------------------------------------------------
 
+
 @click.command()
-@click.option("--config", default=str(ROOT / "model" / "configs" / "ailin-tiny.yaml"), help="Model config YAML")
+@click.option(
+    "--config",
+    default=str(ROOT / "model" / "configs" / "ailin-tiny.yaml"),
+    help="Model config YAML",
+)
 @click.option("--steps", default=20, help="Training steps")
 @click.option("--batch-size", default=2, help="Batch size")
 @click.option("--lr", default=1e-3, help="Learning rate")
@@ -387,7 +429,14 @@ def main(config: str, steps: int, batch_size: int, lr: float, output: str):
     logger.info("  Model:          %s (%s params)", cfg["name"], f"{eval_results['param_count']:,}")
     logger.info("  Steps:          %d", steps)
     logger.info("  Final loss:     %.4f", train_metrics["final_loss"])
-    logger.info("  Loss decreased: %s", train_metrics["losses"][-1] < train_metrics["losses"][0] if len(train_metrics["losses"]) > 1 else "N/A")
+    logger.info(
+        "  Loss decreased: %s",
+        (
+            train_metrics["losses"][-1] < train_metrics["losses"][0]
+            if len(train_metrics["losses"]) > 1
+            else "N/A"
+        ),
+    )
     logger.info("  Perplexity:     %.2f", eval_results["perplexity"])
     logger.info("  Generation OK:  %s", eval_results["generation_success"])
     logger.info("  Checkpoint:     %s", output_dir / "checkpoint")

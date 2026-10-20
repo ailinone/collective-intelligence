@@ -29,6 +29,7 @@ import type { ProviderAdapter } from '@/providers/base/provider-adapter';
 import { getUserSpecifiedModelFlag, getTaskType } from '@/types/chat-request-extended.js';
 import { estimateContextSize as estimateContextSizeShared } from '../context-size-estimator';
 import { ContextWindowExceededError } from '@/utils/custom-errors';
+import { extractHttpStatusFromMessage } from '@/core/operability/provider-failure-classification';
 
 /**
  * Single Model Strategy
@@ -225,10 +226,16 @@ export class SingleModelStrategy extends BaseStrategy {
         {
           requestId: context.requestId,
           model: selectedModel.model.name,
+          modelId: selectedModel.model.id,
           provider: selectedModel.adapter.getName(),
           error: currentExecution.error,
+          errorCode: extractHttpStatusFromMessage(currentExecution.error || ''),
+          durationMs: currentExecution.durationMs,
           attempt: attempt + 1,
           maxAttempts,
+          // ci#765 defect 1: every failed attempt must be identifiable as a
+          // pinned-model attempt (vs. dynamic selection) in the logs.
+          pinnedRequest: userSpecifiedModel,
           isBalanceError,
         },
         'Single strategy execution failed, trying next candidate'
@@ -355,6 +362,11 @@ export class SingleModelStrategy extends BaseStrategy {
       ...opts,
       throwOnTotalFailure: true,
       skipSynthesisCap: true,
+      // ci#765 defect 1: correlate every per-candidate failure log with the
+      // request and flag whether the caller pinned an explicit model, so a
+      // dying pin attempt is visible (and distinguishable) in the logs.
+      requestId: context.requestId,
+      pinnedRequest: userSpecifiedModel,
     });
 
     this.emitObserverEvent(context, {

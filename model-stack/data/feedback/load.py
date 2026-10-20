@@ -37,10 +37,14 @@ logger = logging.getLogger(__name__)
 
 
 @click.command()
-@click.option("--staging-dir", required=True, type=click.Path(exists=True), help="Staging directory")
+@click.option(
+    "--staging-dir", required=True, type=click.Path(exists=True), help="Staging directory"
+)
 @click.option("--sft-dir", required=True, type=click.Path(), help="SFT output directory")
 @click.option("--dpo-dir", required=True, type=click.Path(), help="DPO output directory")
-@click.option("--manifest-dir", required=True, type=click.Path(), help="Dataset manifests directory")
+@click.option(
+    "--manifest-dir", required=True, type=click.Path(), help="Dataset manifests directory"
+)
 @click.option("--lineage-dir", required=True, type=click.Path(), help="Lineage records directory")
 def main(
     staging_dir: str,
@@ -68,7 +72,8 @@ def main(
     if sft_staging.exists() and sft_staging.stat().st_size > 0:
         sft_dest = sft_out / f"feedback-sft-{date_str}.jsonl"
         shutil.copy2(sft_staging, sft_dest)
-        sft_count = sum(1 for _ in open(sft_dest))
+        with open(sft_dest) as f:
+            sft_count = sum(1 for _ in f)
         logger.info(f"SFT: {sft_count} records → {sft_dest}")
 
         # Write manifest
@@ -78,11 +83,13 @@ def main(
             "source_url": "ci-api-execution-outcomes",
             "license": "proprietary",
             "format": "jsonl",
-            "splits": [{
-                "name": "train",
-                "num_rows": sft_count,
-                "path": str(sft_dest),
-            }],
+            "splits": [
+                {
+                    "name": "train",
+                    "num_rows": sft_count,
+                    "path": str(sft_dest),
+                }
+            ],
             "row_count": sft_count,
             "created_at": datetime.now(timezone.utc).isoformat(),
             "tags": ["feedback", "sft", "ci-api", "routing-optimization"],
@@ -99,7 +106,8 @@ def main(
     if dpo_staging.exists() and dpo_staging.stat().st_size > 0:
         dpo_dest = dpo_out / f"feedback-dpo-{date_str}.jsonl"
         shutil.copy2(dpo_staging, dpo_dest)
-        dpo_count = sum(1 for _ in open(dpo_dest))
+        with open(dpo_dest) as f:
+            dpo_count = sum(1 for _ in f)
         logger.info(f"DPO: {dpo_count} records → {dpo_dest}")
 
         dpo_manifest = {
@@ -108,11 +116,13 @@ def main(
             "source_url": "ci-api-shadow-evaluations",
             "license": "proprietary",
             "format": "jsonl",
-            "splits": [{
-                "name": "train",
-                "num_rows": dpo_count,
-                "path": str(dpo_dest),
-            }],
+            "splits": [
+                {
+                    "name": "train",
+                    "num_rows": dpo_count,
+                    "path": str(dpo_dest),
+                }
+            ],
             "row_count": dpo_count,
             "created_at": datetime.now(timezone.utc).isoformat(),
             "tags": ["feedback", "dpo", "ci-api", "preference-learning"],
@@ -129,7 +139,9 @@ def main(
     lineage_record = {
         "date": date_str,
         "loaded_at": datetime.now(timezone.utc).isoformat(),
-        "staging_report": json.loads(staging_report.read_text()) if staging_report.exists() else None,
+        "staging_report": (
+            json.loads(staging_report.read_text()) if staging_report.exists() else None
+        ),
     }
     with open(lineage / f"feedback-lineage-{date_str}.json", "w") as f:
         json.dump(lineage_record, f, indent=2, default=str)

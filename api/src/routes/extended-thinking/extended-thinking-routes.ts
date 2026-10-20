@@ -62,14 +62,16 @@ import {
 import { ModelRepository } from '@/services/model-repository';
 import { nanoid } from 'nanoid';
 import { trackChatUsage } from '@/services/billing-usage-tracker';
+import { resolveTierCarrier } from '@/services/ailin-virtual-model-service';
+import { gateChatRequest } from '@/services/prepaid-wallet-gate';
+import { prepaidWalletResponses } from '@/services/prepaid-wallet-openapi';
 import { evaluateOrchestrationGate } from '@/services/orchestration-gate';
 import {
   EFFORT_THINKING_BUDGETS,
   modelHasNativeThinking,
   resolveReasoningEffort,
 } from '@/utils/reasoning-effort';
-// SSE helpers reserved for future streaming support; route currently
-// returns full responses synchronously.
+import { sendSSEChunk, sendSSEDone, setupSSEHeaders } from '@/utils/sse';
 
 const log = logger.child({ module: 'extended-thinking-routes' });
 
@@ -722,6 +724,129 @@ Focus on quality, accuracy, and completeness.`;
 }
 
 // ==
+// Streaming delivery
+// ==
+
+/**
+ * Deliver a completed ExtendedThinkingResponse over SSE (contract fix,
+ * ci#753: both routes document `stream:true` → Server-Sent Events in their
+ * OpenAPI schema, but the handlers used to ignore the flag and return a
+ * single JSON body — announced contract ≠ delivered contract).
+ *
+ * This is deliberately NOT provider token-streaming: the execution above
+ * already ran to completion and holds the full response in memory, so the
+ * stream here is a short burst of complete frames plus the terminal
+ * `data: [DONE]` sentinel — the same wire shape (and the same
+ * `formatSSE`/`sendSSEChunk`/`sendSSEDone` choke points, including their
+ * oversized-line guard and `applyBranding()`) the chat path uses. That fully
+ * satisfies the documented contract: a client that sends `stream:true`
+ * receives `Content-Type: text/event-stream`, parseable `data:` frames, and
+ * `[DONE]`.
+ *
+ * Frame sequence (repo-wide streaming convention — owner decision ci#750,
+ * implemented by #758): role-opening chunk → one chunk per thinking block on
+ * the DEDICATED `delta.reasoning_content` channel → one chunk per text block
+ * on `delta.content` → terminal chunk with `finish_reason: 'stop'`, usage and
+ * `ailin_metadata` (mapped into the canonical `AilinMetadata` shape for
+ * parity with the chat path). Reasoning text never rides inside
+ * `delta.content`.
+ *
+ * Called only AFTER execution succeeded, so `setupSSEHeaders` commits headers
+ * exactly once and the handlers' existing JSON error path is untouched: a
+ * failure still reaches the client as a clean JSON 500 with headers unsent.
+ */
+function sendResponseAsSSE(reply: FastifyReply, response: ExtendedThinkingResponse): void {
+  setupSSEHeaders(reply);
+
+  const content = response.choices[0]?.message?.content ?? [];
+
+  // Frame sequence follows the repo-wide streaming convention (owner decision
+  // ci#750, implemented repo-wide by #758): role-opening chunk → one chunk per
+  // reasoning block on the DEDICATED `delta.reasoning_content` channel →
+  // content chunks on `delta.content` → terminal chunk with finish_reason,
+  // usage and metadata. Chain-of-thought text NEVER rides inside
+  // `delta.content` (that channel is answer text only); `reasoning_content`
+  // is already on `ChatMessage`, so every delta here types cleanly with zero
+  // casts.
+  const chunkShape = (
+    delta: Partial<ChatMessage>,
+    finish_reason: ChatResponse['choices'][number]['finish_reason'],
+    extra?: Partial<ChatResponse>
+  ): ChatResponse => ({
+    id: response.id,
+    object: 'chat.completion.chunk',
+    created: response.created,
+    model: response.model,
+    choices: [
+      {
+        index: 0,
+        delta,
+        finish_reason,
+        logprobs: null,
+      },
+    ],
+    ...extra,
+  });
+
+  // 1. Role-opening chunk.
+  sendSSEChunk(reply, chunkShape({ role: 'assistant' }, null));
+
+  // 2. Reasoning blocks — one chunk each, on the dedicated channel.
+  for (const block of content) {
+    if (block.type === 'thinking' && block.thinking) {
+      sendSSEChunk(reply, chunkShape({ reasoning_content: block.thinking }, null));
+    }
+  }
+
+  // 3. Answer text — one chunk per text block, on `delta.content`.
+  for (const block of content) {
+    if (block.type === 'text' && block.text) {
+      sendSSEChunk(reply, chunkShape({ content: block.text }, null));
+    }
+  }
+
+  // 4. Terminal chunk: finish_reason + usage + metadata.
+  //
+  // Same facts the non-streaming path returns (models_used / strategy /
+  // cost / duration), mapped into the canonical `AilinMetadata` shape the
+  // rest of the SSE surface carries — the route's own metadata uses
+  // `total_cost`/`total_duration_ms` naming, which is NOT structurally
+  // compatible with `AilinMetadata`, and a double type-cast (`as unknown
+  // as`) is banned outright (eslint no-restricted-syntax). Explicit
+  // mapping, zero casts.
+  sendSSEChunk(
+    reply,
+    chunkShape(
+      {},
+      'stop',
+      {
+        usage: {
+          prompt_tokens: response.usage.prompt_tokens,
+          completion_tokens: response.usage.completion_tokens,
+          total_tokens: response.usage.total_tokens,
+        },
+        ailin_metadata: {
+          strategy_used: response.ailin_metadata?.strategy_used ?? 'extended-thinking',
+          models_used: response.ailin_metadata?.models_used ?? [],
+          model_count: response.ailin_metadata?.models_used?.length ?? 1,
+          execution_time_ms: response.ailin_metadata?.total_duration_ms ?? 0,
+          cost_usd: response.ailin_metadata?.total_cost ?? 0,
+          cache_hit: false,
+        },
+      }
+    )
+  );
+
+  // 5. Terminal sentinel.
+  sendSSEDone(reply);
+  // End the raw stream BEFORE returning: FastifyReply is a thenable resolved
+  // once `raw.writableEnded` is true — returning without ending would leave
+  // the request lifecycle hanging (see chat-routes.ts's sendResponse doc for
+  // the confirmed-by-execution deadlock analysis).
+  reply.raw.end();
+}
+
+// ==
 // Route Registration
 // ==
 
@@ -825,6 +950,7 @@ export async function registerExtendedThinkingRoutes(server: FastifyInstance): P
           },
         },
         response: {
+          ...prepaidWalletResponses,
           200: {
             description: 'Extended thinking completed successfully',
             type: 'object',
@@ -845,10 +971,35 @@ export async function registerExtendedThinkingRoutes(server: FastifyInstance): P
                       description: 'Response message containing role, content, and thinking blocks',
                       properties: {
                         role: { type: 'string', description: 'Message role: assistant' },
-                        content: { type: 'string', description: 'Response content text' },
-                        thinking: {
-                          type: 'string',
-                          description: 'Thinking process (Claude-style extended thinking blocks)',
+                        // ci#753 follow-up: this used to be `type: 'string'`
+                        // while the handler emits ContentBlock[] — the response
+                        // serializer coerced the array to the literal string
+                        // "[object Object],[object Object]", destroying the
+                        // thinking blocks on the JSON path. Schema now matches
+                        // the real payload.
+                        content: {
+                          type: 'array',
+                          description:
+                            'Content blocks: thinking blocks (reasoning) followed by text blocks (the answer)',
+                          items: {
+                            type: 'object',
+                            properties: {
+                              type: {
+                                type: 'string',
+                                enum: ['thinking', 'text'],
+                                description: 'Block type: thinking (reasoning) or text (answer)',
+                              },
+                              thinking: {
+                                type: 'string',
+                                description:
+                                  'Thinking process (present on type:"thinking" blocks)',
+                              },
+                              text: {
+                                type: 'string',
+                                description: 'Answer content (present on type:"text" blocks)',
+                              },
+                            },
+                          },
                         },
                       },
                     },
@@ -936,6 +1087,13 @@ export async function registerExtendedThinkingRoutes(server: FastifyInstance): P
     async (request: FastifyRequest<{ Body: ExtendedThinkingRequest }>, reply: FastifyReply) => {
       const extendedRequest = request as ExtendedFastifyRequest;
       const thinkingRequest = request.body;
+      // SECURITY (billing identity, P0 fix 2026-10-03 audit): the prepaid
+      // wallet gate prefers `req.ailin_wallet_org` over the authenticated
+      // key's org, and this route never runs normalizeChatRequest — the body
+      // schema leaves additionalProperties open, so a client-sent value would
+      // route the hold at ANOTHER organization's wallet. Scrub before the
+      // gate; only chat-routes' server-set sites may introduce the field.
+      delete (thinkingRequest as { ailin_wallet_org?: string }).ailin_wallet_org;
 
       // Create orchestration context
       const userContext: OrchestrationContext = extendedRequest.userContext
@@ -980,10 +1138,18 @@ export async function registerExtendedThinkingRoutes(server: FastifyInstance): P
           return reply.status(gate.status).send(gate.body);
         }
 
-        // Handle streaming (future enhancement)
-        if (thinkingRequest.stream) {
-          // For now, execute normally and stream the result
-          log.info({ requestId }, 'Extended thinking streaming mode requested');
+        // Prepaid wallet gate (same carrier the chat path gates on). The
+        // tier carrier is derived from the model string here because this
+        // route never runs normalizeChatRequest. Real messages are available,
+        // so the worst-case hold estimate sees the actual prompt.
+        if (userContext.organizationId) {
+          const walletGate = await gateChatRequest(userContext.organizationId, {
+            ...thinkingRequest,
+            ...resolveTierCarrier(thinkingRequest.model),
+          } as Parameters<typeof gateChatRequest>[1]);
+          if (!walletGate.allowed) {
+            return reply.status(walletGate.status ?? 402).send(walletGate.body);
+          }
         }
 
         // Execute extended thinking
@@ -1001,11 +1167,30 @@ export async function registerExtendedThinkingRoutes(server: FastifyInstance): P
             request: {
               model: response.model,
               messages: thinkingRequest.messages,
+              // Carrier keyed on the REQUESTED cell + real per-direction
+              // tokens so the prepaid wallet debits tiered cells on this
+              // route. `response.model` is the executor's pick (often a raw
+              // provider id, which resolves NO tier) — the user bought
+              // thinkingRequest's cell, so that is what bills.
+              ...resolveTierCarrier(thinkingRequest.model),
             },
             cacheHit: false,
             totalCostOverride: response.ailin_metadata?.total_cost ?? 0,
             totalTokensOverride: response.usage?.total_tokens ?? 0,
+            tokenUsageOverride: {
+              promptTokens: response.usage?.prompt_tokens ?? 0,
+              completionTokens: response.usage?.completion_tokens ?? 0,
+            },
           });
+        }
+
+        // Contract fix (ci#753): the schema documents stream:true → SSE.
+        // Execute fully, then deliver the completed response as a
+        // single-chunk SSE stream + [DONE] (see sendResponseAsSSE).
+        if (thinkingRequest.stream) {
+          log.info({ requestId }, 'Extended thinking streaming mode requested — single-chunk SSE');
+          sendResponseAsSSE(reply, response);
+          return;
         }
 
         return reply.send(response);
@@ -1138,6 +1323,7 @@ export async function registerExtendedThinkingRoutes(server: FastifyInstance): P
           },
         },
         response: {
+          ...prepaidWalletResponses,
           200: {
             description: 'Ultra thinking completed successfully',
             type: 'object',
@@ -1162,11 +1348,33 @@ export async function registerExtendedThinkingRoutes(server: FastifyInstance): P
                         'Response message containing role, content, and consolidated thinking',
                       properties: {
                         role: { type: 'string', description: 'Message role: assistant' },
-                        content: { type: 'string', description: 'Response content text' },
-                        thinking: {
-                          type: 'string',
+                        // ci#753 follow-up: same fix as the extended-thinking
+                        // route — the handler emits ContentBlock[], not a
+                        // string; the string schema coerced it to
+                        // "[object Object],[object Object]" on the wire.
+                        content: {
+                          type: 'array',
                           description:
-                            'Consolidated thinking from multiple models (ultra-thinking mode)',
+                            'Content blocks: consolidated thinking blocks followed by text blocks',
+                          items: {
+                            type: 'object',
+                            properties: {
+                              type: {
+                                type: 'string',
+                                enum: ['thinking', 'text'],
+                                description: 'Block type: thinking (reasoning) or text (answer)',
+                              },
+                              thinking: {
+                                type: 'string',
+                                description:
+                                  'Consolidated thinking from multiple models (present on type:"thinking" blocks)',
+                              },
+                              text: {
+                                type: 'string',
+                                description: 'Answer content (present on type:"text" blocks)',
+                              },
+                            },
+                          },
                         },
                       },
                     },
@@ -1264,6 +1472,13 @@ export async function registerExtendedThinkingRoutes(server: FastifyInstance): P
     async (request: FastifyRequest<{ Body: ExtendedThinkingRequest }>, reply: FastifyReply) => {
       const extendedRequest = request as ExtendedFastifyRequest;
       const thinkingRequest = request.body;
+      // SECURITY (billing identity, P0 fix 2026-10-03 audit): the prepaid
+      // wallet gate prefers `req.ailin_wallet_org` over the authenticated
+      // key's org, and this route never runs normalizeChatRequest — the body
+      // schema leaves additionalProperties open, so a client-sent value would
+      // route the hold at ANOTHER organization's wallet. Scrub before the
+      // gate; only chat-routes' server-set sites may introduce the field.
+      delete (thinkingRequest as { ailin_wallet_org?: string }).ailin_wallet_org;
 
       // Create orchestration context
       const userContext: OrchestrationContext = extendedRequest.userContext
@@ -1298,6 +1513,19 @@ export async function registerExtendedThinkingRoutes(server: FastifyInstance): P
           return reply.status(gate.status).send(gate.body);
         }
 
+        // Prepaid wallet gate. `model` is nominally unused on this route, but
+        // a tiered cell there still bills exactly like the chat path, so the
+        // same gate applies (no carrier => no-op).
+        if (userContext.organizationId) {
+          const walletGate = await gateChatRequest(userContext.organizationId, {
+            ...thinkingRequest,
+            ...resolveTierCarrier(thinkingRequest.model),
+          } as Parameters<typeof gateChatRequest>[1]);
+          if (!walletGate.allowed) {
+            return reply.status(walletGate.status ?? 402).send(walletGate.body);
+          }
+        }
+
         // Execute ultra thinking with collective intelligence
         const response = await thinkingService.executeUltraThinking(thinkingRequest, userContext);
 
@@ -1310,11 +1538,29 @@ export async function registerExtendedThinkingRoutes(server: FastifyInstance): P
             request: {
               model: response.model,
               messages: thinkingRequest.messages,
+              // Carrier keyed on the REQUESTED cell + real per-direction
+              // tokens so the prepaid wallet debits tiered cells on this
+              // route. `response.model` is the executor's pick (often a raw
+              // provider id, which resolves NO tier) — the user bought
+              // thinkingRequest's cell, so that is what bills.
+              ...resolveTierCarrier(thinkingRequest.model),
             },
             cacheHit: false,
             totalCostOverride: response.ailin_metadata?.total_cost ?? 0,
             totalTokensOverride: response.usage?.total_tokens ?? 0,
+            tokenUsageOverride: {
+              promptTokens: response.usage?.prompt_tokens ?? 0,
+              completionTokens: response.usage?.completion_tokens ?? 0,
+            },
           });
+        }
+
+        // Contract fix (ci#753): same SSE delivery as the extended-thinking
+        // route — the schema documents stream:true → SSE.
+        if (thinkingRequest.stream) {
+          log.info({ requestId }, 'Ultra thinking streaming mode requested — single-chunk SSE');
+          sendResponseAsSSE(reply, response);
+          return;
         }
 
         return reply.send(response);

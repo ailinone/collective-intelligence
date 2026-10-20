@@ -24,11 +24,10 @@ import time
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 import click
 import httpx
-import yaml
 
 logger = logging.getLogger("eval_runner")
 
@@ -52,6 +51,7 @@ SUITE_MODULES: dict[str, str] = {
 # Model client abstraction
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class ModelClient:
     """Unified interface for both local and remote model inference."""
@@ -70,11 +70,13 @@ class ModelClient:
     def load_local(self) -> None:
         if self._local_model is not None:
             return
-        from transformers import AutoModelForCausalLM, AutoTokenizer
         import torch
+        from transformers import AutoModelForCausalLM, AutoTokenizer
 
         logger.info("Loading local model from %s ...", self.model_path)
-        self._local_tokenizer = AutoTokenizer.from_pretrained(self.model_path, trust_remote_code=True)
+        self._local_tokenizer = AutoTokenizer.from_pretrained(
+            self.model_path, trust_remote_code=True
+        )
         self._local_model = AutoModelForCausalLM.from_pretrained(
             self.model_path,
             device_map="auto",
@@ -94,7 +96,9 @@ class ModelClient:
             return self._generate_remote(prompt, max_tokens, temperature, stop)
         return self._generate_local(prompt, max_tokens, temperature, stop)
 
-    def _generate_remote(self, prompt: str, max_tokens: int, temperature: float, stop: list[str] | None) -> str:
+    def _generate_remote(
+        self, prompt: str, max_tokens: int, temperature: float, stop: list[str] | None
+    ) -> str:
         resp = httpx.post(
             f"{self.endpoint.rstrip('/')}/v1/completions",
             json={
@@ -106,9 +110,11 @@ class ModelClient:
             timeout=self.timeout,
         )
         resp.raise_for_status()
-        return resp.json()["choices"][0]["text"]
+        return str(resp.json()["choices"][0]["text"])
 
-    def _generate_local(self, prompt: str, max_tokens: int, temperature: float, stop: list[str] | None) -> str:
+    def _generate_local(
+        self, prompt: str, max_tokens: int, temperature: float, stop: list[str] | None
+    ) -> str:
         import torch
 
         self.load_local()
@@ -120,7 +126,7 @@ class ModelClient:
                 temperature=max(temperature, 1e-7),
                 do_sample=temperature > 0,
             )
-        new_tokens = output_ids[0][inputs["input_ids"].shape[1]:]
+        new_tokens = output_ids[0][inputs["input_ids"].shape[1] :]
         text = self._local_tokenizer.decode(new_tokens, skip_special_tokens=True)
 
         # Apply stop sequences
@@ -129,7 +135,9 @@ class ModelClient:
                 idx = text.find(s)
                 if idx >= 0:
                     text = text[:idx]
-        return text
+        # 2026-10-18: tokenizer.decode() is untyped (Any) — boundary str() so
+        # the declared return type holds without a cast.
+        return str(text)
 
     def chat(
         self,
@@ -148,7 +156,7 @@ class ModelClient:
                 timeout=self.timeout,
             )
             resp.raise_for_status()
-            return resp.json()["choices"][0]["message"]["content"]
+            return str(resp.json()["choices"][0]["message"]["content"])
 
         # Flatten to a simple prompt for local model
         parts = []
@@ -161,6 +169,7 @@ class ModelClient:
 # ---------------------------------------------------------------------------
 # Evaluation report
 # ---------------------------------------------------------------------------
+
 
 @dataclass
 class SuiteResult:
@@ -182,9 +191,7 @@ class EvaluationReport:
 
     def add_suite(self, result: SuiteResult) -> None:
         self.suites.append(result)
-        self.aggregate_metrics.update(
-            {f"{result.suite}/{k}": v for k, v in result.metrics.items()}
-        )
+        self.aggregate_metrics.update({f"{result.suite}/{k}": v for k, v in result.metrics.items()})
 
     def compare_baseline(self, baseline: dict[str, float]) -> None:
         for key, value in self.aggregate_metrics.items():
@@ -195,7 +202,7 @@ class EvaluationReport:
                     "delta": round(value - baseline[key], 6),
                 }
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "model_name": self.model_name,
             "model_version": self.model_version,
@@ -233,7 +240,8 @@ class EvaluationReport:
 # Runner
 # ---------------------------------------------------------------------------
 
-def run_suite(suite_name: str, client: ModelClient, **kwargs) -> SuiteResult:
+
+def run_suite(suite_name: str, client: ModelClient, **kwargs: Any) -> SuiteResult:
     """Dynamically load and run a benchmark suite."""
     module_path = SUITE_MODULES.get(suite_name)
     if module_path is None:
@@ -252,7 +260,9 @@ def run_suite(suite_name: str, client: ModelClient, **kwargs) -> SuiteResult:
     try:
         metrics, details = run_fn(client, **kwargs)
         elapsed = time.time() - start
-        return SuiteResult(suite=suite_name, metrics=metrics, details=details, elapsed_seconds=elapsed)
+        return SuiteResult(
+            suite=suite_name, metrics=metrics, details=details, elapsed_seconds=elapsed
+        )
     except Exception as exc:
         elapsed = time.time() - start
         logger.exception("Suite %s failed", suite_name)
@@ -263,9 +273,12 @@ def run_suite(suite_name: str, client: ModelClient, **kwargs) -> SuiteResult:
 # CLI
 # ---------------------------------------------------------------------------
 
+
 @click.command()
 @click.option("--model-path", default=None, help="Local model path")
-@click.option("--endpoint", default=None, help="Remote serving endpoint (e.g. http://localhost:8000)")
+@click.option(
+    "--endpoint", default=None, help="Remote serving endpoint (e.g. http://localhost:8000)"
+)
 @click.option("--suites", default="all", help="Comma-separated suite names or 'all'")
 @click.option("--baseline", default=None, type=click.Path(exists=True), help="Baseline JSON")
 @click.option("--output", default="eval_report.json", type=click.Path(), help="Output report JSON")
@@ -281,7 +294,7 @@ def main(
     model_name: str,
     model_version: str,
     num_samples: int | None,
-):
+) -> None:
     """Run evaluation suites and produce a report."""
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
 

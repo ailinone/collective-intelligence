@@ -36,6 +36,11 @@ import {
   detectMediaGenerationModalities,
 } from '@/core/orchestration/orchestration-engine';
 import { inferCapabilities } from '@/core/orchestration/capability-inference';
+import { extractLastUserTurnText } from '@/core/orchestration/execution-system-prompt';
+import {
+  buildAilinIdentityResponse,
+  isAilinIdentityQuestion,
+} from '@/core/orchestration/prompts/identity-policy';
 import {
   requestRequiresFunctionCalling,
   explicitlyLacksFunctionCalling,
@@ -55,20 +60,41 @@ import { nanoid } from 'nanoid';
 import { processChatRequest } from '@/services/chat-request-processor';
 import { enqueueIfNeeded, queueManagerMiddleware } from '@/api/middleware/queue-manager';
 import { getRequestLogger } from '@/services/request-logger';
+import { buildSingleStreamTrace, isContentCaptureEnabled } from '@/services/systems-trace';
+import { getCorrelationId } from '@/api/middleware/request-context';
 import {
   setupSSEHeaders,
+  startSSEKeepalive,
+  buildMediaProgressChunk,
+  formatSSE,
   sendSSEChunk,
   sendSSEDone,
   sendSSEError,
   StreamHandler,
 } from '@/utils/sse';
+import {
+  annotateStreamChunk,
+  bufferStreamEvent,
+  readStreamEvents,
+} from '@/cache/stream-event-buffer';
+import { applyBranding, type BrandingOptions } from '@/utils/branding';
 import { getProviderRegistry } from '@/providers/provider-registry';
 import { computeDynamicFirstChunkTimeoutMs } from '@/routes/chat/streaming-first-chunk-timeout';
 import { getFailoverService } from '@/services/provider-failover-service';
+import { getUserSpecifiedModelFlag } from '@/types/chat-request-extended';
 import { sanitizeToolSchemas } from '@/utils/tool-schema-sanitizer';
 import { checkQuota } from '@/services/quota-service';
 import { evaluateGovernance } from '@/services/org-governance-service';
-import { gateChatRequest } from '@/services/prepaid-wallet-gate';
+import {
+  debitChatRequest,
+  gateChatRequest,
+  releaseChatHold,
+  walletInstance,
+} from '@/services/prepaid-wallet-gate';
+import { attachClientDisconnectGuard } from '@/routes/chat/client-disconnect-guard';
+import { evaluateTargetPolicyGate } from '@/services/strategy-target-policy';
+import { checkAndConsumePlanDailyQuota, planQuotaExceededBody } from '@/services/plan-quota-gate';
+import { prepaidWalletResponses } from '@/services/prepaid-wallet-openapi';
 import { recordSecurityEvent } from '@/services/security-audit-service';
 import { trackChatUsage } from '@/services/billing-usage-tracker';
 import { providerAvailabilityService } from '@/services/provider-availability-service';
@@ -76,12 +102,16 @@ import { createOrchestrationContext } from '@/utils/orchestration-context';
 import { ensureStringArray, getHeaderString } from '@/utils/type-guards';
 import { ContextWindowExceededError } from '@/utils/custom-errors';
 import { isDevelopment } from '@/config';
-import { resolveAilinVirtualModelAlias } from '@/services/ailin-virtual-model-service';
 import {
-  HIGH_EFFORT_QUALITY_TARGET_FLOOR,
-  isReasoningEffort,
-} from '@/utils/reasoning-effort';
-import { checkExplicitModelExists, unknownModelErrorBody } from '@/services/explicit-model-guard';
+  resolveAilinVirtualModelAlias,
+  resolveTierCarrier,
+} from '@/services/ailin-virtual-model-service';
+import { HIGH_EFFORT_QUALITY_TARGET_FLOOR, isReasoningEffort } from '@/utils/reasoning-effort';
+import {
+  checkExplicitModelExists,
+  getPinnedModelId,
+  unknownModelErrorBody,
+} from '@/services/explicit-model-guard';
 import {
   debitTierRequest,
   estimatePromptTokens,
@@ -114,10 +144,19 @@ import {
 import {
   chatFreeTierApiKeyId,
   checkAndConsumeFreeTierAutoQuota,
+  CREDITS_CONTINUE_MODEL_CELL,
   freeTierQuotaExceededBody,
+  isCreditsContinueRequested,
   isFreeTierAutoQuotaEnabled,
   isInChatFreeTierScope,
 } from '@/services/free-tier-quota-gate';
+import {
+  isPerUserAutoBillingEnabled,
+  lookupActingUserOrganizationId,
+  resolveAutoBillingDisposition,
+  resolveOrProvisionChatActingUserOrganizationId,
+  type AutoBillingDisposition,
+} from '@/services/auto-preset-billing';
 import {
   FREE_TIER_ALLOWED_STRATEGIES,
   FREE_TIER_FALLBACK_STRATEGY,
@@ -226,9 +265,7 @@ export function classifyEmptyToolsFallbackChain(
   skippedNoFunctionCalling: number,
   fallbackModelCount: number
 ): 'unsatisfiable' | 'exhausted' {
-  return skippedNoFunctionCalling > 0 || fallbackModelCount === 0
-    ? 'unsatisfiable'
-    : 'exhausted';
+  return skippedNoFunctionCalling > 0 || fallbackModelCount === 0 ? 'unsatisfiable' : 'exhausted';
 }
 
 /**
@@ -748,6 +785,14 @@ export function normalizeChatRequest(chatRequest: ChatRequest): ChatRequest {
   if (aliasResolution?.alias) {
     normalizedRequest.ailin_alias = aliasResolution.alias;
   }
+  // SECURITY (billing identity): `ailin_wallet_org` names the wallet that
+  // gateChatRequest/debitChatRequest charge (prepaid-wallet-gate prefers it
+  // over the authenticated org). It is SERVER-set only, in chat-routes after
+  // this normalization (per-user billing path, #720/#721) — a client that
+  // could smuggle it through would drain ANOTHER org's wallet. Strip any
+  // client-supplied value unconditionally; the per-user billing sites re-set
+  // it below from the actor-verified identity.
+  delete normalizedRequest.ailin_wallet_org;
 
   if (aliasResolution) {
     normalizedRequest.user_specified_model = false;
@@ -898,6 +943,49 @@ export async function registerChatRoutes(
   orchestrationEngine: OrchestrationEngine
 ): Promise<void> {
   /**
+   * GET /v1/runs/:runId/events?since=seq (CI-CHAT-0003, R3)
+   *
+   * Replay of a streamed run from the Redis event buffer. Returns the same
+   * SSE wire the original connection carried (buffered post-branding), so a
+   * consumer that dropped mid-stream resumes by re-running its parser over
+   * this response with `since` = last seen `ailin_metadata.seq`.
+   *
+   * Auth: under PROTECTED_ROUTE_PREFIXES (/v1) — the global API-key hook
+   * authenticates this route like every other product route; a run's frames
+   * carry response content and must not be public.
+   */
+  server.get<{ Params: { runId: string }; Querystring: { since?: string } }>(
+    '/v1/runs/:runId/events',
+    async (request, reply) => {
+      if (process.env.ENABLE_STREAM_RESUME !== 'true') {
+        return reply
+          .code(503)
+          .send({ error: { message: 'Stream resume is disabled', code: 'stream_resume_disabled' } });
+      }
+      const { runId } = request.params;
+      // runId is a nanoid requestId (alnum + _ -). Rejecting anything else
+      // before it becomes a Redis key segment.
+      if (!/^[A-Za-z0-9_-]{1,64}$/.test(runId)) {
+        return reply.code(400).send({ error: { message: 'Invalid runId', code: 'invalid_run_id' } });
+      }
+      const sinceRaw = request.query?.since ?? '0';
+      const since = Number.parseInt(sinceRaw, 10);
+      if (!Number.isFinite(since) || since < 0) {
+        return reply.code(400).send({ error: { message: 'Invalid since cursor', code: 'invalid_since' } });
+      }
+      const frames = await readStreamEvents(runId, since);
+      const body = frames.join('') + `data: [DONE]
+
+`;
+      return reply
+        .code(200)
+        .header('content-type', 'text/event-stream; charset=utf-8')
+        .header('cache-control', 'no-store')
+        .send(body);
+    }
+  );
+
+  /**
    * POST /v1/chat/completions
    * Chat completion endpoint (streaming and non-streaming)
    */
@@ -916,6 +1004,7 @@ export async function registerChatRoutes(
           additionalProperties: true,
         },
         response: {
+          ...prepaidWalletResponses,
           200: {
             description: 'Successful completion',
             ...chatCompletionResponseSchema,
@@ -1002,6 +1091,21 @@ export async function registerChatRoutes(
                   message: { type: 'string' },
                   type: { type: 'string' },
                   code: { type: 'string' },
+                  // free-tier quota: when the daily allowance resets (the
+                  // response schema is a serialization ALLOWLIST — fastify
+                  // strips anything not declared here, which silently ate
+                  // reset_at for months).
+                  reset_at: { type: 'string' },
+                  // org quota gate: requests left in the window.
+                  remaining: { type: 'integer' },
+                },
+              },
+              // free-tier quota enrichment: can the caller pay to continue?
+              credits_continue: {
+                type: 'object',
+                properties: {
+                  balance_usd: { type: ['number', 'null'] },
+                  model_cell: { type: 'string' },
                 },
               },
             },
@@ -1050,6 +1154,12 @@ export async function registerChatRoutes(
       const userContext = createOrchestrationContext(request);
       const organizationId = userContext.organizationId;
       const userId = userContext.userId || '';
+      // The organization the BILLING gates (prepaid wallet hold/debit, plan
+      // daily quota) run against. Null = the key principal org above. Set
+      // ONLY by the per-user ailin-auto path below, from the actor-verified
+      // acting user's own organization — authorization (quota/governance/
+      // feature flags) keeps the principal org everywhere else.
+      let billingOrganizationId: string | null = null;
 
       if (!organizationId || !userId) {
         return reply.status(401).send({
@@ -1177,26 +1287,184 @@ export async function registerChatRoutes(
       // organizationId (an org-scoped counter over `ailin-auto` would also
       // cap financial's and guide's unrelated usage of the same org).
       // Any request authenticated normally (not through the dedicated key)
-      // is untouched — this never runs, and never consults the wallet, for
-      // normal traffic. Within the allowance this is a no-op (request
-      // proceeds as today, still exempt from the wallet gate below). Once
-      // exceeded, the ailin-auto request is rejected outright — never
-      // silently swapped to a billed model.
+      // is untouched — this never runs for normal traffic. Within the
+      // allowance this is a no-op (request proceeds as today, still exempt
+      // from the wallet gate below) — EXCEPT for a wallet-billable acting
+      // user (per-user ailin-auto billing below): they skip the counter and
+      // the ceiling entirely and pay through the wallet gate instead. Once
+      // the free allowance is exceeded, the ailin-auto request is rejected
+      // with an enriched 429 — unless the user explicitly consented to
+      // continue with wallet credits (x-ailin-credits-continue, #717), in
+      // which case the published carrier is attached server-side and the
+      // wallet gates take over. Never silently swapped to a billed model.
       const chatFreeTierScope = isInChatFreeTierScope({
         apiKeyId: requestApiKeyId,
         rawModel,
         userId,
       });
       if (isFreeTierAutoQuotaEnabled() && chatFreeTierScope) {
-        const freeTierResult = await checkAndConsumeFreeTierAutoQuota(
-          requestApiKeyId as string,
-          userId
-        );
-        if (!freeTierResult.allowed) {
-          return reply.status(429).send(freeTierQuotaExceededBody(freeTierResult.resetAt));
+        // OWNER PRODUCT DECISION (2026-10-02, see auto-preset-billing.ts):
+        // Ailin¹ Auto is a PAID product. The free 5/day counter applies only
+        // to users with no wallet balance and no active subscription — and
+        // only when a per-user identity was actually verified (the shared
+        // key principal id can never represent a person to bill). A billable
+        // user gets the SAME server-set tier carrier normalizeChatRequest
+        // sets for `<strategy>:<tier>` cells — it deleted the pair above
+        // (the ailin-auto alias resolves tier-less), so re-setting it here,
+        // post-normalization, is the only sanctioned introduction point and
+        // flows straight into the existing wallet gate/hold/debit machinery.
+        let disposition: AutoBillingDisposition | null = null;
+        // The end user's resolved org for FREE users (identity resolved but
+        // not billable): used to target the credits-continue consent path's
+        // balance lookup + wallet charge at THEIR wallet, not the principal's.
+        let freeUserOrg: string | null = null;
+        if (isPerUserAutoBillingEnabled() && getHeaderString(anonHeaders, 'x-acting-user')) {
+          // JIT-provisioning hints (attachForwardedActorIdentity sets these
+          // ONLY inside the actor-token-verified branch): let a first-seen
+          // invited user be provisioned through the exact same
+          // ensureProvisionedOnBehalf path the internal surface uses, instead
+          // of fail-closing every billable path for a missing users row.
+          const actingUserHints = {
+            email: (request as ExtendedFastifyRequest).actingUserEmail,
+            tenant: (request as ExtendedFastifyRequest).actingUserTenant,
+          };
+          disposition = await resolveAutoBillingDisposition({
+            userId,
+            principalOrganizationId: organizationId,
+            ...(actingUserHints.email && actingUserHints.tenant
+              ? {
+                  lookupUserOrganizationId: (id: string) =>
+                    resolveOrProvisionChatActingUserOrganizationId(id, actingUserHints),
+                }
+              : {}),
+          });
+          if (disposition.kind === 'billable_wallet') {
+            // Attach the published `auto:base` carrier SERVER-side — the
+            // carrier (ailin_tier + ailin_tier_rate) is the ONLY thing
+            // resolveTier (prepaid-wallet-gate) keys on. Without it the
+            // request would execute with NO wallet gate, NO debit and NO
+            // ceiling: unlimited free ailin-auto for a paying user.
+            const carrier = resolveTierCarrier(CREDITS_CONTINUE_MODEL_CELL) as {
+              ailin_tier?: ChatRequest['ailin_tier'];
+              ailin_tier_rate?: ChatRequest['ailin_tier_rate'];
+            };
+            if (!carrier.ailin_tier || !carrier.ailin_tier_rate) {
+              // Rate-card/contract drift: fall back to the free daily counter
+              // (rate-limited) rather than an unbilled execution.
+              request.log.error(
+                { cell: CREDITS_CONTINUE_MODEL_CELL, userId },
+                'per-user billing carrier unresolved — falling back to the free daily quota instead of unbilled execution'
+              );
+              disposition = { kind: 'free', reason: 'billing_probe_failed' };
+            } else {
+              billingOrganizationId = disposition.organizationId;
+              chatRequest.ailin_tier = carrier.ailin_tier;
+              chatRequest.ailin_tier_rate = carrier.ailin_tier_rate;
+              // #721's server-set wallet-org override: gate/debit prefer this
+              // ChatRequest field, so every downstream debit site (including
+              // ones that only see the request object) targets the USER's org.
+              chatRequest.ailin_wallet_org = billingOrganizationId;
+            }
+          } else if (disposition.kind === 'billable_plan') {
+            // OWNER DECISION (2026-10-03, auto-preset-billing.ts): a subscriber
+            // consumes their PLAN, never their wallet. No carrier is attached,
+            // so resolveTier finds no tier cell: no 402 hold, no wallet debit.
+            // Setting billingOrganizationId skips the free 5/day counter and
+            // routes trackChatUsage's api_requests report to the user's plan
+            // (the consumption side of the plan ceiling) — volume stays
+            // governed by plan-quota-gate / billing, not the wallet.
+            billingOrganizationId = disposition.organizationId;
+          } else if (disposition.organizationId) {
+            freeUserOrg = disposition.organizationId;
+          }
         }
-        // Cost/strategy ceiling, same reasoning as the anonymous path above.
-        applyFreeTierCeiling(chatRequest);
+        if (!billingOrganizationId) {
+          if (disposition?.kind === 'free') {
+            request.log.info(
+              { userId, reason: disposition.reason },
+              'ailin-auto per-user billing: not billable — consuming the free daily quota'
+            );
+          }
+          const freeTierResult = await checkAndConsumeFreeTierAutoQuota(
+            requestApiKeyId as string,
+            userId
+          );
+          if (!freeTierResult.allowed) {
+            if (isCreditsContinueRequested(request.headers)) {
+              // Credits-continue (#717/#721): the user consented to spend
+              // prepaid wallet credits past the free allowance. Attach the
+              // published `auto:base` billing carrier SERVER-side
+              // (normalization already stripped any client-sent carrier) so
+              // the wallet gate/debit charge through the proven
+              // `<strategy>:<tier>` plumbing. The free-tier cost ceiling is
+              // intentionally NOT applied — this request is paid. Per-user
+              // billing addition: the hold/debit target the USER's wallet
+              // (ailin_wallet_org + billingOrganizationId) — a zero-balance
+              // user gets the wallet 402 telling them to top up instead of
+              // silently spending the platform principal's.
+              const carrier = resolveTierCarrier(CREDITS_CONTINUE_MODEL_CELL) as {
+                ailin_tier?: ChatRequest['ailin_tier'];
+                ailin_tier_rate?: ChatRequest['ailin_tier_rate'];
+              };
+              if (!carrier.ailin_tier || !carrier.ailin_tier_rate) {
+                // Rate-card/contract drift: refuse rather than bill at nothing.
+                request.log.error(
+                  { cell: CREDITS_CONTINUE_MODEL_CELL },
+                  'credits-continue carrier unresolved — rejecting instead of unbilled execution'
+                );
+                return reply.status(429).send(freeTierQuotaExceededBody(freeTierResult.resetAt));
+              }
+              if (!freeUserOrg) {
+                // No active user record for the forwarded identity (#721) —
+                // we cannot name the wallet to charge, so consent cannot be
+                // honored; the platform principal is never the fallback.
+                request.log.warn(
+                  { userId },
+                  'credits-continue consent but acting user/org unresolved — rejecting'
+                );
+                return reply.status(429).send(freeTierQuotaExceededBody(freeTierResult.resetAt));
+              }
+              chatRequest.ailin_wallet_org = freeUserOrg;
+              chatRequest.ailin_tier = carrier.ailin_tier;
+              chatRequest.ailin_tier_rate = carrier.ailin_tier_rate;
+              billingOrganizationId = freeUserOrg;
+              request.log.info(
+                {
+                  userId,
+                  tier: carrier.ailin_tier,
+                  billedOrg: freeUserOrg,
+                  resetAt: freeTierResult.resetAt,
+                },
+                'free-tier quota exhausted — continuing with wallet credits'
+              );
+            } else {
+              // Enrich the 429 so the chat UI can offer "continue with credits"
+              // only when the org actually has a balance. Fail-open to `null`
+              // (UI falls back to always showing the offer). Per-user billing:
+              // look up the END USER's org balance when known (#721).
+              let balanceUsd: number | null = null;
+              try {
+                // Available (balance - active holds) matches what the wallet
+                // gate tests on consent — the gross balance could offer a
+                // "continue with credits" the hold then 402s.
+                balanceUsd = await walletInstance().getAvailableUsd(freeUserOrg ?? organizationId);
+              } catch (error) {
+                request.log.warn({ error }, 'credits-continue balance lookup failed');
+              }
+              return reply.status(429).send(
+                freeTierQuotaExceededBody(freeTierResult.resetAt, {
+                  balance_usd: balanceUsd,
+                  model_cell: CREDITS_CONTINUE_MODEL_CELL,
+                })
+              );
+            }
+          } else {
+            // Cost/strategy ceiling, same reasoning as the anonymous path
+            // above. Never applied to billable users — a paying request runs
+            // the strategy the orchestrator would pick for any paid preset.
+            applyFreeTierCeiling(chatRequest);
+          }
+        }
       } else if (
         requestApiKeyId &&
         requestApiKeyId === chatFreeTierApiKeyId() &&
@@ -1215,6 +1483,47 @@ export async function registerChatRoutes(
               'This API key is restricted to POST /v1/chat/completions with model "ailin-auto".',
           },
         });
+      }
+
+      // ── Per-user billing identity for EXPLICIT paid presets ────────────
+      // A request that already carries the server-set `<strategy>:<tier>`
+      // carrier (user picked a paid preset like consensus:medium) is billed
+      // by the wallet machinery against whatever org reaches gateChatRequest/
+      // debitChatRequest. Without this block that org is the shared chat key
+      // principal — the PLATFORM would pay for every chat user's paid preset
+      // out of its own wallet. Same per-user resolution as ailin-auto above,
+      // minus the free/probe logic: the wallet gate itself decides via the
+      // 402 hold. Resolve-only; an unresolvable user (no ci row) keeps the
+      // principal org (current behavior) rather than fabricating an org.
+      if (
+        !billingOrganizationId &&
+        isPerUserAutoBillingEnabled() &&
+        chatRequest.ailin_tier &&
+        chatRequest.ailin_tier_rate &&
+        getHeaderString(anonHeaders, 'x-acting-user')
+      ) {
+        const paidPresetHints = {
+          email: (request as ExtendedFastifyRequest).actingUserEmail,
+          tenant: (request as ExtendedFastifyRequest).actingUserTenant,
+        };
+        const actingOrg = await (paidPresetHints.email && paidPresetHints.tenant
+          ? resolveOrProvisionChatActingUserOrganizationId(userId, paidPresetHints)
+          : lookupActingUserOrganizationId(userId)
+        ).catch((error: unknown) => {
+          // Same never-throw contract as resolveAutoBillingDisposition: a
+          // transient DB error must not 500 a paid-preset request that
+          // previously succeeded on the principal org — keep current billing.
+          request.log.warn(
+            { error, userId },
+            'per-user billing: acting-user lookup failed — keeping the key principal organizationId'
+          );
+          return null;
+        });
+        if (actingOrg && actingOrg !== organizationId) {
+          billingOrganizationId = actingOrg;
+          // #721's server-set wallet-org override — see the ailin-auto path.
+          chatRequest.ailin_wallet_org = actingOrg;
+        }
       }
 
       // ── Explicit model must exist ──────────────────────────────────────
@@ -1237,13 +1546,15 @@ export async function registerChatRoutes(
         return reply.status(404).send(unknownModelErrorBody(explicitModelCheck.requestedModel));
       }
 
-      // Three independent gates against three different data sources (quota
-      // counters, org governance settings, prepaid wallet) — none depends on
-      // another's result, so run them concurrently instead of one DB round-trip
-      // after another. The priority of which error wins when multiple gates
-      // reject (quota > governance > wallet) is preserved below by checking the
-      // results in the same order the sequential code did.
-      const [quotaCheck, governanceDecision, walletGate] = await Promise.all([
+      // Two of the three independent gates (quota counters, org governance
+      // settings) — none depends on the other's result, so run them
+      // concurrently. The wallet gate MOVED OUT of this Promise.all (A3,
+      // ENT-001 Phase 1): the strategy target-policy gate below must run
+      // BEFORE any wallet hold exists, so a policy-denied target can never
+      // have reserved one. The priority of which error wins when multiple
+      // gates reject (quota > governance > policy > wallet) is preserved by
+      // checking the results in that order below.
+      const [quotaCheck, governanceDecision] = await Promise.all([
         checkQuota(organizationId, {
           organizationId,
           userId,
@@ -1253,7 +1564,6 @@ export async function registerChatRoutes(
           strategy: chatRequest.strategy,
           model: chatRequest.model,
         }),
-        gateChatRequest(organizationId, chatRequest),
       ]);
 
       if (!quotaCheck.allowed) {
@@ -1297,13 +1607,55 @@ export async function registerChatRoutes(
         });
       }
 
+      // A3 — strategy target policy (ENT-001 Phase 1), per
+      // a3-deny-matrix-design.md §2: AFTER org governance, BEFORE the wallet
+      // hold. Fires only for composite `<family>:<tier>` targets (the
+      // server-set ailin_tier carrier); legacy presets / raw ids / auto pass
+      // through untouched. Default mode is `shadow` (decide + log, never
+      // enforce). A denial is a structured 403 and — because this sits before
+      // gateChatRequest — never leaves a hold behind.
+      const targetPolicy = await evaluateTargetPolicyGate(organizationId, chatRequest);
+      if (targetPolicy.applied && !targetPolicy.allowed) {
+        request.log.warn(
+          {
+            organizationId,
+            family: targetPolicy.family,
+            planId: targetPolicy.decision.planId,
+            basis: targetPolicy.decision.basis,
+            reason: targetPolicy.decision.reason,
+          },
+          'Chat completion denied by strategy target policy'
+        );
+        return reply.status(targetPolicy.status).send(targetPolicy.body);
+      }
+
       // Prepaid-balance gate. Flag-gated (PREPAID_WALLET_GATE_ENABLED) and a
       // no-op for non-tiered models — only `<strategy>:<tier>` pricing cells are
       // gated. Rejects 402 insufficient_funds when the org wallet can't cover the
       // worst-case charge. Fail-open on wallet errors (see prepaid-wallet-gate).
-      // (walletGate itself was already resolved above, concurrently with quota/governance.)
+      // (Moved out of the quota/governance Promise.all above so the target-policy
+      // gate can run first — see that comment.) The hold runs against the END
+      // USER's organization when the per-user billing path set one
+      // (billingOrganizationId / ailin_wallet_org) — never the shared chat key
+      // principal's.
+      const walletGate = await gateChatRequest(billingOrganizationId ?? organizationId, chatRequest);
       if (!walletGate.allowed) {
         return reply.status(walletGate.status ?? 402).send(walletGate.body);
+      }
+
+      // Plan daily quota (PLAN_QUOTA_ENFORCEMENT_ENABLED, default OFF): the
+      // plan's api_requests_daily ceiling from /v1/plans/resolve, counted per
+      // (org, UTC-day). LAST admission step on purpose — a request denied by
+      // quota/governance/wallet above must not burn plan allowance.
+      // Flag-off is a structural no-op; fail-open (see plan-quota-gate).
+      const planQuota = await checkAndConsumePlanDailyQuota(
+        billingOrganizationId ?? organizationId,
+        userId
+      );
+      if (planQuota.enforced && !planQuota.allowed) {
+        return reply
+          .status(429)
+          .send(planQuotaExceededBody(planQuota.resetAt ?? '', planQuota.limit ?? 0));
       }
 
       const requestId = nanoid();
@@ -1378,7 +1730,12 @@ export async function registerChatRoutes(
             userId,
             requestLog,
             requestId,
-            tierCtx
+            tierCtx,
+            billingOrganizationId,
+            // ci#751: the gate's pre-execution hold id — threaded so a
+            // client-disconnect abort on the collective path can RELEASE it
+            // immediately instead of leaving it reserved until its TTL.
+            walletGate.holdId
           );
         }
 
@@ -1419,6 +1776,12 @@ export async function registerChatRoutes(
                   userId,
                   requestId,
                   log: requestLog,
+                  billingOrganizationId: billingOrganizationId ?? undefined,
+                  walletHoldId: walletGate.holdId,
+                  identity: {
+                    apiKeyId: (request as ExtendedFastifyRequest).apiKey?.id,
+                    ipAddress: request.ip,
+                  },
                 }),
               {
                 operationName: 'POST /v1/chat/completions',
@@ -1532,7 +1895,11 @@ export async function registerChatRoutes(
             'POST',
             errorObj,
             durationMs,
-            chatRequest
+            chatRequest,
+            {
+              apiKeyId: (request as ExtendedFastifyRequest).apiKey?.id,
+              ipAddress: request.ip,
+            }
           )
           .catch((logError: unknown) => {
             const logErrorMessage = logError instanceof Error ? logError.message : String(logError);
@@ -1745,13 +2112,28 @@ async function handleStreamingRequest(
   userId: string | undefined,
   requestLog: Logger,
   requestId: string,
-  tierCtx: TierContext | null
+  tierCtx: TierContext | null,
+  billingOrganizationId: string | null = null,
+  /**
+   * The pre-execution wallet hold reserved by gateChatRequest in the POST
+   * handler (ci#751). Undefined when the gate is off or the request carries
+   * no tier cell (nothing was reserved). Needed on the abort path: when the
+   * client disconnects mid-collective we release this hold instead of
+   * debiting — without threading it, the release would be impossible here
+   * and the hold would sit reserved until holdTtlForRequest's TTL.
+   */
+  walletHoldId?: string
 ): Promise<void> {
   const requestLogger = getRequestLogger();
   const streamHandler = new StreamHandler();
   const providerRegistry = getProviderRegistry();
   const failoverService = getFailoverService();
   const startTime = Date.now();
+  // Explicit user pin, for branding (a pinned model keeps its real name in
+  // the chunks it actually executes — see applyBranding's BrandingOptions).
+  const brandingOptions: BrandingOptions = {
+    explicitModel: getPinnedModelId(chatRequest) ?? undefined,
+  };
 
   // Media-generation artifact coverage on streaming (2026-07-16/17
   // architecture audit, v2 after an earlier all-modality design was
@@ -1848,37 +2230,99 @@ async function handleStreamingRequest(
         organizationId,
         requestBody: chatRequest,
         handler: async () => {
-          const { response } = await executeRouteWithRetry(
-            () =>
-              processChatRequest({
-                chatRequest: { ...chatRequest, stream: false },
-                orchestrationEngine,
-                organizationId,
-                userId,
+          // Commit SSE headers and start the comment keepalive BEFORE the
+          // generation runs (2026-09-30 incident follow-up): the whole
+          // non-streaming pipeline (media generation + provider fallback
+          // chains — 49.6s observed in production, minutes possible for
+          // video) otherwise flows ZERO bytes, and line-oriented
+          // intermediaries declare the connection dead (Cloudflare ~100s →
+          // 524). `: keepalive` comments are ignored by every consumer in
+          // this chain (chat's stream_chunks_handler and the browser parser
+          // both skip non-`data:` lines). setupSSEHeaders is
+          // headersSent-guarded, so withIdempotency's later sendResponse
+          // call cannot ERR_HTTP_HEADERS_SENT; the structured 400/503 early
+          // returns never reach this closure (headers still unsent for
+          // them), preserving their existing behavior exactly.
+          setupSSEHeaders(reply);
+          // Each keepalive tick ALSO emits a semantic progress frame (same
+          // AilinProgressMetadata shape strategies use) so downstream
+          // clients can render a live "generating…" indicator during the
+          // otherwise-silent generation phase. Unknown consumers drop the
+          // frame harmlessly (empty delta content).
+          const progressStartedAt = Date.now();
+          const stopKeepalive = startSSEKeepalive(reply.raw, 15_000, () => {
+            sendSSEChunk(
+              reply,
+              buildMediaProgressChunk(
+                mediaGateModality,
+                Math.round((Date.now() - progressStartedAt) / 1000),
+                chatRequest.model ?? 'media-generator'
+              )
+            );
+          });
+          try {
+            const { response } = await executeRouteWithRetry(
+              () =>
+                processChatRequest({
+                  // 2026-10-02 prod incident (ailin.chat image prompt → empty
+                  // assistant message): the chat frontend always attaches its
+                  // own `tools` and an explicit `strategy` (observed:
+                  // cost-cascade), and the pre-fix redirect forwarded both.
+                  // The tools make orchestration demand function_calling, so
+                  // EVERY image-capable cascade candidate is rejected ("No
+                  // adapter found" → "No successful executions in cost
+                  // cascade"), while the explicit strategy skips triage
+                  // (autoStrategyRequested=false) so no media executionPlan
+                  // is ever built. The request degraded to a TEXT completion
+                  // whose client-owned tool_call the chat UI never executes —
+                  // the user saw an empty message. A redirected request is by
+                  // definition a GENERATION request: strip the client's tool
+                  // list and strategy override so the mainline
+                  // (triage → executionPlan → executeMediaGenerationStage →
+                  // artifact URL delivery) owns routing.
+                  chatRequest: {
+                    ...chatRequest,
+                    stream: false,
+                    tools: undefined,
+                    tool_choice: undefined,
+                    strategy: undefined,
+                  },
+                  orchestrationEngine,
+                  organizationId,
+                  userId,
+                  requestId,
+                  log: requestLog,
+                  billingOrganizationId: billingOrganizationId ?? undefined,
+                  walletHoldId,
+                  disableVideoEarlyPath: true,
+                  identity: {
+                    apiKeyId: (request as ExtendedFastifyRequest).apiKey?.id,
+                    ipAddress: request.ip,
+                  },
+                }),
+              {
+                operationName: 'POST /v1/chat/completions (streaming media-generation redirect)',
                 requestId,
                 log: requestLog,
-                disableVideoEarlyPath: true,
-              }),
-            {
-              operationName: 'POST /v1/chat/completions (streaming media-generation redirect)',
-              requestId,
-              log: requestLog,
-              isIdempotent: true,
-              maxAttempts: 3,
-              baseDelayMs: 200,
-              maxDelayMs: 1200,
-            }
-          );
-          if (tierCtx) {
-            await debitTierRequest(
-              organizationId,
-              tierCtx,
-              response?.usage?.prompt_tokens ?? 0,
-              response?.usage?.completion_tokens ?? 0,
-              requestId
+                isIdempotent: true,
+                maxAttempts: 3,
+                baseDelayMs: 200,
+                maxDelayMs: 1200,
+              }
             );
+            if (tierCtx) {
+              await debitTierRequest(
+                organizationId,
+                tierCtx,
+                response?.usage?.prompt_tokens ?? 0,
+                response?.usage?.completion_tokens ?? 0,
+                requestId
+              );
+            }
+            return { httpStatus: 200, body: response };
+          } finally {
+            stopKeepalive();
           }
-          return { httpStatus: 200, body: response };
         },
         // 2026-07-17, second adversarial-review round: this closure must end
         // the raw stream itself (sendSSEDone + reply.raw.end()) BEFORE
@@ -1949,6 +2393,33 @@ async function handleStreamingRequest(
     return;
   }
 
+  // Direct identity questions are policy-governed rather than generative.
+  // This fast path normally calls an adapter directly, so short-circuit before
+  // planning/model selection to preserve the same zero-cost guarantee as the
+  // non-streaming and collective streaming engine paths.
+  const lastUserTurn = extractLastUserTurnText(chatRequest.messages);
+  if (isAilinIdentityQuestion(lastUserTurn)) {
+    setupSSEHeaders(reply);
+    sendSSEChunk(reply, {
+      id: `chatcmpl-${requestId}`,
+      object: 'chat.completion.chunk',
+      created: Math.floor(Date.now() / 1000),
+      model: 'ailin-identity',
+      choices: [
+        {
+          index: 0,
+          delta: { role: 'assistant', content: buildAilinIdentityResponse(lastUserTurn) },
+          finish_reason: 'stop',
+          logprobs: null,
+        },
+      ],
+      usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 },
+    } as ChatResponse);
+    sendSSEDone(reply);
+    reply.raw.end();
+    return;
+  }
+
   // Track all attempts for comprehensive error logging
   const allAttempts: Array<{
     attempt: number;
@@ -2002,6 +2473,17 @@ async function handleStreamingRequest(
   if (isCollectiveStrategyRequest) {
     setupSSEHeaders(reply);
     let firstChunkAt = false;
+    // Client-disconnect abort (ci#751, product decision 2026-10-04). The user
+    // closing the tab mid-consensus used to leave the full ~150s fan-out
+    // running, writing into a dead socket, and the usage was still debited
+    // below. Now: disconnect => abort the orchestration through the engine's
+    // own cancellation channel (executeStream's externalSignal feeds the same
+    // requestController as the deadline), skip the debit, and RELEASE the
+    // pre-execution wallet hold instead of letting it sit reserved until its
+    // TTL. In-flight provider calls at abort time are absorbed by the
+    // platform (no partial charge to the user).
+    const disconnectGuard = attachClientDisconnectGuard(request.raw, reply.raw);
+    const collectiveStartedAt = Date.now();
     // Anonymous-audit accumulators: full streamed response text + every model
     // that yielded a chunk, persisted once the stream settles (success OR
     // error — a failed anonymous run is just as investigable as a good one).
@@ -2009,6 +2491,17 @@ async function handleStreamingRequest(
     let anonResponseText = '';
     const anonModelsServed = new Set<string>();
     let anonErrorCode: string | undefined;
+    // CI-CHAT-0003 (R3) — seq/run_id correlation + Redis replay buffer.
+    // run_id is the orchestration requestId (unique per request, already
+    // carried in logs/traces). Off = chunks relayed byte-identical, no
+    // buffering, no annotation.
+    const streamResumeEnabled = process.env.ENABLE_STREAM_RESUME === 'true';
+    let streamSeq = 0;
+    // Real usage for the wallet debit below. executeStream's FINAL chunk is
+    // the strategy's finalResponse passed through ensureResponseUsage, so its
+    // usage block carries the request's real per-direction token counts;
+    // intermediate chunks yield zeroed/absent usage.
+    let streamUsage: { prompt_tokens: number; completion_tokens: number } | undefined;
     // OTel coverage gap fix (2026-08-03): orchestrationEngine.executeStream()
     // itself is an async generator (too large/complex to safely wrap
     // internally in this pass — see orchestration-engine.ts:2737), so the
@@ -2032,8 +2525,15 @@ async function handleStreamingRequest(
           for await (const chunk of orchestrationEngine.executeStream(
             chatRequest,
             organizationId,
-            userId
+            userId,
+            disconnectGuard.signal
           )) {
+            if (disconnectGuard.fired) {
+              // Client gone: stop relaying chunks into the dead socket. The
+              // abort already propagated into the engine; the generator
+              // unwinds from here.
+              break;
+            }
             if (!firstChunkAt) {
               firstChunkAt = true;
               streamingTimeToFirstByte.observe(
@@ -2041,7 +2541,26 @@ async function handleStreamingRequest(
                 Date.now() - startTime
               );
             }
-            sendSSEChunk(reply, chunk);
+            if (streamResumeEnabled) {
+              streamSeq += 1;
+              const annotated = annotateStreamChunk(chunk, requestId, streamSeq);
+              // Buffer the exact wire frame (post-branding) so replay is
+              // byte-identical to what this connection delivered.
+              void bufferStreamEvent(
+                requestId,
+                streamSeq,
+                formatSSE(applyBranding(annotated, brandingOptions))
+              );
+              sendSSEChunk(reply, annotated, brandingOptions);
+            } else {
+              sendSSEChunk(reply, chunk, brandingOptions);
+            }
+            if (chunk.usage && (chunk.usage.prompt_tokens > 0 || chunk.usage.completion_tokens > 0)) {
+              streamUsage = {
+                prompt_tokens: chunk.usage.prompt_tokens,
+                completion_tokens: chunk.usage.completion_tokens,
+              };
+            }
             if (anonCtx) {
               const delta = chunk.choices?.[0]?.delta?.content;
               if (typeof delta === 'string') anonResponseText += delta;
@@ -2060,9 +2579,20 @@ async function handleStreamingRequest(
           anonErrorCode = err instanceof Error ? err.name : 'stream_error';
           span.recordException(err instanceof Error ? err : new Error(errorMsg));
           span.setStatus({ code: SpanStatusCode.ERROR, message: errorMsg });
-          requestLog.error({ error: errorMsg }, 'Collective strategy stream failed');
-          sendSSEError(reply, err instanceof Error ? err : new Error(errorMsg));
+          if (disconnectGuard.fired) {
+            // The abort exception unwinding out of the engine IS the expected
+            // disconnect path — not a stream failure. Never write an SSE error
+            // frame into the dead socket.
+            requestLog.info(
+              { error: errorMsg },
+              'Collective strategy stream aborted (client disconnect)'
+            );
+          } else {
+            requestLog.error({ error: errorMsg }, 'Collective strategy stream failed');
+            sendSSEError(reply, err instanceof Error ? err : new Error(errorMsg));
+          }
         } finally {
+          disconnectGuard.dispose();
           span.end();
         }
         if (anonCtx) {
@@ -2080,6 +2610,58 @@ async function handleStreamingRequest(
             status: anonErrorCode ? 'error' : 'success',
             errorCode: anonErrorCode,
             metadata: { streaming: true, strategy: requestedStrategy },
+          });
+        }
+        // ci#751 abort path: the client disconnected mid-execution. Product
+        // decision (2026-10-04, fail-safe, revertible): NO debit — there is no
+        // completed usage to bill; provider calls already in flight are
+        // absorbed by the platform. The pre-execution hold (gateChatRequest)
+        // is RELEASED immediately instead of staying reserved until its TTL
+        // (holdTtlForRequest). Structured log feeds OPS-001.
+        if (disconnectGuard.fired) {
+          requestLog.warn(
+            {
+              event: 'collective_stream_client_abort',
+              organizationId,
+              userId,
+              billingOrganizationId: billingOrganizationId ?? null,
+              strategy: requestedStrategy,
+              phase: firstChunkAt ? 'mid_stream' : 'before_first_chunk',
+              durationMs: Date.now() - collectiveStartedAt,
+              holdReleased: walletHoldId != null,
+            },
+            'Collective stream aborted: client disconnected before completion — orchestration cancelled, hold released, user not debited'
+          );
+          await releaseChatHold({
+            organizationId: billingOrganizationId ?? organizationId,
+            request: chatRequest,
+            requestId,
+            holdId: walletHoldId,
+          });
+          return;
+        }
+        // Per-user wallet debit for the collective SSE path. This branch
+        // historically never called trackChatUsage (no analytics/quota for
+        // it at all), so the debit is deliberately SURGICAL: only when the
+        // per-user ailin-auto path set both the server-set tier carrier and
+        // the end user's billing organization. Everyone else is untouched —
+        // in particular this does NOT silently start quota-counting the
+        // shared principal org's collective streaming traffic. debitChatRequest
+        // is fail-open on wallet errors and idempotent per requestId; the
+        // pre-execution hold (gateChatRequest) self-expires and releases its
+        // remainder.
+        if (
+          chatRequest.ailin_tier &&
+          chatRequest.ailin_tier_rate &&
+          billingOrganizationId
+        ) {
+          await debitChatRequest({
+            organizationId: billingOrganizationId,
+            request: chatRequest,
+            promptTokens: streamUsage?.prompt_tokens ?? 0,
+            completionTokens: streamUsage?.completion_tokens ?? 0,
+            requestId,
+            holdId: walletHoldId,
           });
         }
       }
@@ -2415,6 +2997,12 @@ async function handleStreamingRequest(
 
     let lastError: unknown = null;
 
+    // ci#765 defect 1: flag carried onto every per-attempt failure log below so
+    // a failing EXPLICIT-MODEL pin is distinguishable from an auto-selection
+    // attempt in structured logs (prod evidence: a pinned @cf/deepseek model
+    // died with no error line explaining why before the failover chain ran).
+    const pinnedRequest = getUserSpecifiedModelFlag(chatRequest);
+
     for (let index = 0; index < candidates.length; index += 1) {
       const candidate = candidates[index];
       const attempt = index + 1;
@@ -2447,8 +3035,14 @@ async function handleStreamingRequest(
       }
       let chunkCount = 0;
       let totalTokens = 0;
+      let promptTokens = 0;
+      let completionTokens = 0;
       let lastChunk: ChatResponse | null = null;
       let firstChunkSent = false;
+      // Output text for the ailin.systems trace — accumulated ONLY when sealed
+      // content capture is on (SYSTEMS_TRACE_CONTENT), and bounded.
+      const traceCaptureContent = isContentCaptureEnabled();
+      let traceOutputText = '';
       // EMPTY-STREAM GUARD (2026-09-06 incident): a provider stream that
       // completes without throwing but never delivers real content or a
       // tool call must not be recorded as a hub SUCCESS below — see the
@@ -2559,7 +3153,24 @@ async function handleStreamingRequest(
           if (chunk.usage?.total_tokens) {
             totalTokens = chunk.usage.total_tokens;
           }
+          // Wallet billing needs the SPLIT counts (debitChatRequest prices
+          // input and output separately); total_tokens alone debited $0 on
+          // this path. OpenAI-compatible streams carry the full usage object
+          // on the final chunk — capture both directions when present.
+          if (typeof chunk.usage?.prompt_tokens === 'number' && chunk.usage.prompt_tokens > 0) {
+            promptTokens = chunk.usage.prompt_tokens;
+          }
+          if (
+            typeof chunk.usage?.completion_tokens === 'number' &&
+            chunk.usage.completion_tokens > 0
+          ) {
+            completionTokens = chunk.usage.completion_tokens;
+          }
           lastChunk = chunk;
+          if (traceCaptureContent && traceOutputText.length < 60_000) {
+            const delta = chunk.choices?.[0]?.delta?.content;
+            if (typeof delta === 'string') traceOutputText += delta;
+          }
           if (!firstChunkSent) {
             streamingTimeToFirstByte.observe(
               { strategy: requestedStrategy || 'auto', result: 'success' },
@@ -2572,7 +3183,10 @@ async function handleStreamingRequest(
             if (typeof streamedContent === 'string') {
               totalContentLength += streamedContent.length;
             }
-            if (Array.isArray(streamedChoice.delta?.tool_calls) && streamedChoice.delta.tool_calls.length > 0) {
+            if (
+              Array.isArray(streamedChoice.delta?.tool_calls) &&
+              streamedChoice.delta.tool_calls.length > 0
+            ) {
               sawToolCalls = true;
             }
           }
@@ -2614,12 +3228,12 @@ async function handleStreamingRequest(
                   finish_reason: 'stop',
                 },
               ];
-              sendSSEChunk(reply, chunk);
+              sendSSEChunk(reply, chunk, brandingOptions);
               closeIterator();
               break;
             }
           }
-          sendSSEChunk(reply, chunk);
+          sendSSEChunk(reply, chunk, brandingOptions);
           // Flush response if available
           if ('flush' in reply.raw && typeof reply.raw.flush === 'function') {
             reply.raw.flush();
@@ -2661,6 +3275,8 @@ async function handleStreamingRequest(
           requestId,
           endpoint: '/v1/chat/completions',
           method: 'POST',
+          apiKeyId: (request as ExtendedFastifyRequest).apiKey?.id,
+          ipAddress: request.ip,
           strategyName: 'single-streaming',
           modelsUsed: [candidate.model.id],
           modelCount: 1,
@@ -2687,6 +3303,17 @@ async function handleStreamingRequest(
             model: candidate.model.id,
             finish_reason: lastChunk?.choices?.[0]?.finish_reason ?? undefined,
           },
+          // ailin.systems only (never persisted to request_logs).
+          systemsTrace: buildSingleStreamTrace({
+            correlationId: getCorrelationId(),
+            provider: candidate.adapter.getName(),
+            modelId: candidate.model.id,
+            durationMs,
+            fallbackAttempts: attempt - 1,
+            request: chatRequest,
+            outputText: traceOutputText || undefined,
+            captureContent: traceCaptureContent,
+          }),
         });
 
         await trackChatUsage({
@@ -2694,10 +3321,16 @@ async function handleStreamingRequest(
           userId,
           requestId,
           request: chatRequest,
+          billingOrganizationId: billingOrganizationId ?? undefined,
           cacheHit: false,
           strategyOverride: 'single-streaming',
           totalTokensOverride: totalTokens,
           totalCostOverride: 0,
+          tokenUsageOverride:
+            promptTokens > 0 || completionTokens > 0
+              ? { promptTokens, completionTokens }
+              : undefined,
+          holdId: walletHoldId,
           modelsOverride: [
             {
               modelId: candidate.model.id,
@@ -2791,9 +3424,7 @@ async function handleStreamingRequest(
             candidate.model.id,
             hadMeaningfulOutput,
             undefined,
-            hadMeaningfulOutput
-              ? undefined
-              : 'empty streaming output (no content, no tool calls)'
+            hadMeaningfulOutput ? undefined : 'empty streaming output (no content, no tool calls)'
           );
         } catch {
           /* hub unavailable — non-fatal */
@@ -2808,9 +3439,7 @@ async function handleStreamingRequest(
         // `sessionAffinityKey` (buildContext() didn't run, or ran on a
         // synthetic context) is a silent no-op.
         if (plan.context.sessionAffinityKey) {
-          const { getSessionAffinityService } = await import(
-            '@/services/session-affinity-service'
-          );
+          const { getSessionAffinityService } = await import('@/services/session-affinity-service');
           getSessionAffinityService()
             .recordOutcome({
               organizationId: plan.context.organizationId,
@@ -2871,6 +3500,11 @@ async function handleStreamingRequest(
             model: candidate.model.name,
             modelId: candidate.model.id,
             latencyMs: attemptLatency,
+            // ci#765 defect 1: flat errorCode + pinnedRequest so the failing
+            // attempt is queryable/alertable without parsing the nested error
+            // object (why did the pinned model die?).
+            errorCode: errorDetails.code || errorDetails.type || 'UNKNOWN',
+            pinnedRequest,
             error: {
               message: errorDetails.message,
               code: errorDetails.code,
@@ -3014,7 +3648,11 @@ async function handleStreamingRequest(
         'POST',
         error as Error,
         durationMs,
-        chatRequest
+        chatRequest,
+        {
+          apiKeyId: (request as ExtendedFastifyRequest).apiKey?.id,
+          ipAddress: request.ip,
+        }
       )
       .catch((logError: unknown) => {
         const logErrorMessage = logError instanceof Error ? logError.message : String(logError);

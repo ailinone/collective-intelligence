@@ -37,6 +37,7 @@ const PUBLIC_NO_AUTH_PATHS = new Set([
   '/v1/models',
   '/v1/models/list',
   '/v1/models/{id}',
+  '/v1/models/strategies',
   '/v1/status',
   '/v1/status/health',
   '/v1/status/ready',

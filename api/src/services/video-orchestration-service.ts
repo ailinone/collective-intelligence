@@ -20,6 +20,8 @@ import {
   diversifyProviders,
 } from '@/services/modality/modality-execution-helpers';
 import { runModalityFallback } from '@/services/modality/modality-fallback-driver';
+import { toModalityCostFields } from '@/services/modality-cost';
+import type { CostRecord } from '@/services/cost-normalization-service';
 import type { CandidateAttempt } from '@/core/orchestration/execute-with-fallback';
 import { getProviderRegistry } from '@/providers/provider-registry';
 import type { ProviderRegistry } from '@/providers/provider-registry';
@@ -174,6 +176,20 @@ export interface VideoResult {
    * success.
    */
   durationRequirementUnmet?: boolean;
+  /**
+   * Real per-call cost, via the same `computeModalityCost`/`normalizeCost`
+   * pipeline the chat path uses — computed by `runModalityFallback` for
+   * every call (see `modality-fallback-driver.ts`'s COST #6 wiring) but
+   * previously dropped here instead of being surfaced to the caller (the
+   * mediaPlanner/mediaConsensus cost-accounting gap). Absent rather than
+   * fabricated: most video adapters' raw responses carry no cost/usage
+   * field today, so this resolves to `costSource: 'missing'` in practice
+   * until real per-unit provider pricing exists — see `cost-normalization-service.ts`.
+   */
+  cost?: number | null;
+  rawCost?: number | null;
+  costSource?: CostRecord['costSource'];
+  costConfidence?: CostRecord['costConfidence'];
 }
 
 export class VideoOrchestrationService {
@@ -760,6 +776,7 @@ export class VideoOrchestrationService {
       ...(audioRequirementUnmet !== undefined ? { audioRequirementUnmet } : {}),
       ...(durationExtended !== undefined ? { durationExtended } : {}),
       ...(durationRequirementUnmet !== undefined ? { durationRequirementUnmet } : {}),
+      ...toModalityCostFields(result.cost),
     };
   }
 

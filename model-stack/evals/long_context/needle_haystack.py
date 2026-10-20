@@ -22,8 +22,11 @@ from __future__ import annotations
 import hashlib
 import logging
 import random
-from dataclasses import dataclass, field
-from typing import Any
+from dataclasses import dataclass
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from evals.runner import ModelClient
 
 logger = logging.getLogger("needle_haystack_eval")
 
@@ -33,16 +36,44 @@ logger = logging.getLogger("needle_haystack_eval")
 # ---------------------------------------------------------------------------
 
 _FILLER_PARAGRAPHS: list[str] = [
-    "The global economy continues to evolve as nations adapt to shifting trade patterns and technological disruption. Central banks around the world monitor inflation indicators while adjusting monetary policy. Supply chain resilience has become a priority for manufacturers seeking to diversify their sourcing strategies.",
-    "Marine biologists recently documented a new species of deep-sea fish near hydrothermal vents in the Pacific Ocean. The creature possesses bioluminescent organs arranged in patterns unlike any previously catalogued organism. Researchers believe it may hold clues to understanding life in extreme environments.",
-    "Urban planners are re-examining transportation infrastructure to accommodate growing populations. Light rail projects, cycling networks, and pedestrian zones are being integrated into city master plans. The goal is to reduce dependence on personal vehicles while improving air quality.",
-    "Advances in materials science have led to the development of self-healing polymers that can repair micro-cracks autonomously. These materials are being tested in aerospace components where maintenance access is limited. Early results suggest a significant extension of component lifespan.",
-    "The history of cartography reflects humanity's evolving understanding of geography and mathematics. From Ptolemy's projections to satellite imagery, map-making has advanced alongside scientific progress. Modern GIS systems combine multiple data layers for spatial analysis.",
-    "Renewable energy installations have grown exponentially over the past decade. Solar farms now operate in regions previously considered impractical due to cloud cover. Battery storage technologies enable grid balancing even when generation is intermittent.",
-    "Classical music has influenced countless genres, from jazz to electronic. Composers like Bach and Beethoven established harmonic frameworks still taught in conservatories worldwide. Contemporary orchestras continue to premiere new works alongside beloved repertoire.",
-    "The philosophy of language examines how meaning is conveyed through words, sentences, and discourse. Wittgenstein argued that language games define usage, while Chomsky proposed innate grammatical structures. The debate continues to shape linguistics and cognitive science.",
-    "Agricultural practices are adapting to climate change through precision farming, drought-resistant crop varieties, and improved water management. Satellite monitoring helps farmers optimize planting schedules and fertilizer application. These technologies are gradually becoming accessible to smallholders.",
-    "Space agencies have announced plans for permanent lunar habitats that could support research crews for extended missions. In-situ resource utilization, which converts lunar regolith into building materials, is a key enabling technology. International cooperation is expected to play a major role in these efforts.",
+    "The global economy continues to evolve as nations adapt to shifting trade patterns and "
+    "technological disruption. Central banks around the world monitor inflation indicators while "
+    "adjusting monetary policy. Supply chain resilience has become a priority for manufacturers "
+    "seeking to diversify their sourcing strategies.",
+    "Marine biologists recently documented a new species of deep-sea fish near hydrothermal vents "
+    "in the Pacific Ocean. The creature possesses bioluminescent organs arranged in patterns "
+    "unlike any previously catalogued organism. Researchers believe it may hold clues to "
+    "understanding life in extreme environments.",
+    "Urban planners are re-examining transportation infrastructure to accommodate growing "
+    "populations. Light rail projects, cycling networks, and pedestrian zones are being integrated "
+    "into city master plans. The goal is to reduce dependence on personal vehicles while improving "
+    "air quality.",
+    "Advances in materials science have led to the development of self-healing polymers that can "
+    "repair micro-cracks autonomously. These materials are being tested in aerospace components "
+    "where maintenance access is limited. Early results suggest a significant extension of "
+    "component lifespan.",
+    "The history of cartography reflects humanity's evolving understanding of geography and "
+    "mathematics. From Ptolemy's projections to satellite imagery, map-making has advanced "
+    "alongside scientific progress. Modern GIS systems combine multiple data layers for spatial "
+    "analysis.",
+    "Renewable energy installations have grown exponentially over the past decade. Solar farms now "
+    "operate in regions previously considered impractical due to cloud cover. Battery storage "
+    "technologies enable grid balancing even when generation is intermittent.",
+    "Classical music has influenced countless genres, from jazz to electronic. Composers like Bach "
+    "and Beethoven established harmonic frameworks still taught in conservatories worldwide. "
+    "Contemporary orchestras continue to premiere new works alongside beloved repertoire.",
+    "The philosophy of language examines how meaning is conveyed through words, sentences, and "
+    "discourse. Wittgenstein argued that language games define usage, while Chomsky proposed "
+    "innate grammatical structures. The debate continues to shape linguistics and cognitive "
+    "science.",
+    "Agricultural practices are adapting to climate change through precision farming, "
+    "drought-resistant crop varieties, and improved water management. Satellite monitoring helps "
+    "farmers optimize planting schedules and fertilizer application. These technologies are "
+    "gradually becoming accessible to smallholders.",
+    "Space agencies have announced plans for permanent lunar habitats that could support research "
+    "crews for extended missions. In-situ resource utilization, which converts lunar regolith into "
+    "building materials, is a key enabling technology. International cooperation is expected to "
+    "play a major role in these efforts.",
 ]
 
 
@@ -61,6 +92,7 @@ def generate_filler(target_tokens: int, seed: int = 42) -> str:
 # ---------------------------------------------------------------------------
 # Needle generation
 # ---------------------------------------------------------------------------
+
 
 def make_needle(trial_id: int) -> tuple[str, str]:
     """Create a unique needle fact and the expected retrieval answer.
@@ -87,6 +119,7 @@ def insert_needle(document: str, needle: str, depth: float) -> str:
 # Evaluation
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class NeedleResult:
     doc_length_tokens: int
@@ -98,12 +131,12 @@ class NeedleResult:
 
 
 def run(
-    client,
+    client: ModelClient,
     num_samples: int | None = None,
     doc_lengths: list[int] | None = None,
     depths: list[float] | None = None,
-    **_kwargs,
-) -> tuple[dict[str, float], list[dict]]:
+    **_kwargs: Any,
+) -> tuple[dict[str, float], dict[str, Any]]:
     """Entry point for the eval runner.
 
     Evaluates over a grid of (doc_length, depth).
@@ -168,7 +201,11 @@ def run(
 
             logger.debug(
                 "length=%d depth=%.2f correct=%s (expected=%s got=%s)",
-                length, depth, correct, expected_answer, answer_digits,
+                length,
+                depth,
+                correct,
+                expected_answer,
+                answer_digits,
             )
 
     # Metrics
@@ -195,13 +232,15 @@ def run(
         metrics[f"accuracy_depth_{depth:.2f}"] = round(acc, 4)
 
     # Heatmap data (length x depth -> correct)
-    heatmap: list[dict] = []
+    heatmap: list[dict[str, Any]] = []
     for r in results:
-        heatmap.append({
-            "doc_length": r.doc_length_tokens,
-            "depth": r.needle_depth,
-            "correct": r.correct,
-        })
+        heatmap.append(
+            {
+                "doc_length": r.doc_length_tokens,
+                "depth": r.needle_depth,
+                "correct": r.correct,
+            }
+        )
 
     details = {
         "heatmap": heatmap,
@@ -219,6 +258,10 @@ def run(
 
     logger.info(
         "Needle-in-haystack: accuracy=%.4f (%d/%d) over %d lengths x %d depths",
-        overall_accuracy, total_correct, total, len(doc_lengths), len(depths),
+        overall_accuracy,
+        total_correct,
+        total,
+        len(doc_lengths),
+        len(depths),
     )
     return metrics, details

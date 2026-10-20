@@ -36,6 +36,20 @@
  * engine singleton's `execute()` (so we assert admission without needing a
  * real workflow run) are stubbed. A regression that drops the gate, or that
  * widens/narrows which tools count as "tenant-safe", fails here.
+ *
+ * SINGLE-DECISION-POINT FOLLOW-UP: `executeToolStep()` used to import
+ * advanced-tool-execution-service's executors directly and switch on
+ * `tool.name` by hand — a call site parallel to (and not covered by)
+ * chat-request-processor.ts/base-strategy.ts/strategy-tool-executor.ts, with
+ * no `safeForStrategies` check of its own; it only stayed safe because THIS
+ * route's gate above kept non-admins out. It now dispatches through
+ * `toolRegistry.executeForStrategy()`, the same shared gate those other call
+ * sites use. Known, deliberate consequence: `delete_file` is registered
+ * `safeForStrategies:false` in production, so it is now refused even for a
+ * platform admin who clears the route gate above — see the "sandbox root"
+ * and "single-decision-point refactor" describe blocks below, and the
+ * "KNOWN BEHAVIOR CHANGE" comment in agentic-workflow-engine.ts's
+ * executeToolStep for the full rationale.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import Fastify, { type FastifyInstance, type FastifyRequest } from 'fastify';
@@ -84,20 +98,6 @@ vi.mock('@/core/agentic/agentic-workflow-engine', async (importOriginal) => {
   return { ...actual, getAgenticWorkflowEngine: () => fakeEngine };
 });
 
-vi.mock('@/services/advanced-tool-execution-service', async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import('@/services/advanced-tool-execution-service')>();
-  return {
-    ...actual,
-    executeDeleteFileTool: vi.fn(
-      async (_args: unknown, toolCallId: string, ctx: { workingDirectory: string }) => {
-        capturedToolContexts.push(ctx);
-        return { tool_call_id: toolCallId, success: true, output: 'stubbed' };
-      }
-    ),
-  };
-});
-
 import { registerCollectiveIntelligenceRoutes } from '../ci-routes';
 import { AgenticWorkflowEngine } from '@/core/agentic/agentic-workflow-engine';
 import { toolRegistry } from '@/core/tools/tool-registry';
@@ -123,6 +123,46 @@ toolRegistry.register({
   }),
 });
 
+// Test-only `safeForStrategies:true` tool, registered directly (no module
+// mock needed now that executeToolStep dispatches through the registry
+// itself instead of importing advanced-tool-execution-service directly —
+// see the single-decision-point refactor note in agentic-workflow-engine.ts).
+// Used ONLY to prove the TOOLS_BASE_DIR sandbox clamp below; `delete_file`
+// itself can no longer be used for that ("AgenticWorkflowEngine tool_call
+// steps — sandbox root" used to reach the real handler directly), because it
+// is `safeForStrategies:false` in production and is now refused by
+// `toolRegistry.executeForStrategy()` before ever reaching a handler — see
+// the "is refused" test further below, and
+// agentic-workflow-engine-tool-dispatch.test.ts for the fuller coverage of
+// that refusal plus every other tool the old switch used to dispatch.
+toolRegistry.register({
+  name: 'test_sandbox_probe_tool',
+  description: 'Test-only tool used to capture the tool execution context',
+  category: 'file',
+  safeForStrategies: true,
+  handler: async (_args, toolCallId, ctx) => {
+    capturedToolContexts.push(ctx as { workingDirectory: string });
+    return { tool_call_id: toolCallId, success: true, output: 'stubbed' };
+  },
+});
+
+// Real (unmocked) registration mirroring production's `delete_file`
+// (chat-request-processor.ts's registerToolsInRegistry: `safeForStrategies:
+// false`), so the refusal test below exercises the actual reason production
+// refuses it, not an accidental "unregistered tool name" pass.
+const deleteFileHandler = vi.fn(async (_args: unknown, toolCallId: string) => ({
+  tool_call_id: toolCallId,
+  success: true,
+  output: 'stubbed',
+}));
+toolRegistry.register({
+  name: 'delete_file',
+  description: 'Delete a file',
+  category: 'file',
+  safeForStrategies: false,
+  handler: deleteFileHandler,
+});
+
 const TOOL_WORKFLOW = {
   id: 'wf-delete',
   name: 'delete a file',
@@ -140,6 +180,20 @@ const TOOL_WORKFLOW = {
       },
     },
   ],
+};
+
+// Single step naming `test_sandbox_probe_tool` (registered above,
+// safeForStrategies:true) — used only to exercise the TOOLS_BASE_DIR clamp,
+// since `delete_file` no longer reaches a handler at all (see below).
+const SANDBOX_PROBE_STEP = {
+  id: 'step-1',
+  name: 'probe',
+  type: 'tool_call',
+  config: {
+    tools: [
+      { name: 'test_sandbox_probe_tool', description: 'probe', parameters: { filePath: 'x.txt' } },
+    ],
+  },
 };
 
 const LLM_ONLY_WORKFLOW = {
@@ -381,7 +435,9 @@ describe('AgenticWorkflowEngine tool_call steps — sandbox root', () => {
     const engine = new AgenticWorkflowEngine() as unknown as {
       executeToolStep: (step: unknown, context: unknown) => Promise<unknown>;
     };
-    await engine.executeToolStep(TOOL_WORKFLOW.steps[0], {
+    // Uses `test_sandbox_probe_tool` (safeForStrategies:true), not
+    // `delete_file` — see the registration comment above for why.
+    await engine.executeToolStep(SANDBOX_PROBE_STEP, {
       workflowId: 'wf_test',
       variables: {},
       stepResults: new Map(),
@@ -395,5 +451,45 @@ describe('AgenticWorkflowEngine tool_call steps — sandbox root', () => {
     expect(capturedToolContexts).toHaveLength(1);
     expect(capturedToolContexts[0]!.workingDirectory).toBe(sandbox);
     expect(capturedToolContexts[0]!.workingDirectory).not.toBe(process.cwd());
+  });
+});
+
+describe('AgenticWorkflowEngine tool_call steps — single-decision-point refactor', () => {
+  afterEach(() => {
+    deleteFileHandler.mockClear();
+  });
+
+  it('refuses delete_file (safeForStrategies:false) even via this directly-invoked, platform-admin-reachable path', async () => {
+    // Regression guard for the structural finding this refactor closes:
+    // executeToolStep() used to import advanced-tool-execution-service's
+    // executors and switch on tool.name by hand, dispatching straight to
+    // executeDeleteFileTool with NO safeForStrategies check of its own — a
+    // call site parallel to (and not covered by) chat-request-processor.ts,
+    // base-strategy.ts and strategy-tool-executor.ts. It now dispatches
+    // through toolRegistry.executeForStrategy(), the SAME shared gate those
+    // call sites use, so a `safeForStrategies:false` tool is refused here
+    // too. This IS a deliberate behavior change: before this refactor, a
+    // platform admin reaching this route COULD delete a file via a workflow
+    // tool_call step; see the "KNOWN BEHAVIOR CHANGE" comment in
+    // agentic-workflow-engine.ts's executeToolStep for the full rationale
+    // and why an admin-bypass was deliberately NOT added here.
+    const engine = new AgenticWorkflowEngine() as unknown as {
+      executeToolStep: (step: unknown, context: unknown) => Promise<unknown>;
+    };
+
+    await expect(
+      engine.executeToolStep(TOOL_WORKFLOW.steps[0], {
+        workflowId: 'wf_test',
+        variables: {},
+        stepResults: new Map(),
+        startTime: Date.now(),
+        stepsExecuted: 0,
+        maxSteps: 10,
+        maxDuration: 60_000,
+        organizationId: TENANT_ORG_ID,
+      })
+    ).rejects.toThrow(/not permitted within strategy execution/i);
+
+    expect(deleteFileHandler).not.toHaveBeenCalled();
   });
 });

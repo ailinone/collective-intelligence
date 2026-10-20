@@ -36,6 +36,7 @@ DEFAULT_FAILURE_STORE = Path(__file__).resolve().parents[1] / "failures" / "capt
 # Data loading
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class FailureItem:
     failure_id: str
@@ -51,14 +52,20 @@ def load_failures(path: Path) -> list[FailureItem]:
     if not path.exists():
         return []
     data = json.loads(path.read_text())
-    return [FailureItem(**{k: f[k] for k in FailureItem.__dataclass_fields__ if k in f}) for f in data.get("failures", [])]
+    return [
+        FailureItem(**{k: f[k] for k in FailureItem.__dataclass_fields__ if k in f})
+        for f in data.get("failures", [])
+    ]
 
 
 # ---------------------------------------------------------------------------
 # Embedding
 # ---------------------------------------------------------------------------
 
-def embed_sentence_transformers(texts: list[str], model_name: str = "all-MiniLM-L6-v2") -> np.ndarray:
+
+def embed_sentence_transformers(
+    texts: list[str], model_name: str = "all-MiniLM-L6-v2"
+) -> np.ndarray:
     """Compute embeddings using sentence-transformers."""
     from sentence_transformers import SentenceTransformer
 
@@ -73,7 +80,8 @@ def embed_tfidf(texts: list[str], max_features: int = 512) -> np.ndarray:
 
     vectorizer = TfidfVectorizer(max_features=max_features, stop_words="english")
     matrix = vectorizer.fit_transform(texts)
-    return matrix.toarray()
+    # 2026-10-18 asarray is a no-op boundary conversion (toarray() is untyped)
+    return np.asarray(matrix.toarray())
 
 
 def compute_embeddings(texts: list[str], method: str = "auto") -> np.ndarray:
@@ -94,13 +102,15 @@ def compute_embeddings(texts: list[str], method: str = "auto") -> np.ndarray:
 # Clustering
 # ---------------------------------------------------------------------------
 
+
 def cluster_hdbscan(embeddings: np.ndarray, min_cluster_size: int = 3) -> np.ndarray:
     """Cluster embeddings using HDBSCAN."""
     import hdbscan
 
     clusterer = hdbscan.HDBSCAN(min_cluster_size=min_cluster_size, metric="euclidean")
     labels = clusterer.fit_predict(embeddings)
-    return labels
+    # 2026-10-18 asarray is a no-op boundary conversion (hdbscan is untyped)
+    return np.asarray(labels)
 
 
 def cluster_kmeans(embeddings: np.ndarray, n_clusters: int = 5) -> np.ndarray:
@@ -109,7 +119,8 @@ def cluster_kmeans(embeddings: np.ndarray, n_clusters: int = 5) -> np.ndarray:
 
     kmeans = KMeans(n_clusters=n_clusters, random_state=42, n_init=10)
     labels = kmeans.fit_predict(embeddings)
-    return labels
+    # 2026-10-18 asarray is a no-op boundary conversion (sklearn is untyped)
+    return np.asarray(labels)
 
 
 def run_clustering(
@@ -135,6 +146,7 @@ def run_clustering(
 # Cluster labelling
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class ClusterInfo:
     cluster_id: int
@@ -156,7 +168,7 @@ def label_clusters(
     for cid in unique_labels:
         if cid == -1:
             continue  # noise cluster in HDBSCAN
-        members = [f for f, l in zip(failures, labels) if l == cid]
+        members = [f for f, lbl in zip(failures, labels, strict=False) if lbl == cid]
         cap_counts = Counter(f.capability for f in members)
         dominant = cap_counts.most_common(1)[0][0] if cap_counts else "unknown"
 
@@ -181,7 +193,7 @@ def label_clusters(
         )
 
     # Handle noise
-    noise_members = [f for f, l in zip(failures, labels) if l == -1]
+    noise_members = [f for f, lbl in zip(failures, labels, strict=False) if lbl == -1]
     if noise_members:
         cap_counts = Counter(f.capability for f in noise_members)
         clusters.append(
@@ -202,10 +214,11 @@ def label_clusters(
 # Report generation
 # ---------------------------------------------------------------------------
 
+
 def generate_report(
     clusters: list[ClusterInfo],
     output_path: Path | None = None,
-) -> dict:
+) -> dict[str, Any]:
     report = {
         "num_clusters": len([c for c in clusters if c.cluster_id >= 0]),
         "total_failures": sum(c.size for c in clusters),
@@ -224,9 +237,14 @@ def generate_report(
 # CLI
 # ---------------------------------------------------------------------------
 
+
 @click.command()
 @click.option("--failures-path", type=click.Path(exists=True), default=str(DEFAULT_FAILURE_STORE))
-@click.option("--embedding-method", type=click.Choice(["auto", "sentence_transformers", "tfidf"]), default="auto")
+@click.option(
+    "--embedding-method",
+    type=click.Choice(["auto", "sentence_transformers", "tfidf"]),
+    default="auto",
+)
 @click.option("--cluster-method", type=click.Choice(["auto", "hdbscan", "kmeans"]), default="auto")
 @click.option("--n-clusters", type=int, default=5, help="Number of clusters (KMeans only)")
 @click.option("--min-cluster-size", type=int, default=3, help="Min cluster size (HDBSCAN only)")
@@ -238,7 +256,7 @@ def main(
     n_clusters: int,
     min_cluster_size: int,
     output: str | None,
-):
+) -> None:
     """Cluster captured failures and produce a report."""
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
 
@@ -271,7 +289,11 @@ def main(
         for q in c.representative_questions:
             click.echo(f"    - {q}")
 
-    out_path = Path(output) if output else Path(failures_path).parent.parent / "clustering" / "cluster_report.json"
+    out_path = (
+        Path(output)
+        if output
+        else Path(failures_path).parent.parent / "clustering" / "cluster_report.json"
+    )
     generate_report(clusters, out_path)
     click.echo(f"\nReport saved to {out_path}")
 

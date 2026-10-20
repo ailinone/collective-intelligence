@@ -196,6 +196,26 @@ export class ResourceConflictError extends ApplicationError {
 }
 
 /**
+ * Invoice-fraud follow-up (#654): `findOverlappingInvoice` is a
+ * check-then-act SELECT-then-INSERT with no lock, so two concurrent callers
+ * (the daily usage-reconciliation job and a self-service POST, or two racing
+ * self-service calls) can both pass the SELECT before either INSERT commits,
+ * double-billing the organization. The DB now backstops the application
+ * check with a GiST exclusion constraint (`no_overlapping_invoice_period`,
+ * see prisma/migrations/20260927000000_invoice_period_no_overlap_exclusion)
+ * that makes the second concurrent INSERT fail atomically instead of
+ * succeeding. `createInvoice` (billing-service.ts) catches that DB error and
+ * throws this instead, so callers get a clean 409 rather than a raw
+ * Postgres/Prisma error leaking as a 500.
+ */
+export class InvoicePeriodOverlapError extends ApplicationError {
+  constructor(message: string = 'An existing invoice already covers part of this period.') {
+    super(message, 409, 'invoice_period_overlap');
+    this.name = 'InvoicePeriodOverlapError';
+  }
+}
+
+/**
  * Database Errors
  */
 export class DatabaseError extends ApplicationError {

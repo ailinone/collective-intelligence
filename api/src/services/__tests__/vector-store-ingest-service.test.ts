@@ -340,4 +340,25 @@ describe('VectorStoreIngestService.search', () => {
     expect(String(selectCall?.[0])).toContain('file_id = ANY');
     expect((selectCall?.[1] as unknown[])[4]).toEqual(['f1', 'f2']);
   });
+
+  it('does not resolve the default embedder at construction (API boot must not need credentials)', async () => {
+    const saved = {
+      key: process.env.OPENAI_API_KEY,
+      url: process.env.HCRA_EMBEDDER_URL,
+    };
+    delete process.env.OPENAI_API_KEY;
+    delete process.env.HCRA_EMBEDDER_URL;
+    const { resetCapabilityEmbedder } = await import('@/capability/embedder/embedder-factory');
+    resetCapabilityEmbedder();
+    try {
+      const service = new VectorStoreIngestService(makeFakePool());
+      await expect(
+        service.search({ vectorStoreId: 'vs_1', organizationId: 'org-1', query: 'q', topK: 1 })
+      ).rejects.toThrow(/OPENAI_API_KEY missing/);
+    } finally {
+      if (saved.key !== undefined) process.env.OPENAI_API_KEY = saved.key;
+      if (saved.url !== undefined) process.env.HCRA_EMBEDDER_URL = saved.url;
+      resetCapabilityEmbedder();
+    }
+  });
 });

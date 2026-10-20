@@ -11,6 +11,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable, Coroutine, Mapping
+from typing import Any
+
 import pytest
 
 from serving.aggregation.tiered_voter import (
@@ -41,19 +44,34 @@ def _vote(
     )
 
 
+class _FnExecutor:
+    """Adapt a plain async function to the TierExecutor protocol.
+
+    2026-10-18 — mypy does not structurally match bare async functions
+    against __call__-protocols (even with identical callable types), so
+    test doubles are wrapped in a class; runtime behaviour is unchanged.
+    """
+
+    def __init__(self, fn: Callable[[Mapping[str, Any]], Coroutine[Any, Any, TierResult]]) -> None:
+        self._fn = fn
+
+    async def __call__(self, request: Mapping[str, Any]) -> TierResult:
+        return await self._fn(request)
+
+
 # ---------------------------------------------------------------------------
 # TierResult
 # ---------------------------------------------------------------------------
 
 
 class TestTierResult:
-    def test_empty_tier_returns_no_majority(self):
+    def test_empty_tier_returns_no_majority(self) -> None:
         tr = TierResult(tier=Tier.ENCODER, votes=())
         assert tr.majority_role is None
         assert tr.dissent_count == 0
         assert tr.average_confidence == 0.0
 
-    def test_unanimous_tier_zero_dissent(self):
+    def test_unanimous_tier_zero_dissent(self) -> None:
         votes = (
             _vote("m01", Tier.ENCODER, "auditor", 0.9),
             _vote("m02", Tier.ENCODER, "auditor", 0.8),
@@ -65,7 +83,7 @@ class TestTierResult:
         # average ~0.883
         assert pytest.approx(tr.average_confidence, abs=0.01) == 0.883
 
-    def test_split_tier_has_dissent(self):
+    def test_split_tier_has_dissent(self) -> None:
         votes = (
             _vote("m01", Tier.ENCODER, "auditor", 0.9),
             _vote("m02", Tier.ENCODER, "auditor", 0.8),
@@ -76,7 +94,7 @@ class TestTierResult:
         assert tr.majority_role == "auditor"  # tie broken by Counter ordering = first inserted
         assert tr.dissent_count == 2
 
-    def test_failed_models_tracked_separately(self):
+    def test_failed_models_tracked_separately(self) -> None:
         votes = (_vote("m01", Tier.ENCODER, "auditor", 0.9),)
         tr = TierResult(tier=Tier.ENCODER, votes=votes, failed_models=("m02",))
         assert tr.majority_role == "auditor"
@@ -89,7 +107,7 @@ class TestTierResult:
 
 
 class TestVoteAggregator:
-    def test_no_results_returns_fallback(self):
+    def test_no_results_returns_fallback(self) -> None:
         agg = VoteAggregator(tier_weights={Tier.ENCODER: 0.1})
         role, reason, conf, dist = agg.aggregate([])
         assert role == "fallback-default"
@@ -97,7 +115,7 @@ class TestVoteAggregator:
         assert conf == 0.0
         assert dist == {}
 
-    def test_weighted_majority_picks_highest_score(self):
+    def test_weighted_majority_picks_highest_score(self) -> None:
         # Tier 1 (weight 0.1) has 2 votes for "auditor"
         # Tier 4 (weight 0.25) has 1 vote for "solver"
         # Despite numerical majority going to "auditor" (count 2 vs 1),
@@ -125,7 +143,7 @@ class TestVoteAggregator:
         assert dist == {"auditor": 2, "solver": 1}
         assert 0.0 < conf <= 1.0
 
-    def test_high_confidence_anchor_dominates_low_confidence_encoders(self):
+    def test_high_confidence_anchor_dominates_low_confidence_encoders(self) -> None:
         # 4 encoders at low confidence vs 1 anchor at high confidence —
         # anchor's higher tier weight × confidence outweighs the encoders.
         agg = VoteAggregator(tier_weights={Tier.ENCODER: 0.1, Tier.DENSE_ANCHOR: 0.25})
@@ -146,7 +164,7 @@ class TestVoteAggregator:
         assert role == "solver"
         assert conf > 0.5
 
-    def test_accuracy_history_can_demote_a_model(self):
+    def test_accuracy_history_can_demote_a_model(self) -> None:
         agg = VoteAggregator(
             tier_weights={Tier.ENCODER: 0.5},
             accuracy_history={"m01": 0.1, "m02": 1.0},  # m01 historically wrong
@@ -166,7 +184,7 @@ class TestVoteAggregator:
         # solver wins despite m01's higher confidence.
         assert role == "solver"
 
-    def test_reason_picked_from_winners(self):
+    def test_reason_picked_from_winners(self) -> None:
         agg = VoteAggregator(tier_weights={Tier.ENCODER: 1.0})
         results = [
             TierResult(
@@ -190,7 +208,7 @@ class TestVoteAggregator:
 
 class TestTieredEnsembleVoter:
     @pytest.mark.asyncio
-    async def test_no_executors_returns_fallback(self):
+    async def test_no_executors_returns_fallback(self) -> None:
         voter = TieredEnsembleVoter(tier_executors={})
         decision = await voter.decide({"strategy": "debate"})
         assert decision.role == "fallback-default"
@@ -198,8 +216,8 @@ class TestTieredEnsembleVoter:
         assert decision.short_circuited is False
 
     @pytest.mark.asyncio
-    async def test_short_circuit_on_high_confidence(self):
-        async def t1_executor(_req):
+    async def test_short_circuit_on_high_confidence(self) -> None:
+        async def t1_executor(_req: Mapping[str, Any]) -> TierResult:
             return TierResult(
                 tier=Tier.ENCODER,
                 votes=tuple(_vote(f"m0{i + 1}", Tier.ENCODER, "auditor", 0.95) for i in range(4)),
@@ -209,7 +227,7 @@ class TestTieredEnsembleVoter:
         # decision exits at Tier 1.
         config = EnsembleConfig()
         voter = TieredEnsembleVoter(
-            tier_executors={Tier.ENCODER: t1_executor},
+            tier_executors={Tier.ENCODER: _FnExecutor(t1_executor)},
             config=config,
         )
         decision = await voter.decide({"strategy": "tri-role-collective"})
@@ -221,8 +239,8 @@ class TestTieredEnsembleVoter:
         assert decision.dissent_count == 0
 
     @pytest.mark.asyncio
-    async def test_dissent_escalates_to_next_tier(self):
-        async def t1_split(_req):
+    async def test_dissent_escalates_to_next_tier(self) -> None:
+        async def t1_split(_req: Mapping[str, Any]) -> TierResult:
             return TierResult(
                 tier=Tier.ENCODER,
                 votes=(
@@ -233,7 +251,7 @@ class TestTieredEnsembleVoter:
                 ),
             )
 
-        async def t2_unanimous(_req):
+        async def t2_unanimous(_req: Mapping[str, Any]) -> TierResult:
             return TierResult(
                 tier=Tier.DENSE_TINY,
                 votes=tuple(
@@ -244,8 +262,8 @@ class TestTieredEnsembleVoter:
         config = EnsembleConfig()
         voter = TieredEnsembleVoter(
             tier_executors={
-                Tier.ENCODER: t1_split,
-                Tier.DENSE_TINY: t2_unanimous,
+                Tier.ENCODER: _FnExecutor(t1_split),
+                Tier.DENSE_TINY: _FnExecutor(t2_unanimous),
             },
             config=config,
         )
@@ -256,11 +274,11 @@ class TestTieredEnsembleVoter:
         assert decision.tiers_activated == (Tier.ENCODER, Tier.DENSE_TINY)
 
     @pytest.mark.asyncio
-    async def test_executor_failure_does_not_break_cascade(self):
-        async def t1_raises(_req):
+    async def test_executor_failure_does_not_break_cascade(self) -> None:
+        async def t1_raises(_req: Mapping[str, Any]) -> TierResult:
             raise RuntimeError("simulated failure")
 
-        async def t2_ok(_req):
+        async def t2_ok(_req: Mapping[str, Any]) -> TierResult:
             return TierResult(
                 tier=Tier.DENSE_TINY,
                 votes=(_vote("m05", Tier.DENSE_TINY, "auditor", 0.95),),
@@ -268,8 +286,8 @@ class TestTieredEnsembleVoter:
 
         voter = TieredEnsembleVoter(
             tier_executors={
-                Tier.ENCODER: t1_raises,
-                Tier.DENSE_TINY: t2_ok,
+                Tier.ENCODER: _FnExecutor(t1_raises),
+                Tier.DENSE_TINY: _FnExecutor(t2_ok),
             },
         )
         decision = await voter.decide({"strategy": "debate"})
@@ -285,10 +303,10 @@ class TestTieredEnsembleVoter:
 
 
 class TestAggregatedDecision:
-    def test_default_scheduler_is_ensemble_label(self):
+    def test_default_scheduler_is_ensemble_label(self) -> None:
         d = AggregatedDecision(role="x", reason="y")
         assert d.scheduler == "ensemble-24-tiered-bayesian"
 
-    def test_aggregation_method_default(self):
+    def test_aggregation_method_default(self) -> None:
         d = AggregatedDecision(role="x", reason="y")
         assert d.aggregation_method == "weighted_bayesian_majority"

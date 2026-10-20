@@ -172,6 +172,38 @@ export interface CapabilityInvoker {
    * binary/base64 file data directly.
    */
   generateFile(options: FileGenInvokeOptions): Promise<FileGenInvokeResult>;
+
+  /**
+   * Artifact storage — persist generated media/document bytes to files
+   * storage (GCS) and return a fetchable signed URL. Added so media stages
+   * deliver payloads by URL instead of inline base64: the 2026-09-30
+   * production incident ("Response too large to deliver over a streaming
+   * connection") was an inline ~2.2MB image degrading an entire SSE response
+   * — see utils/sse.ts's line-length guard for the transport constraint that
+   * makes URL delivery the only scalable channel for real media.
+   */
+  storeArtifact(options: StoreArtifactOptions): Promise<StoreArtifactResult>;
+}
+
+export interface StoreArtifactOptions {
+  /** Artifact bytes to persist. */
+  buffer: Buffer;
+  /** Filename WITH extension — files storage derives the stored Content-Type
+   *  from the extension alone (FilesService.getContentType), so the extension
+   *  must match the actual bytes. */
+  filename: string;
+  /** Storage purpose (path segment under the org prefix); defaults to
+   *  'media_generation'. */
+  purpose?: string;
+}
+
+export interface StoreArtifactResult {
+  /** Signed, directly fetchable (no auth headers) delivery URL. */
+  url: string;
+  /** Files-storage record id — re-signable later via generateDownloadUrl. */
+  fileId: string;
+  /** Epoch ms when `url` stops resolving. */
+  expiresAt: number;
 }
 
 export interface FileGenInvokeOptions {
@@ -339,6 +371,33 @@ type FileServiceLike = {
     | { buffer: Buffer; filename: string; mimeType: string };
 };
 
+/** FilesService (services/files-service.ts), loosely typed like the service
+ *  types above to avoid a concrete import: uploadFile + generateDownloadUrl
+ *  are everything the invoker's storeArtifact needs. */
+type FilesServiceLike = {
+  uploadFile(options: {
+    fileBuffer: Buffer;
+    filename: string;
+    purpose: string;
+    userContext: OrchestrationContext;
+    requestId: string;
+  }): Promise<{ id: string }>;
+  generateDownloadUrl(options: {
+    fileId: string;
+    userContext: OrchestrationContext;
+    expiresInMs?: number;
+  }): Promise<string>;
+};
+
+/** Lifetime requested for artifact signed URLs (and reported via
+ *  StoreArtifactResult.expiresAt). Deliberately LONGER than the semantic
+ *  cache's defaultTTLSeconds (3600s): artifact-bearing responses are cached
+ *  whole (ailin_metadata included), so a replayed entry must still carry a
+ *  resolvable URL for its entire cache life. Still bounded so a leaked URL is
+ *  not a durable credential; the immediate consumer (chat) re-hosts the bytes
+ *  under its own /files on first receipt anyway. */
+const ARTIFACT_SIGNED_URL_TTL_MS = 6 * 60 * 60 * 1000;
+
 const FILE_FORMAT_INSTRUCTIONS: Record<FileGenInvokeOptions['format'], string> = {
   csv: 'Respond ONLY with a JSON object of the exact shape {"headers": string[], "rows": Array<Array<string|number|boolean|null>>} representing the requested data as a table. No prose, no markdown code fences, no extra keys.',
   json: 'Respond ONLY with the raw JSON value being requested (object or array) — no prose, no markdown code fences, no wrapping unless explicitly asked for one.',
@@ -383,6 +442,8 @@ export function createCapabilityInvoker(deps: {
   imageService?: ImageServiceLike;
   /** FileGenerationService instance (loosely typed to avoid circular imports) */
   fileService?: FileServiceLike;
+  /** FilesService instance (GCS uploads + signed URLs) for storeArtifact */
+  filesService?: FilesServiceLike;
   /** Orchestration context for model selection */
   context: OrchestrationContext;
 }): CapabilityInvoker {
@@ -602,6 +663,32 @@ export function createCapabilityInvoker(deps: {
         options.filenameBase
       );
       return { ...rendered, model: response.model };
+    },
+
+    async storeArtifact(options) {
+      if (!deps.filesService) {
+        throw new Error('Artifact storage capability not available in this context');
+      }
+      const purpose = options.purpose ?? 'media_generation';
+      log.debug(
+        { requestId, filename: options.filename, bytes: options.buffer.length, purpose },
+        'Invoking artifact storage capability'
+      );
+      const uploaded = await deps.filesService.uploadFile({
+        fileBuffer: options.buffer,
+        filename: options.filename,
+        purpose,
+        userContext: deps.context,
+        requestId,
+      });
+      // Signed lazily, at the moment of use, per FilesService's own contract
+      // (upload no longer persists stale signed URLs).
+      const url = await deps.filesService.generateDownloadUrl({
+        fileId: uploaded.id,
+        userContext: deps.context,
+        expiresInMs: ARTIFACT_SIGNED_URL_TTL_MS,
+      });
+      return { url, fileId: uploaded.id, expiresAt: Date.now() + ARTIFACT_SIGNED_URL_TTL_MS };
     },
   };
 }

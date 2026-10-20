@@ -821,22 +821,21 @@ export class DebateStrategy extends BaseStrategy {
 
     log.debug({ requestId, debaterCount: debaters.length }, 'Conducting opening round');
 
-    // Emit a per-debater "now presenting" event UP FRONT so the observer has
-    // continuous content to narrate DURING this ~25s round. The local narrator
-    // processes these sequentially (~7s each), so drainWhile() streams them spread
-    // across the round instead of the client sitting in silence until it ends.
-    debaters.forEach((debater, i) => {
+    // Execute in parallel for speed
+    const reasoningEnabled = this.isReasoningEnabled(request);
+    const openingPromises = debaters.map(async (debater, i) => {
+      // CI-CHAT-0004: the per-debater event is emitted AT DISPATCH (not up
+      // front for all debaters before any call exists), so a narration never
+      // claims an invocation that hasn't started. The round still gets
+      // continuous observer content across its ~25s (the local narrator
+      // processes these sequentially, ~7s each) — but every event now has a
+      // real model call behind it.
       this.emitObserverEvent(context, {
         type: 'model_response',
         round: 0,
         modelName: debater.name,
-        summary: `Analyst ${i + 1} of ${debaters.length} is forming their opening position.`,
+        summary: `Analyst ${i + 1} of ${debaters.length} is presenting their opening position.`,
       });
-    });
-
-    // Execute in parallel for speed
-    const reasoningEnabled = this.isReasoningEnabled(request);
-    const openingPromises = debaters.map(async (debater) => {
       const systemPrompt = this.withReasoningPrompt(
         PROMPTS.debateOpening(debater.name),
         request,

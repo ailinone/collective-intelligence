@@ -85,7 +85,31 @@ interface ProviderSecretBinding {
 export const PROVIDER_SECRETS: readonly ProviderSecretBinding[] = [
   { envVar: 'OPENAI_API_KEY', secretKeys: ['openai-key'] },
   { envVar: 'ANTHROPIC_API_KEY', secretKeys: ['anthropic-key'] },
-  { envVar: 'GOOGLE_API_KEY', secretKeys: ['google-key'] },
+  // 2026-10-01: `google-key` holds a credential of the WRONG TYPE (boot-time
+  // detector logs `credentialShapes: "unknown"` every container start; every
+  // Google image-model attempt 401s with ACCESS_TOKEN_TYPE_UNSUPPORTED — 27
+  // occurrences in 40 minutes of production logs, forcing every image
+  // generation through the 7-attempt fallback chain to OpenAI gpt-image).
+  // `vertex-key` is the same key GEMINI_API_KEY (see below) already prefers —
+  // verified working against generativelanguage.googleapis.com — so it takes
+  // priority here too; the resolution loop below picks the first candidate
+  // that merely EXISTS in Secret Manager, so ordering is the fix. Restore
+  // `google-key` to first position once it holds a real AI Studio key
+  // (AIza...) again.
+  {
+    envVar: 'GOOGLE_API_KEY',
+    secretKeys: ['vertex-key', 'google-ai-studio-key', 'google-key'],
+  },
+  // 2026-10-01: the wallet top-up/grant internal routes (billing → ci, and
+  // any sanctioned system credit) compare against process.env
+  // WALLET_TOPUP_SECRET — but nothing loaded it: the compose entrypoint
+  // exports it from the swarm secret `ci_wallet_topup_secret`, which was
+  // never created on the manager, so every container boots with it UNSET and
+  // the route 401s for everyone (observed live: `secret set: false` inside a
+  // running ci_api). The GCP secret exists (ailin-ci-wallet-topup-secret);
+  // map it so the boot loader populates the env like every other provider
+  // secret.
+  { envVar: 'WALLET_TOPUP_SECRET', secretKeys: ['ci-wallet-topup-secret'] },
   { envVar: 'DEEPSEEK_API_KEY', secretKeys: ['deepseek-key'] },
   { envVar: 'XAI_API_KEY', secretKeys: ['xai-key'] },
   { envVar: 'MISTRAL_API_KEY', secretKeys: ['mistral-key'] },

@@ -40,13 +40,14 @@ logger = logging.getLogger("ablation_runner")
 # Config generation
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class AblationDimension:
     """A single dimension to ablate over."""
 
-    name: str                         # Human-readable name
-    config_path: str                  # Dot-separated path in the config dict (e.g. "training.lr")
-    values: list[Any]                 # Values to try
+    name: str  # Human-readable name
+    config_path: str  # Dot-separated path in the config dict (e.g. "training.lr")
+    values: list[Any]  # Values to try
     description: str = ""
 
 
@@ -55,12 +56,12 @@ class AblationVariant:
     """A single config variant generated from ablation dimensions."""
 
     variant_id: str
-    label: str                        # e.g. "lr=1e-4_bs=64"
+    label: str  # e.g. "lr=1e-4_bs=64"
     config: dict[str, Any]
-    ablation_values: dict[str, Any]   # dimension_name -> value used
+    ablation_values: dict[str, Any]  # dimension_name -> value used
 
 
-def set_nested(d: dict, path: str, value: Any) -> None:
+def set_nested(d: dict[str, Any], path: str, value: Any) -> None:
     """Set a value in a nested dict using dot-separated path."""
     keys = path.split(".")
     for key in keys[:-1]:
@@ -70,7 +71,7 @@ def set_nested(d: dict, path: str, value: Any) -> None:
     d[keys[-1]] = value
 
 
-def get_nested(d: dict, path: str, default: Any = None) -> Any:
+def get_nested(d: dict[str, Any], path: str, default: Any = None) -> Any:
     """Get a value from a nested dict using dot-separated path."""
     keys = path.split(".")
     for key in keys:
@@ -101,7 +102,7 @@ def generate_variants(
             label_parts = []
             ablation_values = {}
 
-            for dim, val in zip(dimensions, combo):
+            for dim, val in zip(dimensions, combo, strict=True):
                 set_nested(config, dim.config_path, val)
                 short_val = str(val).replace(".", "p")
                 label_parts.append(f"{dim.name}={short_val}")
@@ -138,7 +139,9 @@ def generate_variants(
             variant_id=f"abl-baseline-{uuid.uuid4().hex[:8]}",
             label="baseline",
             config=copy.deepcopy(base_config),
-            ablation_values={dim.name: get_nested(base_config, dim.config_path) for dim in dimensions},
+            ablation_values={
+                dim.name: get_nested(base_config, dim.config_path) for dim in dimensions
+            },
         )
         variants.insert(0, baseline)
 
@@ -152,10 +155,11 @@ def generate_variants(
 # Run management
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class AblationRun:
     variant: AblationVariant
-    status: str = "pending"         # pending | running | completed | failed
+    status: str = "pending"  # pending | running | completed | failed
     result_metrics: dict[str, float] = field(default_factory=dict)
     elapsed_seconds: float = 0.0
     error: str = ""
@@ -191,8 +195,10 @@ def run_training_variant(
     cmd = [
         sys.executable,
         training_script,
-        "--config", str(config_path),
-        "--output-dir", str(variant_dir),
+        "--config",
+        str(config_path),
+        "--output-dir",
+        str(variant_dir),
     ]
 
     logger.info("Launching variant %s: %s", variant.label, " ".join(cmd))
@@ -244,6 +250,7 @@ def run_training_variant(
 # Report generation
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class AblationReport:
     dimensions: list[dict[str, Any]]
@@ -251,7 +258,7 @@ class AblationReport:
     mode: str
     created_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "created_at": self.created_at,
             "mode": self.mode,
@@ -267,21 +274,28 @@ def generate_report(
     mode: str,
 ) -> AblationReport:
     dim_info = [
-        {"name": d.name, "config_path": d.config_path, "values": d.values, "description": d.description}
+        {
+            "name": d.name,
+            "config_path": d.config_path,
+            "values": d.values,
+            "description": d.description,
+        }
         for d in dimensions
     ]
 
     variant_info = []
     for run in runs:
-        variant_info.append({
-            "variant_id": run.variant.variant_id,
-            "label": run.variant.label,
-            "ablation_values": run.variant.ablation_values,
-            "status": run.status,
-            "metrics": run.result_metrics,
-            "elapsed_seconds": round(run.elapsed_seconds, 1),
-            "error": run.error,
-        })
+        variant_info.append(
+            {
+                "variant_id": run.variant.variant_id,
+                "label": run.variant.label,
+                "ablation_values": run.variant.ablation_values,
+                "status": run.status,
+                "metrics": run.result_metrics,
+                "elapsed_seconds": round(run.elapsed_seconds, 1),
+                "error": run.error,
+            }
+        )
 
     return AblationReport(dimensions=dim_info, variants=variant_info, mode=mode)
 
@@ -305,7 +319,9 @@ def print_comparison(runs: list[AblationRun]) -> None:
 
     # Sort by first metric
     first_metric = all_metrics[0] if all_metrics else ""
-    sorted_runs = sorted(completed, key=lambda r: r.result_metrics.get(first_metric, 0), reverse=True)
+    sorted_runs = sorted(
+        completed, key=lambda r: r.result_metrics.get(first_metric, 0), reverse=True
+    )
 
     for run in sorted_runs:
         row = f"{run.variant.label[:30]:30s}"
@@ -322,11 +338,23 @@ def print_comparison(runs: list[AblationRun]) -> None:
 # CLI
 # ---------------------------------------------------------------------------
 
+
 @click.command()
-@click.option("--base-config", required=True, type=click.Path(exists=True), help="Base training config YAML")
-@click.option("--ablations", required=True, type=click.Path(exists=True), help="Ablation dimensions YAML")
-@click.option("--training-script", required=True, type=click.Path(exists=True), help="Training script to run")
-@click.option("--output-dir", required=True, type=click.Path(), help="Directory for variant outputs")
+@click.option(
+    "--base-config", required=True, type=click.Path(exists=True), help="Base training config YAML"
+)
+@click.option(
+    "--ablations", required=True, type=click.Path(exists=True), help="Ablation dimensions YAML"
+)
+@click.option(
+    "--training-script",
+    required=True,
+    type=click.Path(exists=True),
+    help="Training script to run",
+)
+@click.option(
+    "--output-dir", required=True, type=click.Path(), help="Directory for variant outputs"
+)
 @click.option("--mode", type=click.Choice(["grid", "one_at_a_time"]), default="one_at_a_time")
 @click.option("--dry-run", is_flag=True, default=False, help="Print plan without running")
 @click.option("--report", type=click.Path(), default=None, help="Output report JSON path")
@@ -338,7 +366,7 @@ def main(
     mode: str,
     dry_run: bool,
     report: str | None,
-):
+) -> None:
     """Run ablation studies over training hyperparameters.
 
     The ablations YAML file should have the format:
@@ -384,7 +412,7 @@ def main(
 
     runs: list[AblationRun] = []
     for i, variant in enumerate(variants):
-        click.echo(f"\n[{i+1}/{len(variants)}] Running variant: {variant.label}")
+        click.echo(f"\n[{i + 1}/{len(variants)}] Running variant: {variant.label}")
         run = run_training_variant(variant, training_script, out, dry_run=dry_run)
         runs.append(run)
         if run.status == "completed":
@@ -393,9 +421,9 @@ def main(
             click.echo(f"  {run.status}: {run.error}")
 
     # Comparison table
-    click.echo(f"\n{'='*60}")
+    click.echo(f"\n{'=' * 60}")
     click.echo("Ablation Comparison")
-    click.echo(f"{'='*60}")
+    click.echo(f"{'=' * 60}")
     print_comparison(runs)
 
     # Report

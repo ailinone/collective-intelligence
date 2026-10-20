@@ -289,15 +289,24 @@ describe('the outer catch must not re-commit headers sendResponse already sent',
     await app.close();
   });
 
-  it('hangs when the catch block unconditionally re-commits headers (the pre-fix shape) — proves the harness catches it', async () => {
+  it('completes cleanly even when the catch block unconditionally re-commits headers (the pre-fix shape) — setupSSEHeaders is headersSent-idempotent', async () => {
+    // 2026-09-30 (media-gate SSE keepalive follow-up): setupSSEHeaders gained
+    // an internal headersSent guard so the gate can commit headers EARLY for
+    // its keepalive heartbeat. That guard makes even this historically-fatal
+    // unguarded-catch shape safe: the re-commit is a no-op instead of
+    // ERR_HTTP_HEADERS_SENT, so the client receives the clean SSE error frame
+    // instead of a hung connection. The old canary expected exactly this
+    // shape to HANG — a failure class the guard removed entirely — so this
+    // test now pins the STRONGER invariant: no catch-block shape, guarded or
+    // not, can ever hang the request on double header commit again.
     const app = buildAppWithThrowingSend(false);
     await app.ready();
-    await expect(
-      Promise.race([
-        app.inject({ method: 'POST', url: '/test' }),
-        new Promise((_, reject) => setTimeout(() => reject(new Error('TIMEOUT')), 1500)),
-      ])
-    ).rejects.toThrow();
+    const response = await Promise.race([
+      app.inject({ method: 'POST', url: '/test' }),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('TIMEOUT')), 1500)),
+    ]);
+    expect((response as { statusCode: number }).statusCode).toBe(200);
+    expect((response as { body: string }).body).toContain('data: [ERROR]');
     await app.close();
   });
 });

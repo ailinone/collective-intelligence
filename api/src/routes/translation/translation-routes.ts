@@ -29,8 +29,22 @@ import {
   type PalabraSessionRequest,
 } from '@/providers/palabraai/palabraai-adapter';
 import { getTranslationService } from '@/services/translation-service';
+import { getTenantContext } from '@/api/middleware/tenant-isolation-middleware';
+import {
+  forgetTranslationSessionOwner,
+  isTranslationSessionOwnedBy,
+  recordTranslationSessionOwner,
+} from '@/services/translation-session-ownership';
 
 const log = logger.child({ module: 'translation-routes' });
+
+function resolveOrganizationId(request: FastifyRequest): string | null {
+  try {
+    return getTenantContext(request).organizationId || null;
+  } catch {
+    return null;
+  }
+}
 
 export async function registerTranslationRoutes(server: FastifyInstance): Promise<void> {
   /**
@@ -95,6 +109,16 @@ export async function registerTranslationRoutes(server: FastifyInstance): Promis
         'Translation session requested'
       );
 
+      const organizationId = resolveOrganizationId(request);
+      if (!organizationId) {
+        return reply.status(401).send({
+          error: {
+            code: 'tenant_context_required',
+            message: 'An organization-scoped credential is required to create a translation session.',
+          },
+        });
+      }
+
       try {
         const registry = getProviderRegistry();
         const palabraAdapter = registry.get('palabraai');
@@ -110,6 +134,28 @@ export async function registerTranslationRoutes(server: FastifyInstance): Promis
         }
 
         const session = await palabraAdapter.createTranslationSession(body);
+
+        try {
+          await recordTranslationSessionOwner(session.sessionId, organizationId);
+        } catch (ownershipError) {
+          // A session nobody can prove they own could only ever be deleted by
+          // waiting it out, so tear it down rather than hand it to the client.
+          log.error(
+            {
+              requestId,
+              sessionId: session.sessionId,
+              error: ownershipError instanceof Error ? ownershipError.message : String(ownershipError),
+            },
+            'Could not record translation session ownership; discarding the session'
+          );
+          await palabraAdapter.deleteSession(session.sessionId).catch(() => undefined);
+          return reply.status(503).send({
+            error: {
+              code: 'translation_session_ownership_unavailable',
+              message: 'Translation session could not be registered. Please retry.',
+            },
+          });
+        }
 
         return reply.status(201).send({
           session: {
@@ -155,13 +201,38 @@ export async function registerTranslationRoutes(server: FastifyInstance): Promis
     async (request: FastifyRequest, reply: FastifyReply) => {
       const { id } = request.params as { id: string };
 
-      try {
-        const registry = getProviderRegistry();
-        const palabraAdapter = registry.get('palabraai') as PalabraAIAdapter | undefined;
+      const organizationId = resolveOrganizationId(request);
+      if (!organizationId) {
+        return reply.status(401).send({
+          error: {
+            code: 'tenant_context_required',
+            message: 'An organization-scoped credential is required to delete a translation session.',
+          },
+        });
+      }
 
-        if (palabraAdapter) {
-          await palabraAdapter.deleteSession(id);
+      try {
+        // The public contract is an idempotent delete ("200 if it didn't
+        // exist"). Another organization's session is, from this caller's
+        // side, a session that doesn't exist: answer the same 200 and leave
+        // the session alone, which also gives no signal that the id is live.
+        if (!(await isTranslationSessionOwnedBy(id, organizationId))) {
+          return reply.status(200).send({ deleted: true, sessionId: id });
         }
+
+        const registry = getProviderRegistry();
+        const palabraAdapter = registry.get('palabraai');
+        if (!palabraAdapter || !(palabraAdapter instanceof PalabraAIAdapter)) {
+          return reply.status(503).send({
+            error: {
+              code: 'translation_provider_unavailable',
+              message: 'Palabra.ai provider not configured.',
+            },
+          });
+        }
+
+        await palabraAdapter.deleteSession(id);
+        await forgetTranslationSessionOwner(id);
 
         return reply.status(200).send({ deleted: true, sessionId: id });
       } catch (error) {

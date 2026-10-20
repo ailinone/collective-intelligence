@@ -25,12 +25,11 @@ import logging
 import time
 from collections import Counter
 from pathlib import Path
-from typing import Any, Iterator
+from typing import Any
 
 import click
 import numpy as np
 from tokenizers import Tokenizer
-from tqdm import tqdm
 
 logger = logging.getLogger(__name__)
 
@@ -38,6 +37,7 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # Evaluation metrics
 # ---------------------------------------------------------------------------
+
 
 def compute_fertility(
     tokenizer: Tokenizer,
@@ -231,6 +231,7 @@ def compute_token_frequency_stats(
 # Corpus loading
 # ---------------------------------------------------------------------------
 
+
 def load_eval_texts(
     path: Path,
     text_field: str = "text",
@@ -250,7 +251,7 @@ def load_eval_texts(
                 if len(texts) >= max_texts:
                     break
     else:
-        with open(path, "r", encoding="utf-8", errors="replace") as f:
+        with open(path, encoding="utf-8", errors="replace") as f:
             for line in f:
                 line = line.strip()
                 if line:
@@ -265,6 +266,7 @@ def load_eval_texts(
 # ---------------------------------------------------------------------------
 # Main evaluation pipeline
 # ---------------------------------------------------------------------------
+
 
 def evaluate_tokenizer(
     tokenizer_path: Path,
@@ -335,10 +337,13 @@ def evaluate_tokenizer(
     report["aggregate"] = {
         "mean_fertility": round(np.mean(all_fertilities), 4) if all_fertilities else None,
         "mean_bytes_per_token": round(np.mean(all_compressions), 4) if all_compressions else None,
-        "languages_evaluated": len([
-            l for l in report["languages"].values()
-            if isinstance(l, dict) and "error" not in l
-        ]),
+        "languages_evaluated": len(
+            [
+                entry
+                for entry in report["languages"].values()
+                if isinstance(entry, dict) and "error" not in entry
+            ]
+        ),
     }
 
     elapsed = time.time() - start_time
@@ -356,13 +361,35 @@ def evaluate_tokenizer(
 # CLI
 # ---------------------------------------------------------------------------
 
+
 @click.command("eval-tokenizer")
-@click.option("--tokenizer", "tokenizer_path", required=True, type=click.Path(exists=True), help="Path to tokenizer.json")
-@click.option("--eval-corpus", required=True, multiple=True, help="Eval corpus in format 'lang:path' (e.g. 'en:/data/eval_en.jsonl')")
-@click.option("--output", "output_path", required=True, type=click.Path(), help="Output evaluation report JSON")
+@click.option(
+    "--tokenizer",
+    "tokenizer_path",
+    required=True,
+    type=click.Path(exists=True),
+    help="Path to tokenizer.json",
+)
+@click.option(
+    "--eval-corpus",
+    required=True,
+    multiple=True,
+    help="Eval corpus in format 'lang:path' (e.g. 'en:/data/eval_en.jsonl')",
+)
+@click.option(
+    "--output",
+    "output_path",
+    required=True,
+    type=click.Path(),
+    help="Output evaluation report JSON",
+)
 @click.option("--text-field", default="text", help="Text field name in JSONL files")
 @click.option("--max-texts", default=10_000, type=int, help="Max texts per language")
-@click.option("--log-level", default="INFO", type=click.Choice(["DEBUG", "INFO", "WARNING", "ERROR"]))
+@click.option(
+    "--log-level",
+    default="INFO",
+    type=click.Choice(["DEBUG", "INFO", "WARNING", "ERROR"]),
+)
 def cli(
     tokenizer_path: str,
     eval_corpus: tuple[str, ...],
@@ -395,16 +422,18 @@ def cli(
         max_texts_per_lang=max_texts,
     )
 
-    click.echo(f"\n--- Tokenizer Evaluation Report ---")
+    click.echo("\n--- Tokenizer Evaluation Report ---")
     click.echo(f"Vocab size:           {report['vocab_size']:>10,}")
     click.echo(f"Languages evaluated:  {report['aggregate']['languages_evaluated']:>10}")
 
     if report["aggregate"]["mean_fertility"] is not None:
-        click.echo(f"Mean fertility:       {report['aggregate']['mean_fertility']:>10.4f} tokens/word")
+        mean_fertility = report["aggregate"]["mean_fertility"]
+        click.echo(f"Mean fertility:       {mean_fertility:>10.4f} tokens/word")
     if report["aggregate"]["mean_bytes_per_token"] is not None:
-        click.echo(f"Mean compression:     {report['aggregate']['mean_bytes_per_token']:>10.4f} bytes/token")
+        mean_bytes_per_token = report["aggregate"]["mean_bytes_per_token"]
+        click.echo(f"Mean compression:     {mean_bytes_per_token:>10.4f} bytes/token")
 
-    click.echo(f"\nPer-language results:")
+    click.echo("\nPer-language results:")
     for lang, data in report["languages"].items():
         if "error" in data:
             click.echo(f"  {lang:5s}  ERROR: {data['error']}")

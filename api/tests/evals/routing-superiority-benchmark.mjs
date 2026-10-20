@@ -427,7 +427,7 @@ async function runBenchmark() {
         const qLabel = grade.errorType ? `q=N/A(${grade.errorType})` : `q=${grade.score.toFixed(2)}`;
         console.log(`${icon} ${qLabel} | ${latencyMs}ms | $${(meta.cost_usd ?? 0).toFixed(6)} | models=${meta.models_used?.length ?? '?'}`);
       } catch (e) {
-        console.log(`EXCEPTION: ${e.message}`);
+        console.log(`EXCEPTION: ${e.message}${e.cause ? ` [${e.cause.code || e.cause.message}]` : ''}`);
         results.push({
           taskFamily: testCase.taskFamily,
           complexity: testCase.complexity,

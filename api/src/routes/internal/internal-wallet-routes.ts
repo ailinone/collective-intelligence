@@ -18,6 +18,17 @@
  *        (X-Wallet-Topup-Secret == WALLET_TOPUP_SECRET) — a SYSTEM operation, not
  *        on-behalf-of a user, so the org comes from the body (== id tenant_id).
  *
+ *   GET  /v1/internal/wallet/org-balance — system read of ANY org's wallet
+ *        balance (billing -> ci, for the daily reconciliation of the wallet
+ *        debit mirror). Same shared-secret auth as top-up; org comes from the
+ *        query string. Read-only, so the same secret is sufficient.
+ *
+ *   POST /v1/internal/wallet/grant — credit a promotional grant with expiry
+ *        (allocation bucket: debits spend the promotional portion first; the
+ *        sweeper reclaims the unspent remainder at expiry). Called by the billing
+ *        campaign engine. Same shared-secret auth as top-up; idempotent per
+ *        grantId (campaign redemption id).
+ *
  * Both live under /v1/internal/* (exempted from the global user-auth + rate-limit
  * hooks; secured here at the route level).
  *
@@ -45,6 +56,7 @@ import {
 import { resolveOrProvisionActingUser } from '@/services/internal-acting-user';
 import { walletInstance, isWalletGateEnabled } from '@/services/prepaid-wallet-gate';
 import { getBillingActorHeaders } from '@/services/billing-actor-token';
+import { billableTenantId } from '@/services/billing-tenant-resolver';
 
 const log = logger.child({ component: 'internal-wallet-routes' });
 const SCOPE_READ = 'apikeys:read:on_behalf';
@@ -155,6 +167,148 @@ export async function internalWalletRoutes(server: FastifyInstance): Promise<voi
   );
 
   /**
+   * GET org-balance — system read of an org's wallet balance. Called by
+   * billing's daily reconciliation task (tasks/reconciliation.py) to audit
+   * the convergence wallet(ci) -> Credit(billing) after the consumption
+   * mirror (prepaid-wallet-gate.mirrorWalletDebitToBilling) landed. The
+   * mirror is fire-and-forget; when billing is down past its retry ladder
+   * this is the endpoint that makes the accounting gap VISIBLE instead of
+   * silently permanent.
+   */
+  server.get(
+    '/v1/internal/wallet/org-balance',
+    { preHandler: [requireTopupSecret] },
+    async (request, reply) => {
+      const query = (request.query ?? {}) as { organizationId?: unknown };
+      const organizationId =
+        typeof query.organizationId === 'string' ? query.organizationId : '';
+
+      if (!organizationId || !UUID_RE.test(organizationId)) {
+        return reply
+          .code(400)
+          .send({ error: 'bad_request', message: 'organizationId (uuid) is required' });
+      }
+
+      try {
+        const balanceUsd = await walletInstance().getBalanceUsd(organizationId);
+        return reply.send({ organizationId, balanceUsd });
+      } catch (error) {
+        log.error({ error, organizationId }, 'wallet org-balance read failed');
+        return reply
+          .code(503)
+          .send({ error: 'wallet_unavailable', message: 'Could not read balance.' });
+      }
+    }
+  );
+
+  /**
+   * POST /v1/internal/wallet/grant — credit a promotional grant with expiry
+   * (billing campaign engine → ci). Same shared-secret auth as top-up: a
+   * SYSTEM operation, org comes from the body. Idempotent per `grantId` (the
+   * campaign redemption id): a retried call credits once and returns the
+   * current balance with `applied: false`. The credit lands in the wallet as
+   * spendable balance with an allocation bucket — debits consume the
+   * promotional portion first (soonest expiry first) and the expiry sweeper
+   * reclaims whatever is unspent at `expiresAtMs`.
+   */
+  server.post(
+    '/v1/internal/wallet/grant',
+    { preHandler: [requireTopupSecret] },
+    async (request, reply) => {
+      const body = (request.body ?? {}) as {
+        organizationId?: unknown;
+        amountUsd?: unknown;
+        grantId?: unknown;
+        expiresAtMs?: unknown;
+      };
+      const organizationId = typeof body.organizationId === 'string' ? body.organizationId : '';
+      const amountUsd = typeof body.amountUsd === 'number' ? body.amountUsd : Number(body.amountUsd);
+      const grantId = typeof body.grantId === 'string' ? body.grantId : '';
+      const expiresAtMs =
+        typeof body.expiresAtMs === 'number' ? body.expiresAtMs : Number(body.expiresAtMs);
+
+      if (!organizationId || !UUID_RE.test(organizationId)) {
+        return reply
+          .code(400)
+          .send({ error: 'bad_request', message: 'organizationId (uuid) is required' });
+      }
+      if (!Number.isFinite(amountUsd) || amountUsd <= 0) {
+        return reply
+          .code(400)
+          .send({ error: 'bad_request', message: 'amountUsd must be a positive number' });
+      }
+      // The grant id becomes a wallet_grants PK and a ledger idempotency key —
+      // charset-restricted so it can never smuggle anything into either.
+      if (!/^[A-Za-z0-9:_-]{1,128}$/.test(grantId)) {
+        return reply.code(400).send({
+          error: 'bad_request',
+          message: 'grantId is required (1-128 chars, [A-Za-z0-9:_-])',
+        });
+      }
+      if (!Number.isFinite(expiresAtMs) || expiresAtMs <= Date.now()) {
+        return reply.code(400).send({
+          error: 'bad_request',
+          message: 'expiresAtMs must be a future epoch-milliseconds timestamp',
+        });
+      }
+
+      try {
+        const res = await walletInstance().grant(organizationId, grantId, amountUsd, expiresAtMs);
+        log.info(
+          { organizationId, grantId, amountUsd, expiresAtMs, applied: res.applied, balanceUsd: res.balanceUsd },
+          'wallet promotional grant applied'
+        );
+        return reply.send({
+          organizationId,
+          grantId,
+          balanceUsd: res.balanceUsd,
+          applied: res.applied,
+        });
+      } catch (error) {
+        log.error({ error, organizationId, grantId, amountUsd }, 'wallet grant failed');
+        return reply
+          .code(503)
+          .send({ error: 'wallet_unavailable', message: 'Could not apply grant.' });
+      }
+    }
+  );
+
+  /**
+   * POST /v1/internal/wallet/grant/reverse — claw back a promotional grant
+   * (campaign fraud/abuse reversal, billing → ci). Same shared secret as the
+   * other system wallet routes. Idempotent per grantId: only the CURRENT
+   * unspent remainder is reclaimed; money already spent from the grant stays
+   * spent (the campaign ledger on the billing side records the accounting
+   * reversal regardless).
+   */
+  server.post(
+    '/v1/internal/wallet/grant/reverse',
+    { preHandler: [requireTopupSecret] },
+    async (request, reply) => {
+      const body = (request.body ?? {}) as { grantId?: unknown };
+      const grantId = typeof body.grantId === 'string' ? body.grantId.trim() : '';
+
+      if (!/^[A-Za-z0-9:_-]{1,128}$/.test(grantId)) {
+        return reply.code(400).send({
+          error: 'bad_request',
+          message: 'grantId is required (1-128 chars, [A-Za-z0-9:_-])',
+        });
+      }
+
+      try {
+        const res = await walletInstance().reverseGrant(grantId);
+        log.info({ grantId, ...res }, 'wallet grant reversal applied');
+        return reply.send({ grantId, status: res.status, reversedUsd: res.reversedUsd });
+      } catch (error) {
+        log.error({ error, grantId }, 'wallet grant reversal failed');
+        return reply
+          .code(503)
+          .send({ error: 'wallet_unavailable', message: 'Could not reverse grant.' });
+      }
+    }
+  );
+
+  /**
    * POST /v1/internal/billing/checkout-credits — start a Stripe credit purchase
    * for the acting user's org. ci is the integration hub (it knows the org from
    * X-Acting-User), so the portal BFF only ever talks to ci-internal. Proxies to
@@ -215,13 +369,21 @@ export async function internalWalletRoutes(server: FastifyInstance): Promise<voi
       }
 
       try {
-        const actorHeaders = await getBillingActorHeaders(user.organizationId);
+        // BILLING_TENANT_MAPPING_ENABLED: address billing with the id-
+        // canonical tenant (where plan + Stripe live) instead of ci's org
+        // UUID. Flag off / unresolved => user.organizationId, exactly as
+        // before (billing-tenant-resolver is fail-open by contract). Both
+        // tenant channels move TOGETHER: x-tenant-id AND X-Acting-Tenant-Id
+        // (inside actorHeaders) must agree or billing's verify_service_token
+        // rejects the mismatch.
+        const billingTenantId = await billableTenantId(user.organizationId, user.id);
+        const actorHeaders = await getBillingActorHeaders(billingTenantId);
         const res = await fetch(`${billingUrl}/v1/billing/checkout/credits`, {
           method: 'POST',
           headers: {
             'content-type': 'application/json',
             'billing-api-secret-key': billingSecret,
-            'x-tenant-id': user.organizationId,
+            'x-tenant-id': billingTenantId,
             ...actorHeaders,
           },
           body: JSON.stringify({
