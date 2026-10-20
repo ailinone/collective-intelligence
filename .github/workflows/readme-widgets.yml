@@ -19,6 +19,7 @@ on:
 
 permissions:
   contents: write
+  pull-requests: write # gh pr create/merge in the "Commit if changed" step
 
 concurrency:
   group: readme-widgets
