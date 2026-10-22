@@ -20,7 +20,7 @@
  * technique as queue-runner-secrets-wiring.test.ts) because the entrypoints
  * cannot be booted in a unit test.
  */
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import Fastify, { type FastifyInstance } from 'fastify';
@@ -53,7 +53,12 @@ const API_SRC = join(__dirname, '..', '..');
 const REPO_ROOT = join(API_SRC, '..', '..');
 const read = (...parts: string[]) => readFileSync(join(...parts), 'utf8');
 
-const compose = read(REPO_ROOT, 'docker', 'docker-compose.production.yml');
+// The production compose file is PRIVATE-REPO-ONLY: the public mirror's
+// export pipeline strips it, so skip the whole contract there instead of
+// failing every branch on an ENOENT (mirror CI ran red repo-wide for days).
+const composePath = join(REPO_ROOT, 'docker', 'docker-compose.production.yml');
+const hasCompose = existsSync(composePath);
+const compose = hasCompose ? readFileSync(composePath, 'utf8') : '';
 
 /** Text of one top-level service block (`  <name>:` up to the next one). */
 function serviceBlock(name: string): string {
@@ -77,7 +82,7 @@ function healthcheckUrl(service: string): string {
   return match![1];
 }
 
-describe('docker-compose.production.yml healthchecks are liveness-only', () => {
+describe.skipIf(!hasCompose, 'docker-compose.production.yml healthchecks are liveness-only', () => {
   it('api probes /health/live', () => {
     expect(healthcheckUrl('api')).toBe('http://127.0.0.1:3000/health/live');
   });
