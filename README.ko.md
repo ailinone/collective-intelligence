@@ -37,7 +37,11 @@ Source: https://github.com/ailinone/collective-intelligence
   <a href="README.ru.md"><img alt="Русский" src="https://img.shields.io/badge/%D0%A0%D1%83%D1%81%D1%81%D0%BA%D0%B8%D0%B9-30363d?style=for-the-badge"></a>
 </p>
 
-> **TL;DR:** Ailin¹ 은 **103,224 개의 AI 모델** 을 하나의 집단 모델 안에서 협력시키며, 단일 모델로 라우팅하는 대신 **32 가지 전략** 으로 오케스트레이션합니다. 모든 요청에 구조화된 다양성, 독립적 추론, 완전한 의사결정 감사 추적을 적용해 단일 모델 통합보다 더 신뢰할 수 있고 회복력 있으며 감사 가능합니다. 또한 [공개적으로 프런티어를 상대로 입증되었습니다](#프런티어를-상대로-공개적으로-입증).
+<p align="center"><b><a href="https://ailin.chat/">Ailin¹ Chat</a> · <a href="https://ailin.dev/">Ailin¹ Dev</a> · <a href="https://ailin.guide/">Ailin¹ Guide</a></b></p>
+
+**카탈로그 수치는 발견된 모델 식별자의 개수이며, 요청당 실행되는 모델 수가 아닙니다.** AI Decision Layer는 각 전략에 필요한 참여 모델만 선택하고, 검색 결과에 따라 카탈로그가 계속 바뀝니다.
+
+> **TL;DR:** Ailin¹은 **10만 개 이상의 발견된 모델 식별자**를 인덱싱하고, 각 작업에 필요한 모델과 집단 전략을 동적으로 선택합니다. AI Decision Layer는 독립적 추론, 가능한 경우의 검증, 감사 가능한 의사결정을 **31개의 등록된 전략**으로 결합합니다. 객관적으로 검증 가능한 작업의 공개 벤치마크에서 검증 기반 합의 전략은 **38회 중 37회 정답**을 기록했습니다([검증 가능한 결과](#프런티어를-상대로-공개적으로-입증)).
 >
 > **→ [퀵스타트](#퀵스타트) · [증거 보기](#프런티어를-상대로-공개적으로-입증) · [문서](https://ailin.guide)**
 
@@ -56,8 +60,8 @@ Source: https://github.com/ailinone/collective-intelligence
 [![Contributor Covenant 2.1](https://img.shields.io/badge/Contributor%20Covenant-2.1-4baaaa.svg)](CODE_OF_CONDUCT.md)
 [![CodeQL 상태, 클릭하면 현재 검출 결과 확인](https://github.com/ailinone/collective-intelligence/actions/workflows/github-code-scanning/codeql/badge.svg)](https://github.com/ailinone/collective-intelligence/security/code-scanning)
 [![~90개 제공자 통합](https://img.shields.io/badge/provider_integrations-~90-8A2BE2)](https://ailin.guide/architecture/provider-ecosystem)
-[![인덱싱된 모델 103,224개](https://img.shields.io/badge/models_indexed-103%2C224-blueviolet)](#수만-개의-모델-언제나-프런티어에)
-[![등록된 집단 전략 32개](https://img.shields.io/badge/collective_strategies-32_registered-6A5ACD)](#요청이-흐르는-방식)
+[![인덱싱된 모델 100,000+개](https://img.shields.io/badge/models_indexed-100k%2B-blueviolet)](#수만-개의-모델-언제나-프런티어에)
+[![등록된 집단 전략 31개](https://img.shields.io/badge/collective_strategies-31_registered-6A5ACD)](#요청이-흐르는-방식)
 [![GitHub stars](https://img.shields.io/github/stars/ailinone/collective-intelligence?style=social)](https://github.com/ailinone/collective-intelligence/stargazers)
 [![GitHub Discussions: 열림](https://img.shields.io/badge/discussions-open-2ea44f?logo=github)](https://github.com/ailinone/collective-intelligence/discussions)
 
@@ -71,9 +75,9 @@ Source: https://github.com/ailinone/collective-intelligence
 ## 집단 지성: AI의 다음 프런티어
 
 AI 업계는 지금까지 더 큰 단일 모델을 만드는 데 집중해 왔습니다.
-Ailin¹은 이를 보완하는 접근을 취합니다: 서로 협업하고, 토론하고,
-비판하고, 종합할 수 있는 **103,224개 AI 모델**의 집단(2026-08 기준
-라이브 프로덕션 수치)이 [구조화된 다양성](https://ailin.guide/architecture/cognitive-diversity)을 적용해, 단일 모델이 곧
+Ailin¹은 이를 보완하는 접근을 취합니다: **10만 개 이상의 발견된 모델 식별자**를
+인덱싱하고 요청에 맞게 필요한 모델을 선택합니다. 선택된 모델들은 서로 협업하고,
+토론하고, 비판하고, 종합하며 [구조화된 다양성](https://ailin.guide/architecture/cognitive-diversity)을 적용해, 단일 모델이 곧
 학습의 단일 지점이자 아키텍처·편향·장애의 단일 지점이 되는 문제들에
 맞섭니다.
 
@@ -88,7 +92,7 @@ Ailin¹은 이를 보완하는 접근을 취합니다: 서로 협업하고, 토�
 Hong & Page의 "다양성이 능력을 이긴다(diversity trumps ability)"
 결과와 Woolley 등의 집단 성과 연구가 그것입니다(공개
 [참고문헌](https://ailin.guide/reference/bibliography) 참조). Ailin¹은
-그 원리를 엔지니어링 플랫폼으로 구현합니다: 103,224개 모델을
+그 원리를 엔지니어링 플랫폼으로 구현합니다: 10만 개 이상의 모델 식별자를
 인덱싱하는 디스커버리 엔진, 수십 가지 조율 전략, 모든 조율 결정을
 기록하는 [감사 기반(audit substrate)](https://ailin.guide/architecture/collective-intelligence), 그리고
 폐루프(closed-loop) 학습 파이프라인. 이 계층들 중 일부는 오늘 이미
@@ -168,7 +172,7 @@ Ailin¹ 집단은 하드코딩된 모델 목록이나 수동 제공자 통합에
 모델이 출시되는 즉시 자동으로 흡수합니다.
 
 그 결과: [~90개 제공자
-통합](https://ailin.guide/architecture/provider-ecosystem)에 걸친 **103,224개 모델**의 라이브 집단이 생태계와
+통합](https://ailin.guide/architecture/provider-ecosystem)에 걸친 **10만 개 이상의 모델 식별자**를 담은 동적 카탈로그가 생태계와
 함께 최신 상태를 유지합니다. 발견된 소스에서 새 모델이 공개되면,
 디스커버리 엔진은 코드 변경도, 설정도, 다운타임도 없이 그것을
 흡수합니다.
@@ -208,7 +212,7 @@ Ailin¹ 집단은 하드코딩된 모델 목록이나 수동 제공자 통합에
 
 ### 반증 가능한 가설로서의 집단 전략
 
-등록된 32개 전략(수렴 하한선을 갖춘 합의, 블라인드 토론, 전문가
+등록된 31개 전략(수렴 하한선을 갖춘 합의, 블라인드 토론, 전문가
 패널, 악마의 변호인 합의, 비용 캐스케이드, 객관적 검증을 갖춘
 best-of-N) 각각은 정직한 도달 가능성(자동 선택 가능 / 명시적 전용 /
 로드맵)으로 라벨링되어 있고, 각각은 이 저장소의 실험 하네스로 반증
@@ -276,7 +280,7 @@ flowchart LR
     A[OpenAI-compatible request] --> B{Strategy resolution<br/>ailin-auto cascade}
     B -->|simple| C[Single model<br/>cheapest viable]
     B -->|declared answer_check| D[Consensus + verifier]
-    B -->|explicit| E[1 of 32 strategies]
+    B -->|explicit| E[1 of 31 strategies]
     C --> F[Execution + fallback chains]
     D --> F
     E --> F
@@ -288,7 +292,7 @@ flowchart LR
 세 갈래 경로 중 하나로 보냅니다. 단순한 요청은 가장 저렴하게 실행
 가능한 단일 모델로, `ailin_constraints.answer_check`를 선언한 요청은
 합의(consensus)와 결정론적 검증기로, 전략을 명시적으로 지정한 요청은
-등록된 32개 전략 중 하나로 향합니다. 세 경로 모두 실행(폴백 체인
+등록된 31개 전략 중 하나로 향합니다. 세 경로 모두 실행(폴백 체인
 포함) 단계로 수렴한 뒤 중재와 품질 게이트를 거치고, 완전한
 `ailin_metadata` 의사결정 이력이 담긴 응답으로 마무리됩니다.*
 
@@ -408,7 +412,7 @@ Linux에서는 api 서비스에
 | 오늘 출시됨 | 개발 중 |
 |---|---|
 | OpenAI 호환 API (chat, responses, embeddings, images, files) | 학습된 코디네이터 가중치 (설계 + 감사 기반은 지금 출시됨) |
-| 32개 오케스트레이션 전략 (단일 모델 베이스라인 포함) + `ailin-auto` 캐스케이드 | 자체 모델 패밀리 프로덕션 가중치 (학습 플라이휠 구축 완료) |
+| 31개 오케스트레이션 전략 (단일 모델 베이스라인 포함) + `ailin-auto` 캐스케이드 | 자체 모델 패밀리 프로덕션 가중치 (학습 플라이휠 구축 완료) |
 | 디스커버리 엔진, 헬스 게이트 라우팅, 폴백 체인 | 완전히 감사된 비용 회계를 갖춘 확장된 벤치마크 캠페인 |
 | 완전한 의사결정 이력 (`ailin_metadata`) | 독립 평가를 위한 단계별 캠페인 가이드 |
 | 멀티모달 + 결정론적 파일 생성 (DOCX/XLSX/PDF/PPTX/ZIP/코드) | |

@@ -37,7 +37,11 @@ Source: https://github.com/ailinone/collective-intelligence
   <a href="README.ru.md"><img alt="Русский" src="https://img.shields.io/badge/%D0%A0%D1%83%D1%81%D1%81%D0%BA%D0%B8%D0%B9-30363d?style=for-the-badge"></a>
 </p>
 
-> **TL;DR**: Ailin¹ は **103,224 個の AI モデル** をひとつのコレクティブ・モデルの中で協調させ、単一モデルへのルーティングではなく **32 の戦略** でオーケストレーションします。すべてのリクエストに構造化された多様性・独立した推論・完全な意思決定の監査証跡を付与し、単一モデル統合よりも信頼性・耐障害性・監査可能性に優れます。さらに[公開の場でフロンティアを相手に実証済み](#フロンティアを相手に公開の場で実証済み)。
+<p align="center"><b><a href="https://ailin.chat/">Ailin¹ Chat</a> · <a href="https://ailin.dev/">Ailin¹ Dev</a> · <a href="https://ailin.guide/">Ailin¹ Guide</a></b></p>
+
+**カタログの件数は発見済みモデル識別子の数であり、1回のリクエストで実行されるモデル数ではありません。** AI Decision Layer が各戦略に必要なモデルのみを選び、件数は継続的な探索によって変化します。
+
+> **TL;DR**: Ailin¹ は **10万件を超える発見済みモデル識別子** を索引化し、タスクに合わせて適切なモデルと集団戦略を動的に選択します。AI Decision Layer は、独立した推論、可能な場合の検証、追跡できる判断を **31の登録戦略** で支えます。客観的に検証可能なタスクの公開ベンチマークでは、検証付きコンセンサスが **38回中37回正答** しました（[再現可能な証拠](#フロンティアを相手に公開の場で実証済み)）。
 >
 > **→ [クイックスタート](#クイックスタート) · [エビデンスを見る](#フロンティアを相手に公開の場で実証済み) · [ドキュメント](https://ailin.guide)**
 
@@ -56,8 +60,8 @@ Source: https://github.com/ailinone/collective-intelligence
 [![Contributor Covenant 2.1](https://img.shields.io/badge/Contributor%20Covenant-2.1-4baaaa.svg)](CODE_OF_CONDUCT.md)
 [![CodeQLの状態、クリックすると現在の検出結果を確認できます](https://github.com/ailinone/collective-intelligence/actions/workflows/github-code-scanning/codeql/badge.svg)](https://github.com/ailinone/collective-intelligence/security/code-scanning)
 [![~90件のプロバイダー統合](https://img.shields.io/badge/provider_integrations-~90-8A2BE2)](https://ailin.guide/architecture/provider-ecosystem)
-[![103,224モデルをインデックス済み](https://img.shields.io/badge/models_indexed-103%2C224-blueviolet)](#数万のモデル常にフロンティアに)
-[![登録済み32件のコレクティブ戦略](https://img.shields.io/badge/collective_strategies-32_registered-6A5ACD)](#リクエストの流れ)
+[![100,000+モデルをインデックス済み](https://img.shields.io/badge/models_indexed-100k%2B-blueviolet)](#数万のモデル常にフロンティアに)
+[![登録済み31件のコレクティブ戦略](https://img.shields.io/badge/collective_strategies-31_registered-6A5ACD)](#リクエストの流れ)
 [![GitHub stars](https://img.shields.io/github/stars/ailinone/collective-intelligence?style=social)](https://github.com/ailinone/collective-intelligence/stargazers)
 [![GitHub Discussions: 公開中](https://img.shields.io/badge/discussions-open-2ea44f?logo=github)](https://github.com/ailinone/collective-intelligence/discussions)
 
@@ -71,9 +75,9 @@ Source: https://github.com/ailinone/collective-intelligence
 ## コレクティブ・インテリジェンス：AIの次なるフロンティア
 
 AI業界は、より大きな単一モデルを構築することに注力してきました。
-Ailin¹ はそれを補完するアプローチを取ります: **103,224のAIモデル**
-(2026-08時点の本番稼働数)からなるコレクティブが、協調し、討論し、
-批評し、統合する。単一モデルがトレーニング・アーキテクチャ・バイアス・
+Ailin¹ はそれを補完するアプローチを取ります: **10万件を超える発見済みモデル識別子**を索引化し、
+タスクごとに適切なモデルを選んでコレクティブを構成します。その参加モデルが協調し、討論し、
+批評し、統合します。単一モデルがトレーニング・アーキテクチャ・バイアス・
 障害それぞれの単一点となってしまう問題に対して、
 [構造化された多様性](https://ailin.guide/architecture/cognitive-diversity)を適用します。
 
@@ -90,7 +94,7 @@ API、オープンウェイトの挑戦者、そして自社モデルファミ�
 能力に勝る)」という結果や、Woolley らによる集合的パフォーマンスの
 研究(公開の[参考文献一覧](https://ailin.guide/reference/bibliography)を参照)。
 Ailin¹ はその原理をエンジニアリング・プラットフォームとして実装します:
-103,224のモデルをインデックスするディスカバリーエンジン、数十の協調戦略、
+10万件以上のモデル識別子をインデックスするディスカバリーエンジン、数十の協調戦略、
 すべての協調上の意思決定を記録する
 [監査基盤](https://ailin.guide/architecture/collective-intelligence)、
 そしてクローズドループの学習パイプライン。これらのレイヤーには今日
@@ -173,7 +177,7 @@ Ailin¹ のコレクティブは、ハードコードされたモデルリスト
 自動的に吸収します。
 
 その結果: [~90のプロバイダー統合](https://ailin.guide/architecture/provider-ecosystem)にまたがる
-**103,224モデル**のライブなコレクティブが、エコシステムの最新状態を
+**10万件超のモデル識別子**を収める動的なカタログが、エコシステムの最新状態を
 保ち続けます。発見済みのソースから新しいモデルが公開されると、
 ディスカバリーエンジンはコード変更・設定・ダウンタイムなしにそれを
 吸収します。
@@ -216,7 +220,7 @@ Ailin¹ のコレクティブは、ハードコードされたモデルリスト
 
 ### 反証可能な仮説としてのコレクティブ戦略
 
-登録済みの32戦略(収束フロア付きコンセンサス、ブラインド討論、
+登録済みの31戦略(収束フロア付きコンセンサス、ブラインド討論、
 エキスパートパネル、悪魔の代弁者コンセンサス、コストカスケード、
 客観的検証付き best-of-N)、それぞれに誠実な到達可能性ラベル
 (自動選択可 / 明示指定のみ / ロードマップ)が付き、それぞれがこの
@@ -287,7 +291,7 @@ flowchart LR
     A[OpenAI-compatible request] --> B{Strategy resolution<br/>ailin-auto cascade}
     B -->|simple| C[Single model<br/>cheapest viable]
     B -->|declared answer_check| D[Consensus + verifier]
-    B -->|explicit| E[1 of 32 strategies]
+    B -->|explicit| E[1 of 31 strategies]
     C --> F[Execution + fallback chains]
     D --> F
     E --> F
@@ -299,7 +303,7 @@ flowchart LR
 リクエストを3つの経路のいずれかへ振り分けます。単純なリクエストは、
 最も安価で実行可能な単一モデルへ。`ailin_constraints.answer_check` を
 宣言したリクエストはコンセンサス+決定論的検証器へ。戦略を明示的に
-指定したリクエストは、登録済み32戦略のうちの1つへ。3つの経路はすべて
+指定したリクエストは、登録済み31戦略のうちの1つへ。3つの経路はすべて
 実行とそのフォールバックチェーンに合流し、続いて裁定と品質ゲートを
 経て、完全な `ailin_metadata` プロビナンスを伴うレスポンスを生成
 します。*
@@ -421,7 +425,7 @@ print(r.model_extra["ailin_metadata"])  # strategy, models, costs, dissent — t
 | 現在提供中 | 開発中 |
 |---|---|
 | OpenAI互換API(chat、responses、embeddings、images、files) | 訓練済みコーディネーター・ウェイト(設計 + 監査基盤は提供済み) |
-| 32のオーケストレーション戦略(単一モデルのベースラインを含む)+ `ailin-auto` カスケード | 自社モデルファミリーの本番ウェイト(学習フライホイールは構築済み) |
+| 31のオーケストレーション戦略(単一モデルのベースラインを含む)+ `ailin-auto` カスケード | 自社モデルファミリーの本番ウェイト(学習フライホイールは構築済み) |
 | ディスカバリーエンジン、ヘルスゲート付きルーティング、フォールバックチェーン | 完全に監査されたコスト会計を伴う拡大ベンチマークキャンペーン |
 | 完全な意思決定プロビナンス(`ailin_metadata`) | 独立評価のためのステップバイステップのキャンペーンガイド |
 | マルチモーダル + 決定論的ファイル生成(DOCX/XLSX/PDF/PPTX/ZIP/コード) | |

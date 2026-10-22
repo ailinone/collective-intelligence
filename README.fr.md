@@ -37,7 +37,11 @@ Source: https://github.com/ailinone/collective-intelligence
   <a href="README.ru.md"><img alt="Русский" src="https://img.shields.io/badge/%D0%A0%D1%83%D1%81%D1%81%D0%BA%D0%B8%D0%B9-30363d?style=for-the-badge"></a>
 </p>
 
-> **TL;DR** : Ailin¹ fait collaborer **103,224 modèles d'IA** au sein d'un seul modèle collectif, orchestrés par **32 stratégies** plutôt que routés vers un seul. Diversité structurée, raisonnement indépendant et traçabilité décisionnelle complète sur chaque requête : plus fiable, résilient et auditable que toute intégration mono-modèle, et [éprouvé face à la frontière, au grand jour](#éprouvé-face-à-la-frontière-au-grand-jour).
+<p align="center"><b><a href="https://ailin.chat/">Ailin¹ Chat</a> · <a href="https://ailin.dev/">Ailin¹ Dev</a> · <a href="https://ailin.guide/">Ailin¹ Guide</a></b></p>
+
+**La taille du catalogue compte les identifiants de modèles découverts, pas les modèles exécutés par requête.** L'AI Decision Layer active uniquement les participants nécessaires à chaque stratégie; le catalogue évolue avec la découverte.
+
+> **TL;DR** : Ailin¹ indexe **plus de 100 000 identifiants de modèles découverts** et mobilise les modèles et stratégies collectives adaptés à chaque tâche. Son AI Decision Layer associe raisonnement indépendant, vérification lorsque cela est possible et traçabilité des décisions grâce à **31 stratégies enregistrées**. Dans le benchmark public de tâches objectivement vérifiables, le consensus vérifié a obtenu **37 bonnes réponses sur 38** ([voir les preuves](#éprouvé-face-à-la-frontière-au-grand-jour)).
 >
 > **→ [Démarrage rapide](#démarrage-rapide) · [Voir les preuves](#éprouvé-face-à-la-frontière-au-grand-jour) · [Docs](https://ailin.guide)**
 
@@ -57,8 +61,8 @@ complète : **[ailin.guide](https://ailin.guide)**.
 [![Contributor Covenant 2.1](https://img.shields.io/badge/Contributor%20Covenant-2.1-4baaaa.svg)](CODE_OF_CONDUCT.md)
 [![Statut de CodeQL, cliquez pour voir les résultats actuels](https://github.com/ailinone/collective-intelligence/actions/workflows/github-code-scanning/codeql/badge.svg)](https://github.com/ailinone/collective-intelligence/security/code-scanning)
 [![~90 intégrations de fournisseurs](https://img.shields.io/badge/provider_integrations-~90-8A2BE2)](https://ailin.guide/architecture/provider-ecosystem)
-[![103,224 modèles indexés](https://img.shields.io/badge/models_indexed-103%2C224-blueviolet)](#des-dizaines-de-milliers-de-modèles-toujours-à-la-frontière)
-[![32 stratégies collectives enregistrées](https://img.shields.io/badge/collective_strategies-32_registered-6A5ACD)](#le-parcours-dune-requête)
+[![100,000+ modèles indexés](https://img.shields.io/badge/models_indexed-100k%2B-blueviolet)](#des-dizaines-de-milliers-de-modèles-toujours-à-la-frontière)
+[![31 stratégies collectives enregistrées](https://img.shields.io/badge/collective_strategies-31_registered-6A5ACD)](#le-parcours-dune-requête)
 [![GitHub stars](https://img.shields.io/github/stars/ailinone/collective-intelligence?style=social)](https://github.com/ailinone/collective-intelligence/stargazers)
 [![Discussions GitHub : ouvertes](https://img.shields.io/badge/discussions-open-2ea44f?logo=github)](https://github.com/ailinone/collective-intelligence/discussions)
 
@@ -73,9 +77,9 @@ complète : **[ailin.guide](https://ailin.guide)**.
 
 L'industrie de l'IA s'est concentrée sur la construction de modèles
 individuels toujours plus gros. Ailin¹ adopte une approche
-complémentaire : un collectif de **103,224 modèles d'IA** (comptage de
-production en direct, 2026-08) capables de collaborer, débattre, se
-critiquer et synthétiser ensemble, en appliquant la
+complémentaire : elle indexe **plus de 100 000 identifiants de modèles**
+et sélectionne, pour chaque requête, les participants capables de collaborer,
+débattre, se critiquer et synthétiser ensemble, en appliquant la
 [diversité structurée](https://ailin.guide/architecture/cognitive-diversity) aux problèmes où un
 modèle unique est un point unique d'entraînement, d'architecture, de
 biais et de défaillance.
@@ -94,7 +98,7 @@ diversité cognitive : le résultat « diversity trumps ability » de
 Hong & Page et les travaux de Woolley et al. sur la performance
 collective (voir la [Bibliographie](https://ailin.guide/reference/bibliography)
 publique). Ailin¹ applique ce principe sous forme de plateforme
-d'ingénierie : un moteur de découverte qui indexe 103,224 modèles, des
+d'ingénierie : un moteur de découverte qui indexe plus de 100 000 identifiants de modèles, des
 dizaines de stratégies de coordination, un [substrat d'audit](https://ailin.guide/architecture/collective-intelligence) qui
 enregistre chaque décision de coordination, et un pipeline d'entraînement
 en boucle fermée. Certaines de ces couches sont de qualité production dès
@@ -176,7 +180,7 @@ d'intégrations de fournisseurs manuelles. Un moteur de découverte
 continue scanne l'écosystème mondial de l'IA et absorbe automatiquement
 les nouveaux modèles dès leur sortie.
 
-Le résultat : un collectif vivant de **103,224 modèles** répartis sur
+Le résultat : un catalogue vivant de **plus de 100 000 identifiants de modèles** répartis sur
 [~90 intégrations de fournisseurs](https://ailin.guide/architecture/provider-ecosystem) qui reste à jour avec
 l'écosystème. Quand un nouveau modèle est publié par une source
 découverte, le moteur de découverte l'absorbe sans changement de code,
@@ -222,7 +226,7 @@ développement** ([statut honnête, toujours à jour](https://ailin.guide)).
 
 ### Des stratégies collectives comme hypothèses falsifiables
 
-32 stratégies enregistrées (consensus avec planchers de convergence,
+31 stratégies enregistrées (consensus avec planchers de convergence,
 débat en aveugle, panels d'experts, consensus avec avocat du diable,
 cascade de coûts, best-of-N avec vérification objective), chacune
 étiquetée avec une accessibilité honnête (auto-sélectionnable / explicite
@@ -296,7 +300,7 @@ flowchart LR
     A[OpenAI-compatible request] --> B{Strategy resolution<br/>ailin-auto cascade}
     B -->|simple| C[Single model<br/>cheapest viable]
     B -->|declared answer_check| D[Consensus + verifier]
-    B -->|explicit| E[1 of 32 strategies]
+    B -->|explicit| E[1 of 31 strategies]
     C --> F[Execution + fallback chains]
     D --> F
     E --> F
@@ -309,7 +313,7 @@ chaque requête vers l'un de trois chemins. Une requête simple va vers un
 seul modèle, le moins cher qui reste viable. Une requête qui déclare
 `ailin_constraints.answer_check` va vers le consensus plus le
 vérificateur déterministe. Une requête qui nomme une stratégie explicite
-utilise celle-ci parmi les 32 stratégies enregistrées. Les trois chemins
+utilise celle-ci parmi les 31 stratégies enregistrées. Les trois chemins
 convergent vers l'exécution et ses chaînes de repli, puis vers
 l'arbitrage et sa porte de qualité, produisant la réponse avec la
 provenance complète `ailin_metadata`.*
@@ -426,7 +430,7 @@ Suite : [choisir une stratégie](docs/guides/strategy-selection.md) ·
 | Livré aujourd'hui | En développement |
 |---|---|
 | API compatible OpenAI (chat, responses, embeddings, images, fichiers) | Poids de coordinateur entraînés (le design + le substrat d'audit sont livrés dès maintenant) |
-| 32 stratégies d'orchestration (y compris des baselines mono-modèle) + cascade `ailin-auto` | Poids de production de la famille de modèles propriétaire (volant d'entraînement construit) |
+| 31 stratégies d'orchestration (y compris des baselines mono-modèle) + cascade `ailin-auto` | Poids de production de la famille de modèles propriétaire (volant d'entraînement construit) |
 | Moteur de découverte, routage conditionné à la santé, chaînes de repli | Campagne de benchmark élargie avec une comptabilité des coûts intégralement auditée |
 | Provenance décisionnelle complète (`ailin_metadata`) | Guide de campagne pas à pas pour les évaluations indépendantes |
 | Multimodal + génération déterministe de fichiers (DOCX/XLSX/PDF/PPTX/ZIP/code) | |

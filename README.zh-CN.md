@@ -37,7 +37,11 @@ Source: https://github.com/ailinone/collective-intelligence
   <a href="README.ru.md"><img alt="Русский" src="https://img.shields.io/badge/%D0%A0%D1%83%D1%81%D1%81%D0%BA%D0%B8%D0%B9-30363d?style=for-the-badge"></a>
 </p>
 
-> **TL;DR**：Ailin¹ 让 **103,224 个 AI 模型** 在同一个集体模型中协同，通过 **32 种策略** 编排，而非路由到单一模型。每一次请求都具备结构化多样性、独立推理与完整的决策审计轨迹，比任何单模型集成更可靠、更有韧性、更可审计，并且[已在公开场景中对阵前沿完成实证](#对阵前沿的公开实证)。
+<p align="center"><b><a href="https://ailin.chat/">Ailin¹ Chat</a> · <a href="https://ailin.dev/">Ailin¹ Dev</a> · <a href="https://ailin.guide/">Ailin¹ Guide</a></b></p>
+
+**目录规模指已发现的模型标识符数量，不代表每次请求执行的模型数量。** AI Decision Layer 仅选择每项策略需要的参与模型；目录随持续发现而更新。
+
+> **TL;DR**：Ailin¹ 索引 **超过 10 万个已发现的模型标识符**，根据每项任务动态选择合适的模型和集体策略。AI Decision Layer 通过 **31 种已注册策略** 结合独立推理、适用时的验证以及可审计的决策过程。在客观可验证任务的公开基准测试中，经过验证的共识策略 **38 次中答对 37 次**（[查看可复现证据](#对阵前沿的公开实证)）。
 >
 > **→ [快速开始](#快速开始) · [查看实证](#对阵前沿的公开实证) · [文档](https://ailin.guide)**
 
@@ -55,8 +59,8 @@ Source: https://github.com/ailinone/collective-intelligence
 [![Contributor Covenant 2.1](https://img.shields.io/badge/Contributor%20Covenant-2.1-4baaaa.svg)](CODE_OF_CONDUCT.md)
 [![CodeQL 状态，点击查看实时扫描结果](https://github.com/ailinone/collective-intelligence/actions/workflows/github-code-scanning/codeql/badge.svg)](https://github.com/ailinone/collective-intelligence/security/code-scanning)
 [![约 90 个提供商集成](https://img.shields.io/badge/provider_integrations-~90-8A2BE2)](https://ailin.guide/architecture/provider-ecosystem)
-[![103,224 个模型已建立索引](https://img.shields.io/badge/models_indexed-103%2C224-blueviolet)](#数万个模型始终站在前沿)
-[![32 个已注册的集体策略](https://img.shields.io/badge/collective_strategies-32_registered-6A5ACD)](#请求如何流转)
+[![100,000+ 个模型已建立索引](https://img.shields.io/badge/models_indexed-100k%2B-blueviolet)](#数万个模型始终站在前沿)
+[![31 个已注册的集体策略](https://img.shields.io/badge/collective_strategies-31_registered-6A5ACD)](#请求如何流转)
 [![GitHub stars](https://img.shields.io/github/stars/ailinone/collective-intelligence?style=social)](https://github.com/ailinone/collective-intelligence/stargazers)
 [![GitHub Discussions：开放中](https://img.shields.io/badge/discussions-open-2ea44f?logo=github)](https://github.com/ailinone/collective-intelligence/discussions)
 
@@ -70,8 +74,8 @@ Source: https://github.com/ailinone/collective-intelligence
 ## 集体智能：AI的下一个前沿
 
 AI 行业一直专注于打造更大的单体模型。Ailin¹ 采取一条互补的路线：
-一个由 **103,224 个 AI 模型**（2026-08 生产环境实时统计）组成的集体，
-它们可以协作、辩论、互相批判并共同综合，将[结构化多样性](https://ailin.guide/architecture/cognitive-diversity)应用于那些
+持续索引 **超过 10 万个已发现的模型标识符**，并为每项请求选择合适的模型组成集体。
+所选模型可以协作、辩论、互相批判并共同综合，将[结构化多样性](https://ailin.guide/architecture/cognitive-diversity)应用于那些
 对单一模型而言意味着单点训练、单点架构、单点偏见与单点故障的问题。
 
 **这不是多模型路由。这不是 API 网关。这是集体智能（Collective
@@ -83,7 +87,7 @@ Intelligence）**：一个让来自各大架构的模型（前沿 API、开放�
 这一原则植根于关于集体智能与认知多样性的研究：Hong & Page 的
 "多样性胜过能力"（diversity trumps ability）结论，以及 Woolley 等人
 关于集体绩效的工作（见公开的[参考文献](https://ailin.guide/reference/bibliography)）。Ailin¹ 把这一原则
-落地为一个工程平台：一个索引了 103,224 个模型的发现引擎、数十种协同
+落地为一个工程平台：一个索引超过 10 万个模型标识符的发现引擎、数十种协同
 策略、一个记录每一次协同决策的[审计基座](https://ailin.guide/architecture/collective-intelligence)，以及一条闭环训练
 流水线。其中一些层今天已达到生产级，另一些仍在成熟之中。文档带有
 状态标识，让你始终清楚哪些已经交付、哪些还在路线图上。
@@ -147,8 +151,8 @@ Intelligence）**：一个让来自各大架构的模型（前沿 API、开放�
 Ailin¹ 集体不依赖硬编码的模型列表或人工的提供商集成。一个持续运行
 的发现引擎扫描全球 AI 生态，并在新模型发布时自动将其吸纳。
 
-结果是：一个横跨 [~90 个提供商集成](https://ailin.guide/architecture/provider-ecosystem)、由 **103,224 个模型**
-组成、与生态同步演进的实时集体。当一个已被发现的来源发布新模型时，
+结果是：一个横跨 [~90 个提供商集成](https://ailin.guide/architecture/provider-ecosystem)、拥有 **超过 10 万个模型标识符**、
+与生态同步演进的动态目录。当一个已被发现的来源发布新模型时，
 发现引擎无需代码改动、无需配置、无需停机即可将其吸纳。
 
 ### 语义化发现，零硬编码模型
@@ -182,7 +186,7 @@ Ailin¹ 集体不依赖硬编码的模型列表或人工的提供商集成。一
 
 ### 作为可证伪假设的集体策略
 
-32 种注册在案的策略（带收敛下限的共识、盲辩论、专家小组、魔鬼
+31 种注册在案的策略（带收敛下限的共识、盲辩论、专家小组、魔鬼
 代言人共识、成本级联、带客观校验的 best-of-N），每一种都标注了诚实
 的可达性（可自动选择 / 仅显式调用 / 路线图中），每一种都可被本仓库
 中的实验框架证伪。**策略靠证据赢得席位，也会因证据失去席位。**
@@ -244,7 +248,7 @@ flowchart LR
     A[OpenAI-compatible request] --> B{Strategy resolution<br/>ailin-auto cascade}
     B -->|simple| C[Single model<br/>cheapest viable]
     B -->|declared answer_check| D[Consensus + verifier]
-    B -->|explicit| E[1 of 32 strategies]
+    B -->|explicit| E[1 of 31 strategies]
     C --> F[Execution + fallback chains]
     D --> F
     E --> F
@@ -254,7 +258,7 @@ flowchart LR
 
 *文字版：策略解析的 `ailin-auto` 级联把请求分流到三条路径之一：
 简单请求交给单一的、成本最低的可行模型；声明了 `answer_check` 的
-请求走共识加确定性校验器；显式指定策略的请求则使用 32 种注册策略
+请求走共识加确定性校验器；显式指定策略的请求则使用 31 种注册策略
 中的那一种。三条路径都汇聚到执行环节及其回退链，再进入仲裁与质量
 门控，最终生成带完整 `ailin_metadata` 溯源信息的响应。*
 
@@ -369,7 +373,7 @@ bridge IP）。面向 OpenAPI 校验的原生（无 Docker）开发环境搭建�
 | 今天已交付 | 开发中 |
 |---|---|
 | OpenAI 兼容 API（chat、responses、embeddings、images、files） | 训练完成的协调器权重（设计+审计基座现已交付） |
-| 32 种编排策略（含单模型基线）+ `ailin-auto` 级联 | 专有模型家族的生产权重（训练飞轮已建成） |
+| 31 种编排策略（含单模型基线）+ `ailin-auto` 级联 | 专有模型家族的生产权重（训练飞轮已建成） |
 | 发现引擎、健康门控路由、回退链 | 范围更广的基准测试战役，附带完整审计的成本核算 |
 | 完整决策溯源（`ailin_metadata`） | 面向独立评测的分步战役指南 |
 | 多模态+确定性文件生成（DOCX/XLSX/PDF/PPTX/ZIP/代码） | |
