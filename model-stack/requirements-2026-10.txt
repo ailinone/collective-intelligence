@@ -19,7 +19,7 @@ trl==1.16.0
 vllm==0.32.0
 peft==0.21.2
 accelerate==1.15.0
-deepspeed==0.19.7
+deepspeed==0.19.8
 datasets==5.1.0
 tokenizers==0.23.3
 sentence-transformers==6.1.0
