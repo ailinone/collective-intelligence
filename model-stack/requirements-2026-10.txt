@@ -14,7 +14,7 @@ torch==2.13.0
 # transformers capped by vllm 0.32's own constraint (>=5.16.1,<5.20):
 # 5.19.0 is the highest version compatible with the latest vLLM. Evidence:
 # ResolutionImpossible on run 39310116258 when we tried >=5.20.
-transformers==5.19.0
+transformers==5.20.2
 trl==1.16.0
 vllm==0.32.0
 peft==0.21.2
