@@ -6,11 +6,11 @@
 # (what our code imports). Regenerate with the same PyPI query when bumping,
 # and re-run the Integration Smoke job before merging the bump.
 #
-# torch: vllm 0.32.0 pins torch==2.13.0 EXACTLY (resolver evidence: run
+# torch: vllm 0.32.0 pins torch==2.14.1 EXACTLY (resolver evidence: run
 # 39313132178), so 2.13.0 is the frontier, not 2.14.x. Install per-platform
 # CUDA wheel per the official index; the pin below is the validated
 # training-env version.
-torch==2.13.0
+torch==2.14.1
 # transformers capped by vllm 0.32's own constraint (>=5.16.1,<5.20):
 # 5.19.0 is the highest version compatible with the latest vLLM. Evidence:
 # ResolutionImpossible on run 39310116258 when we tried >=5.20.
