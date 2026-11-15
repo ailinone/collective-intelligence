@@ -33,7 +33,7 @@ dependencies = [
     # what vLLM ships against, so 5.19.0 is the real SOTA-compatible pick.
     # Same story for torch: vllm 0.32.0 pins torch==2.13.0 EXACTLY (run
     # 39313132178), so the torch frontier here is 2.13.0, not 2.14.x.
-    "torch>=2.13.0,<2.14",
+    "torch>=2.13.0,<2.15",
     "transformers>=5.16.1,<5.20",
     "datasets>=5.1.0,<6",
     "tokenizers>=0.23.0,<0.24",
