@@ -153,7 +153,7 @@
     "eventsource-parser": "^3.1.0",
     "exceljs": "^4.4.0",
     "fastify": "^5.12.5",
-    "fastify-raw-body": "^5.0.0",
+    "fastify-raw-body": "^6.0.3",
     "image-size": "2.0.4",
     "ioredis": "^5.11.1",
     "jsonwebtoken": "^9.0.2",
